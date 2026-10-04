@@ -33,8 +33,8 @@ export class Host {
     requireValue(e.deadline===null || typeof e.deadline==='string','invalid_envelope');
     if(e.authenticatedActor) requireValue(canonical(actor)===canonical(e.authenticatedActor),'actor_conflict');
     const grant=this.ledger.get('grant',e.authorizationRef);
-    requireValue(grant?.active && canonical(grant.actor)===canonical(actor),'unauthorized');
-    const fn=this.commands[e.command] ?? this.extensions[e.command]; requireValue(fn,'unsupported_command');
+    requireValue(grant && canonical(grant.actor)===canonical(actor) && (grant.active || ['inspectOperation','stopTask'].includes(e.command)),'unauthorized');
+    const fn=Object.hasOwn(this.commands,e.command) ? this.commands[e.command] : Object.hasOwn(this.extensions,e.command) ? this.extensions[e.command] : null; requireValue(fn,'unsupported_command');
     return this.ledger.operation(actor,e,payload,()=>fn.call(this,payload,e,actor));
   }
   snapshot(inputActor) {

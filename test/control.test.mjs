@@ -64,3 +64,19 @@ test('trusted actor cannot be spoofed by envelope body and bot lacks root grant'
  assert.throws(()=>f.host.execute({kind:'bot',id:'bot-1'},{...e,authenticatedActor:human},p),{code:'unauthorized'});
  assert.throws(()=>f.host.execute(human,{...e,authenticatedActor:{kind:'human',id:'another'}},p),{code:'actor_conflict'}); f.ledger.close();
 });
+test('operationId cannot be laundered through another operation nonce',()=>{
+ const f=fixture();const p={name:'A',config:{contact:{provider:'x',model:'m'}}},q={...p,name:'B'};
+ const a=envelope('createBot',p),b=envelope('createBot',q);f.host.execute(human,a,p);f.host.execute(human,b,q);
+ assert.throws(()=>f.host.execute(human,{...a,operationId:b.operationId},p),{code:'operation_conflict'});f.ledger.close();
+});
+test('config insert-only ledger rejects same-version content mutation',()=>{
+ const f=fixture(),b=createBot(f);const old=f.ledger.get('config',b.configVersion);
+ assert.throws(()=>f.ledger.put('config',b.configVersion,{...old,contact:{provider:'x',model:'changed'}}),{code:'config_immutable'});
+ assert.deepEqual(f.ledger.get('config',b.configVersion),old);f.ledger.close();
+});
+test('revoked root keeps trusted human operation lookup and stop available',()=>{
+ const f=fixture(),b=createBot(f),t=createTask(f,b);const rev=f.cmd('revoke',{grantId:'root'});
+ assert.equal(f.cmd('inspectOperation',{operationId:rev.operationId}).result.operationId,rev.operationId);
+ assert.equal(f.cmd('stopTask',{taskId:t.taskId},t.revision).result.stop.state,'unsupported');
+ assert.throws(()=>f.cmd('startAttempt',{taskId:t.taskId},f.ledger.get('task',t.taskId).revision),{code:'unauthorized'});f.ledger.close();
+});
