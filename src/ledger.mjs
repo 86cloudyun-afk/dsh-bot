@@ -1,10 +1,15 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync,existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { canonical, digest, requireValue } from './errors.mjs';
 
 export class Ledger {
   constructor(path) {
+    if(existsSync(path)) {
+      const reader=new DatabaseSync(path,{readOnly:true});
+      try {const version=reader.prepare('PRAGMA user_version').get().user_version;requireValue(version===0 || version===1,'migration_required','Unsupported schema; no writer opened');if(version===0) requireValue(reader.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().n===0,'migration_required','Nonempty unversioned database requires explicit migration');}
+      finally {reader.close();}
+    }
     mkdirSync(dirname(path),{recursive:true});
     this.db=new DatabaseSync(path);
     this.db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=2000; PRAGMA synchronous=FULL;');
@@ -34,6 +39,7 @@ export class Ledger {
       requireValue(!byId || !byNonce || byId.id===byNonce.id,'operation_conflict');
       if(byNonce) { requireValue(byNonce.binding===binding,'nonce_conflict'); return JSON.parse(byNonce.receipt); }
       if(byId) { requireValue(byId.actor===actorKey && byId.nonce===e.nonce && byId.binding===binding,'operation_conflict'); return JSON.parse(byId.receipt); }
+      requireValue(e.deadline===null || Date.parse(e.deadline)>Date.now(),'deadline_expired');
       const result=fn();
       const receipt={operationId:e.operationId,state:'received',authority:'plugin-ledger',observedAt:new Date().toISOString(),result};
       this.db.prepare('INSERT INTO operations VALUES(?,?,?,?,?)').run(e.operationId,actorKey,e.nonce,binding,canonical(receipt));

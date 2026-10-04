@@ -80,3 +80,4 @@ test('revoked root keeps trusted human operation lookup and stop available',()=>
  assert.equal(f.cmd('stopTask',{taskId:t.taskId},t.revision).result.stop.state,'unsupported');
  assert.throws(()=>f.cmd('startAttempt',{taskId:t.taskId},f.ledger.get('task',t.taskId).revision),{code:'unauthorized'});f.ledger.close();
 });
+test('new expired operations and malformed dates are refused before mutation',()=>{const f=fixture(),payload={name:'expired',config:{contact:{provider:'x',model:'m'}}};assert.throws(()=>f.host.execute(human,envelope('createBot',payload,{deadline:'2020-01-01T00:00:00Z'}),payload),{code:'deadline_expired'});assert.throws(()=>f.host.execute(human,envelope('createBot',payload,{createdAt:'not-a-date'}),payload),{code:'invalid_envelope'});assert.equal(f.ledger.list('bot').length,0);f.ledger.close();});

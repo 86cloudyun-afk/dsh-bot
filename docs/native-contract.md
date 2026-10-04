@@ -34,4 +34,4 @@ scope 是宿主授予的不透明引用：历史/检索候选在取出前过滤�
 
 ## 本次阻塞
 
-Mac executor exec-server transport disconnected，consumer-local recovery timeout；Codex app message transport 也 closed。接口扩展仅设计，未开发或运行，不绕权限换环境。
+Mac executor 曾断线，现已恢复并继续在原工作区实现。接口扩展仍仅设计，未修改 core 或调用原生写接口。独立云测试任务已由用户授权、原主控协调；本仓不预先声称其结果或其他宿主已接通。

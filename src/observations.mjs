@@ -11,7 +11,24 @@ export function observe(ledger,event) {
     const old=ledger.get('projection',event.entityId);
     if(old && (old.generation!==event.generation || old.source!==event.source || event.sourceSeq<=old.sourceSeq)) return old;
     const freshness=event.sourceSeq===(old?.sourceSeq ?? 0)+1 && old?.freshness!=='stale' ? 'fresh':'stale';
-    if(old && ['settled','failed'].includes(old.state) && event.state!==old.state) return ledger.put('projection',event.entityId,{...old,sourceSeq:event.sourceSeq,freshness:'stale'});
+    if(old && !legalTransition(old.state,event.state)) return ledger.put('projection',event.entityId,{...old,sourceSeq:event.sourceSeq,freshness:'stale'});
     return ledger.put('projection',event.entityId,{...event,freshness,projectionUpdatedAt:new Date().toISOString()});
+  });
+}
+
+function legalTransition(from,to) {
+  if(from===to) return true;
+  if(['settled','failed'].includes(from)) return false;
+  if(to==='outcome_unknown') return true;
+  if(from==='outcome_unknown') return to!=='queued';
+  const rank={queued:0,admitted:1,running:2,settling:3,settled:4,failed:4};
+  return rank[to]>=rank[from];
+}
+export function activateGeneration(ledger,transition,verifyTransition=()=>false) {
+  requireValue(verifyTransition(transition)===true,'invalid_evidence','Trusted native generation receipt required');
+  return ledger.transaction(()=>{
+    const old=ledger.get('projection',transition.entityId);
+    requireValue(old?.generation===transition.priorGeneration,'generation_conflict');
+    return ledger.put('projection',transition.entityId,{entityId:transition.entityId,source:transition.source,generation:transition.generation,sourceSeq:0,state:'queued',freshness:'fresh',observedAt:null});
   });
 }

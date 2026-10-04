@@ -18,7 +18,7 @@ GitHub：connector 与本机 `gh api user` 都确认为 `86cloudyun-afk`；直�
 | producer | Agent.send / followup 接收带 source 的 UserMessage；remote.prompt 不接 bot source | 可以定义 producer 契约；原生 Bot dispatch 仍 blocked；不伪造 user |
 | scope enforce | `dsh-fs-sandbox/lib/types/index.d.ts` 公开说明 reads pass through untouched；工具 scoped guard 为局部入口 | 不能证明私聊 / 群文件与检索隔离；不装模型工具、raw shell、检索或外部产物发布 |
 | 归档 / 恢复 | `dsh-workspace/lib/types/index.d.ts:213,224` | archive 先隐藏再请求 stop，不 await settlement；unarchive 不验证日志存在。薄 adapter 保留这些事实；原生写 blocked |
-| 持久插件挂载 | Cordis Context.provide / effect，Typert 服务类型存在 | 可以交付独立 Cordis plugin 入口与 SQLite 控制账本；隔离宿主加载未授权 / 未测 |
+| 持久插件挂载 | Cordis Context.provide / effect，Typert 服务类型存在 | 可交付独立 Cordis plugin 接缝；原生 caller 未验时服务仅暴露能力状态、拒绝所有命令；本地 UI 单独绑定可信入口；Mac 宿主未加载 / 未测；独立云验证另任务负责 |
 
 公开 upstream：[DeepSeek session controller](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/api/session-controller/src/index.ts)、[npm package](https://www.npmjs.com/package/@deepseek-ai/dsh)。上游 master 会变化，最终结论只针对本次固定本地包；不从符号缺失推断所有未来版本都不支持，也不将相似名称当等价语义。
 
