@@ -1,0 +1,29 @@
+{
+  "name": "dsh-bot",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "description": "Capability-gated native DSH control layer candidate",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "exports": {
+    ".": "./src/host.mjs",
+    "./plugin": "./src/plugin.mjs",
+    "./adapter": "./src/adapter.mjs"
+  },
+  "types": "./src/contracts.d.ts",
+  "scripts": {
+    "test": "node scripts/test.mjs",
+    "start": "node src/server.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.4"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
+  }
+}
