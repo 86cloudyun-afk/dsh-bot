@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { canonical, text, requireValue, CommandError } from './errors.mjs';
 import { DshAdapter, REQUIRED_NATIVE } from './adapter.mjs';
+import { registerCollaboration } from './collaboration.mjs';
 
 function route(value) {
   requireValue(value && Object.keys(value).every(k=>['provider','model','reasoning'].includes(k)),'invalid_config','Only nonsecret model route fields are accepted');
@@ -15,7 +16,7 @@ export class Host {
     this.ledger=ledger; this.ownerHumanId=text(ownerHumanId,'ownerHumanId',200); this.adapter=adapter;
     const owner=ledger.get('meta','owner'); requireValue(!owner || owner.id===ownerHumanId,'owner_mismatch');
     if(!owner) ledger.transaction(()=>{ledger.put('meta','owner',{id:ownerHumanId}); ledger.put('grant','root',{id:'root',actor:{kind:'human',id:ownerHumanId},epoch:1,active:true,authority:'configured-human-entry',scope:'local-control-ledger'});});
-    this.extensions={};
+    registerCollaboration(this);
   }
   actor(actor) { requireValue(actor?.kind==='human' && actor.id===this.ownerHumanId,'unauthorized','Trusted human entry required; bot execution bridge is unavailable'); return {kind:'human',id:actor.id}; }
   object(kind,id,e) {
@@ -40,7 +41,7 @@ export class Host {
   snapshot(inputActor) {
     this.actor(inputActor);
     const kinds=['bot','config','conversation','group','meeting','task','attempt','message','delivery','outbox','resource','grant'];
-    return {host:'disconnected',nativeRuntimeVerified:false,releaseReady:false,version:'0.1.0-alpha.1',capabilities:this.adapter.capabilities(),observedAt:new Date().toISOString(),...Object.fromEntries(kinds.map(k=>[k,this.ledger.list(k)]))};
+    return {host:'disconnected',nativeRuntimeVerified:false,releaseReady:false,version:'0.1.0-alpha.1',capabilities:this.adapter.capabilities(),observedAt:new Date().toISOString(),...Object.fromEntries(kinds.map(k=>[k,k==='meeting'?this.ledger.list(k).map(m=>this.publicMeeting(m.meetingId)):this.ledger.list(k)]))};
   }
   commands={
     createBot(p,e) {

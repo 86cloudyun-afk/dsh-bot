@@ -11,6 +11,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { resolve } from 'node:path';
 if (!process.env.DSH_BOT_TEST_ROOT || !process.permission?.has('fs.write', process.env.DSH_BOT_TEST_ROOT)) throw Error('Test safety guard requires isolated filesystem permissions');
 if (!resolve(process.env.DSH_HOME).startsWith(resolve(process.env.DSH_BOT_TEST_ROOT) + '/')) throw Error('Production DSH_HOME forbidden');
+for(const key of Object.keys(process.env)) if(!['DSH_HOME','DSH_BOT_TEST_ROOT','TMPDIR','TZ','LANG','NODE_TEST_CONTEXT'].includes(key)) delete process.env[key];
 fs.mkdirSync(process.env.DSH_HOME, {recursive: true});
 const deny = () => { throw Error('DSH_BOT_TEST_SIDE_EFFECT_DENIED'); };
 globalThis.fetch = deny;
