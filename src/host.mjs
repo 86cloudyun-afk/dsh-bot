@@ -2,21 +2,25 @@ import { randomUUID } from 'node:crypto';
 import { canonical, text, requireValue, CommandError } from './errors.mjs';
 import { DshAdapter, REQUIRED_NATIVE } from './adapter.mjs';
 import { registerCollaboration } from './collaboration.mjs';
+import { autonomyPolicy,registerProgression } from './progression.mjs';
 
 function route(value) {
   requireValue(value && Object.keys(value).every(k=>['provider','model','reasoning'].includes(k)),'invalid_config','Only nonsecret model route fields are accepted');
-  return {provider:text(value.provider,'provider',100),model:text(value.model,'model',200),reasoning:value.reasoning===undefined ? null:text(value.reasoning,'reasoning',40)};
+  return {provider:text(value.provider,'provider',100),model:text(value.model,'model',200),reasoning:value.reasoning==null ? null:text(value.reasoning,'reasoning',40)};
 }
 function config(value) {
-  requireValue(value && Object.keys(value).every(k=>['contact','execution'].includes(k)),'invalid_config');
-  const contact=route(value.contact); return {contact,execution:value.execution ? route(value.execution):contact};
+  requireValue(value && Object.keys(value).every(k=>['contact','execution','sessionModes','autonomy'].includes(k)),'invalid_config');
+  const sessionModes=value.sessionModes ?? {plan:null,permissions:null};
+  requireValue(sessionModes && Object.keys(sessionModes).every(k=>['plan','permissions'].includes(k)),'invalid_config');
+  requireValue(sessionModes.plan==null && sessionModes.permissions==null,'unsupported_session_mode','Native mode catalog and user selection remain unverified');
+  const contact=route(value.contact); return {contact,execution:value.execution ? route(value.execution):contact,sessionModes:{plan:null,permissions:null},autonomy:autonomyPolicy(value.autonomy)};
 }
 export class Host {
   constructor({ledger,ownerHumanId,adapter=new DshAdapter()}) {
     this.ledger=ledger; this.ownerHumanId=text(ownerHumanId,'ownerHumanId',200); this.adapter=adapter;
     const owner=ledger.get('meta','owner'); requireValue(!owner || owner.id===ownerHumanId,'owner_mismatch');
     if(!owner) ledger.transaction(()=>{ledger.put('meta','owner',{id:ownerHumanId}); ledger.put('grant','root',{id:'root',actor:{kind:'human',id:ownerHumanId},epoch:1,active:true,authority:'configured-human-entry',scope:'local-control-ledger'});});
-    registerCollaboration(this);
+    registerCollaboration(this); registerProgression(this);
   }
   actor(actor) { requireValue(actor?.kind==='human' && actor.id===this.ownerHumanId,'unauthorized','Trusted human entry required; bot execution bridge is unavailable'); return {kind:'human',id:actor.id}; }
   object(kind,id,e) {
@@ -24,14 +28,15 @@ export class Host {
     if(e) {requireValue(e.expectedRevision===o.revision,'revision_conflict'); if(e.expectedEpochs[kind]!==undefined) requireValue(e.expectedEpochs[kind]===o.epoch,'epoch_conflict');}
     return o;
   }
-  save(kind,o) { return this.ledger.put(kind,o[`${kind}Id`] ?? o.id,o); }
+  save(kind,o) { return this.ledger.put(kind,(kind==='progress' ? o.planId : o[`${kind}Id`]) ?? o.id,o); }
   execute(inputActor,e,payload) {
     const actor=this.actor(inputActor);
     requireValue(e && typeof e==='object','invalid_envelope');
     for(const key of ['operationId','nonce','command','payloadDigest','rootHumanInstructionRef','authorizationRef','createdAt']) text(e[key],key,250);
     requireValue(e.expectedRevision===null || Number.isSafeInteger(e.expectedRevision),'invalid_envelope');
     requireValue(e.expectedEpochs && typeof e.expectedEpochs==='object' && !Array.isArray(e.expectedEpochs),'invalid_envelope');
-    requireValue(e.deadline===null || typeof e.deadline==='string','invalid_envelope');
+    requireValue(Number.isFinite(Date.parse(e.createdAt)),'invalid_envelope');
+    requireValue(e.deadline===null || (typeof e.deadline==='string' && Number.isFinite(Date.parse(e.deadline))),'invalid_envelope');
     if(e.authenticatedActor) requireValue(canonical(actor)===canonical(e.authenticatedActor),'actor_conflict');
     const grant=this.ledger.get('grant',e.authorizationRef);
     requireValue(grant && canonical(grant.actor)===canonical(actor) && (grant.active || ['inspectOperation','stopTask'].includes(e.command)),'unauthorized');
@@ -40,7 +45,7 @@ export class Host {
   }
   snapshot(inputActor) {
     this.actor(inputActor);
-    const kinds=['bot','config','conversation','group','meeting','task','attempt','message','delivery','outbox','resource','grant'];
+    const kinds=['bot','config','conversation','group','meeting','task','attempt','message','delivery','outbox','resource','grant','progress'];
     return {host:'disconnected',nativeRuntimeVerified:false,releaseReady:false,version:'0.1.0-alpha.1',capabilities:this.adapter.capabilities(),observedAt:new Date().toISOString(),...Object.fromEntries(kinds.map(k=>[k,k==='meeting'?this.ledger.list(k).map(m=>this.publicMeeting(m.meetingId)):this.ledger.list(k)]))};
   }
   commands={
@@ -63,6 +68,7 @@ export class Host {
     },
     startAttempt(p,e) {
       const t=this.object('task',p.taskId,e), b=this.object('bot',t.ownerBotId);
+      requireValue(t.stop.state==='none','task_stopped');requireValue(!t.pendingRevision,'revision_pending');requireValue(t.responsibility!=='verified','task_complete');
       const blockers=REQUIRED_NATIVE.map(capability=>({code:'unsupported',capability,reason:'Native dispatch is disabled in this alpha; isolated live proof required'}));
       if(b.lifecycle!=='active') blockers.push({code:'owner_unavailable'});
       for(const dep of t.dependencies) if(this.ledger.get('task',dep)?.responsibility!=='verified') blockers.push({code:'blocked_dependency',taskId:dep});

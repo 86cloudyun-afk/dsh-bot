@@ -11,6 +11,7 @@ export function fixture(adapter) {
   const ledger = new Ledger(path);
   const host = new Host({ledger, ownerHumanId:human.id, adapter});
   const cmd = (name,payload={},expectedRevision=null, expectedEpochs={}) => {
+    if(['sendMessage','startMeeting'].includes(name) && expectedRevision===null) expectedRevision=ledger.get('group',payload.groupId)?.revision ?? null;
     const envelope={operationId:randomUUID(),nonce:randomUUID(),command:name,payloadDigest:digest(payload),expectedRevision,expectedEpochs,rootHumanInstructionRef:'test-human-input',authorizationRef:'root',createdAt:new Date().toISOString(),deadline:null};
     return host.execute(human,envelope,payload);
   };

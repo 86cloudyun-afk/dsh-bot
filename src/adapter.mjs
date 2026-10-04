@@ -15,6 +15,7 @@ export class DshAdapter {
     requireValue(this.context?.sessionController,'host_disconnected');
     return this.context.sessionController.inspect(id,new AbortController().signal);
   }
+  sessionModeCatalog() { return {status:'unsupported',options:[],reason:'Loaded native mode catalog and user domain selection are unverified',staticDefinitions:['plan','permission preset']}; }
   unsupported(operation) { return {status:'unsupported',operation,reason:'Missing verified native contract; no native mutation issued'}; }
   selectSessionModel() { return this.unsupported('selectSessionModel'); }
   dispatch() { return this.unsupported('dispatchPermit'); }

@@ -28,3 +28,7 @@ export declare class Ledger {
  put(kind:string,id:string,value:unknown):unknown;
  inspectOperation(actor:TrustedActor,id:string):Receipt;
 }
+export interface AutonomyPolicy { enabled:boolean;maxSteps:number;maxRetries:number;observationDeadline:string|null;reportMilestonesOnly:boolean }
+export interface BotConfigVersion { id:string;contact:ModelRoute;execution:ModelRoute;sessionModes:{plan:null;permissions:null};autonomy:AutonomyPolicy;createdAt:string }
+export interface ProgressPlan { planId:string;taskId:string;taskRevision:number;taskEpoch:number;botEpoch:number;authorityEpoch:number;configSnapshot:BotConfigVersion;policySnapshot:AutonomyPolicy;nextStepId:string;eventCursor:number;retryCount:number;state:'planned'|'waiting_native'|'reconciling_unknown'|'blocked';nativeExecutionVerified:false }
+export declare function apply(ctx:{provide(name:string,value:unknown):(()=>void)|void;effect(fn:()=>()=>Promise<void>):unknown},options:{databasePath:string;ownerHumanId:string}):Readonly<{snapshot():Record<string,unknown>;execute():never}>;

@@ -23,11 +23,11 @@ export function registerCollaboration(host) {
    requireValue(Array.isArray(p.remove) && Array.isArray(p.add),'invalid_members');
    for(const id of p.remove) {requireValue(members[id],'unknown_target');members[id].active=false;}
    for(const id of p.add) {const b=this.object('bot',id);requireValue(b.lifecycle==='active','bot_unavailable');if(!members[id]?.active) members[id]={active:true,generation:(members[id]?.generation ?? 0)+1};}
-   for(const d of this.ledger.list('delivery').filter(d=>d.groupId===g.groupId && members[d.botId]?.active!==true)) this.save('delivery',{...d,state:'revoked'});
+   for(const d of this.ledger.list('delivery').filter(d=>d.groupId===g.groupId && (!members[d.botId]?.active || members[d.botId].generation!==d.membershipGeneration))) { this.save('delivery',{...d,state:'revoked'}); const o=this.ledger.get('outbox',d.deliveryId); if(o) this.save('outbox',{...o,state:'revoked'}); }
    return this.save('group',{...g,members,revision:g.revision+1});
   },
   sendMessage(p,e,actor) {
-   const g=this.object('group',p.groupId);
+   const g=this.object('group',p.groupId,e);
    requireValue(Array.isArray(p.recipients ?? []),'invalid_recipients');
    const ids=canonicalTargets(this,g,p.recipients?.length ? p.recipients:[g.coordinatorBotId]);
    const message={messageId:randomUUID(),groupId:g.groupId,namespace:g.namespace,content:text(p.content,'content'),producer:actor,rootHumanInstructionRef:e.rootHumanInstructionRef,epoch:g.epoch,operationId:e.operationId,state:'received'};
@@ -38,7 +38,7 @@ export function registerCollaboration(host) {
    });return {message,deliveries};
   },
   startMeeting(p,e) {
-   const g=this.object('group',p.groupId);activeMember(g,g.coordinatorBotId);
+   const g=this.object('group',p.groupId,e);activeMember(g,g.coordinatorBotId);requireValue(this.object('bot',g.coordinatorBotId).lifecycle==='active','coordinator_unavailable');
    const topic=text(p.topic,'topic',2000);requireValue(Array.isArray(p.materials),'invalid_material');
    for(const m of p.materials) {requireValue(m.namespace===g.namespace,'scope_denied');text(m.text,'material');text(m.version,'materialVersion',200);}
    const ids=Object.keys(g.members).filter(id=>g.members[id].active);requireValue(Number.isSafeInteger(p.maxOpinions) && p.maxOpinions>=ids.length && p.maxOpinions<=100,'invalid_budget');
@@ -56,17 +56,19 @@ export function registerCollaboration(host) {
   },
   revealOpinions(p,e) {
    const m=this.object('meeting',p.meetingId,e),g=this.object('group',m.groupId);
-   for(const [id,part] of Object.entries(m.participants)) requireValue(activeMember(g,id).generation===part.membershipGeneration,'membership_revoked');
-   requireValue(m.opinions.length===Object.keys(m.participants).length,'waiting_opinions');
-   return this.save('meeting',{...m,revision:m.revision+1,stage:'discussion',opinions:m.opinions.map(o=>({...o,sealed:false}))});
+   const revoked=Object.keys(m.participants).filter(id=>!g.members[id]?.active || g.members[id].generation!==m.participants[id].membershipGeneration || this.object('bot',id).lifecycle!=='active');
+   const valid=Object.keys(m.participants).filter(id=>!revoked.includes(id));
+   requireValue(valid.every(id=>m.opinions.some(o=>o.botId===id)),'waiting_opinions');
+   this.save('meeting',{...m,revision:m.revision+1,stage:'discussion',missing:revoked.map(botId=>({botId,reason:'revoked'})),opinions:m.opinions.map(o=>({...o,sealed:revoked.includes(o.botId)}))});
+   return this.publicMeeting(m.meetingId);
   },
   submitTask(p,e,actor) {
-   const t=this.object('task',p.taskId,e);requireValue(p.expectedAuthorityEpoch===this.ledger.get('grant','root').epoch,'authority_conflict');
+   const t=this.object('task',p.taskId,e);requireValue(t.stop.state==='none','task_stopped');requireValue(this.object('bot',t.ownerBotId).lifecycle==='active','owner_unavailable');requireValue(p.expectedAuthorityEpoch===this.ledger.get('grant','root').epoch,'authority_conflict');
    requireValue(/^[a-f0-9]{64}$/.test(p.artifactDigest),'invalid_artifact');
    return this.save('task',{...t,revision:t.revision+1,responsibility:'submitted',artifactDigest:p.artifactDigest,submission:{producer:actor,evidence:text(p.evidence,'evidence'),nativeExecutionVerified:false}});
   },
   acceptTask(p,e,actor) {
-   const t=this.object('task',p.taskId,e);requireValue(t.responsibility==='submitted','not_submitted');
+   const t=this.object('task',p.taskId,e);requireValue(t.stop.state==='none','task_stopped');requireValue(t.responsibility==='submitted','not_submitted');
    requireValue(p.artifactDigest===t.artifactDigest && p.acceptanceVersion===t.acceptanceVersion,'acceptance_conflict');
    requireValue(['passed','failed','inconclusive'].includes(p.outcome),'invalid_acceptance');
    const check={checkId:randomUUID(),taskRevision:t.revision,artifactDigest:p.artifactDigest,acceptanceVersion:p.acceptanceVersion,actor,outcome:p.outcome};
@@ -74,5 +76,5 @@ export function registerCollaboration(host) {
    return this.save('task',{...t,revision:t.revision+1,responsibility:p.outcome==='passed'?'verified':'submitted',acceptanceCheck:check});
   }
  };
- host.publicMeeting=function(id) {const m=this.object('meeting',id);return {...m,received:m.opinions.length,opinions:m.stage==='independent'?[]:m.opinions};};
+ host.publicMeeting=function(id) {const m=this.object('meeting',id);return {...m,received:m.opinions.length,opinions:m.stage==='independent'?[]:m.opinions.filter(o=>!o.sealed)};};
 }
