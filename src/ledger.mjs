@@ -18,7 +18,7 @@ export class Ledger {
   close() { this.db.close(); }
   get(kind,id) { const row=this.db.prepare('SELECT value FROM objects WHERE kind=? AND id=?').get(kind,id); return row ? JSON.parse(row.value):null; }
   list(kind) { return this.db.prepare('SELECT value FROM objects WHERE kind=? ORDER BY id').all(kind).map(r=>JSON.parse(r.value)); }
-  put(kind,id,value) { this.db.prepare('INSERT INTO objects(kind,id,value) VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET value=excluded.value').run(kind,id,canonical(value)); return structuredClone(value); }
+  put(kind,id,value) { if(kind==='config') { const old=this.get(kind,id); requireValue(!old || canonical(old)===canonical(value),'config_immutable'); } this.db.prepare('INSERT INTO objects(kind,id,value) VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET value=excluded.value').run(kind,id,canonical(value)); return structuredClone(value); }
   transaction(fn) {
     this.db.exec('BEGIN IMMEDIATE');
     try { const result=fn(); requireValue(!result?.then,'async_transaction','No await inside a ledger transaction'); this.db.exec('COMMIT'); return result; }
@@ -30,8 +30,9 @@ export class Ledger {
     const binding=canonical({actor,command:e.command,payload,canonicalVersion:1,expectedRevision:e.expectedRevision,expectedEpochs:e.expectedEpochs,rootHumanInstructionRef:e.rootHumanInstructionRef,authorizationRef:e.authorizationRef,createdAt:e.createdAt,deadline:e.deadline});
     return this.transaction(()=>{
       const byNonce=this.db.prepare('SELECT * FROM operations WHERE actor=? AND nonce=?').get(actorKey,e.nonce);
-      if(byNonce) { requireValue(byNonce.binding===binding,'nonce_conflict'); return JSON.parse(byNonce.receipt); }
       const byId=this.db.prepare('SELECT * FROM operations WHERE id=?').get(e.operationId);
+      requireValue(!byId || !byNonce || byId.id===byNonce.id,'operation_conflict');
+      if(byNonce) { requireValue(byNonce.binding===binding,'nonce_conflict'); return JSON.parse(byNonce.receipt); }
       if(byId) { requireValue(byId.actor===actorKey && byId.nonce===e.nonce && byId.binding===binding,'operation_conflict'); return JSON.parse(byId.receipt); }
       const result=fn();
       const receipt={operationId:e.operationId,state:'received',authority:'plugin-ledger',observedAt:new Date().toISOString(),result};
