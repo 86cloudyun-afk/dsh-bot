@@ -1,0 +1,247 @@
+{
+  "purpose": "private-unaccepted-Mac-to-cloud-backup",
+  "acceptedRelease": false,
+  "knownFailingRedRegressions": 4,
+  "productImplementationUnchangedFrom": "b42acc305a005c25dd68aac220eb6122a7a67b5e",
+  "sourceHead": "b42acc305a005c25dd68aac220eb6122a7a67b5e",
+  "sourceTree": "9f1982a5ece28b5eb24c0ccd67ad0e3d2a8ac4b7",
+  "originalLibraryFileId": "libfile_3d8260b7925081918590573d1646aff6",
+  "originalLibraryVersion": 0,
+  "originalArchiveBytes": 215607,
+  "originalArchiveSHA256": "e8263aa1661a7dbd34aec174b30f290ace3ef7000d297b5f22ffdd2e1a842374",
+  "frozenSourceFileCount": 42,
+  "frozenSourceFiles": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "size": 726,
+      "sha256": "cebc7f08c32b0c8279be81dbc723dfb6145c20d218dcc87017bfe1548bdd2463"
+    },
+    {
+      "path": ".gitignore",
+      "size": 93,
+      "sha256": "994db02cf9447912a3cc15f7d3619470f0c33b116da7a132991375f292786928"
+    },
+    {
+      "path": "README.md",
+      "size": 5111,
+      "sha256": "f0715fa1cb0970bd9e3647c52015ee005d1a3ca49482a3cd61f43bb496e7e913"
+    },
+    {
+      "path": "docs/acceptance-matrix.md",
+      "size": 6454,
+      "sha256": "12d8873dae9dd3648de05a9173b6dcc82b972cbc8bc4065ac6067227fc93f620"
+    },
+    {
+      "path": "docs/autonomy-protocol.md",
+      "size": 3164,
+      "sha256": "e1876f3820a095c75458b9cc91ce7ff580df79c27ec150372905b891204b8608"
+    },
+    {
+      "path": "docs/host-capabilities.md",
+      "size": 5425,
+      "sha256": "d137852a13a5d2099ccf5375b987489f097d8539d606b74c8be0f6f665c74d55"
+    },
+    {
+      "path": "docs/native-contract.md",
+      "size": 4467,
+      "sha256": "8c9d787da4ee073393d499e4041a422e76931da027e50c7ee6401b88afe6f68c"
+    },
+    {
+      "path": "docs/provenance.md",
+      "size": 2011,
+      "sha256": "31a928ca8ba3f851167a946cf0f3832751206711f22e99be670559552a533ce2"
+    },
+    {
+      "path": "docs/public-types-manifest.json",
+      "size": 24951,
+      "sha256": "3cb03871fd2f26490b80a7fbb1162f871a41d5d432512963cf39b33eb29f9bcb"
+    },
+    {
+      "path": "docs/review-ledger.md",
+      "size": 4145,
+      "sha256": "e5c51340893c7ca2c4e5297c5ae9c38268c90a273556f23085789b6bca943b8f"
+    },
+    {
+      "path": "docs/session-mode.md",
+      "size": 3095,
+      "sha256": "a157cadb1bfee81625187e3d45186cc760fa000318deabe2b413070b201029eb"
+    },
+    {
+      "path": "docs/spec-extraction.json",
+      "size": 20949,
+      "sha256": "c4080ee4db2630fc284289a51dc4f0d462d7c138689e240458d3e09be4b4c5e8"
+    },
+    {
+      "path": "docs/spec-v0.2.1.md",
+      "size": 55369,
+      "sha256": "aa85b6fbe9e9c81619bfb9daa12f46b99320703809e8030ab33cacf5460d9ea9"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-04-dsh-bot.md",
+      "size": 6724,
+      "sha256": "16171b23016df84fb055f6b5d1ef381695dea86ad38756e31959fc9b270fe03c"
+    },
+    {
+      "path": "package.json",
+      "size": 650,
+      "sha256": "c7fa48ef91e1d285a6c7c2e39bde5704cae8ec0942d3b085871d751c18880eec"
+    },
+    {
+      "path": "scripts/check.mjs",
+      "size": 1261,
+      "sha256": "c9d384f059157f5ad37cf42711910d7f094e9f9ab5b30a7e3d8ee52ec136f21b"
+    },
+    {
+      "path": "scripts/probe-public-types.mjs",
+      "size": 1707,
+      "sha256": "6d5c2e4d2c83b440c5f33b45634f29b38996ede915f0bf154f7e216a87950458"
+    },
+    {
+      "path": "scripts/test-safety.mjs",
+      "size": 1631,
+      "sha256": "a5fe1e26bdc9c4258fa7a619d80d1971c49c666d3caa12d825a07d3c96cc3a22"
+    },
+    {
+      "path": "scripts/test.mjs",
+      "size": 878,
+      "sha256": "5ae9973db6a816f4bc7d6396e1b945f9e64d0063ac076a21804f028e5f39119c"
+    },
+    {
+      "path": "src/adapter.mjs",
+      "size": 2002,
+      "sha256": "f5ea2f42c46bda5783573a61a4452c147fbbbcaf573915863e61e8976f542c5f"
+    },
+    {
+      "path": "src/collaboration.mjs",
+      "size": 7826,
+      "sha256": "f853f4319a01462a2f7ee4d0396d7e0ee5153074da2cba60fab84580bc7e9fd0"
+    },
+    {
+      "path": "src/contracts.d.ts",
+      "size": 2587,
+      "sha256": "c9c52495bd7ead8160a0d6f77bcdd92eb7cd6796176cf2544c8a1a0ba53205c1"
+    },
+    {
+      "path": "src/errors.mjs",
+      "size": 1191,
+      "sha256": "2db662f458b724732b3b5a9efaf56fd664cf74c170adf1185a29f0aa3855baa9"
+    },
+    {
+      "path": "src/host.mjs",
+      "size": 9594,
+      "sha256": "e76a974987b143cd5e6168316661d69cf198cecde2dfe230cc1b24d31b3f29d9"
+    },
+    {
+      "path": "src/ledger.mjs",
+      "size": 4251,
+      "sha256": "1ed42fa6668ef1be9c3d68081ea0171906c399e01106d56f73750966c7ff13dd"
+    },
+    {
+      "path": "src/observations.mjs",
+      "size": 2425,
+      "sha256": "1ef5f0b4e16c7e3f2cdc7c128257a23655c7c4c4b3f32844c679f7ba0eb81547"
+    },
+    {
+      "path": "src/plugin.mjs",
+      "size": 1166,
+      "sha256": "da8451014b1d7b7079f554b66aaeaeb3962f3b1d156503d40f8421cb016666b8"
+    },
+    {
+      "path": "src/progression.mjs",
+      "size": 4391,
+      "sha256": "e35cde713996452269f1c5d3734f43ab6bed44a48ff74c2335bbc3f5d720b847"
+    },
+    {
+      "path": "src/resources.mjs",
+      "size": 1459,
+      "sha256": "2791ac9fba809e34b4956273964e351a1bf599332fa3575721d7ca2e3706dce1"
+    },
+    {
+      "path": "src/server.mjs",
+      "size": 4008,
+      "sha256": "0797a2a678523b9eac45fadc20bf64e19d9c01d84ab024bb9bcbcc0fe511eb64"
+    },
+    {
+      "path": "test/adapter.test.mjs",
+      "size": 1265,
+      "sha256": "e7cca78320667bfc7e85bcd307e6a49b6c8c44f397c270549e74609abce1ff43"
+    },
+    {
+      "path": "test/autonomy.test.mjs",
+      "size": 5290,
+      "sha256": "f2691b45b1bf0f5327fc4e8603ba715e23c4263811cb5c270bcd29c6e2244995"
+    },
+    {
+      "path": "test/collaboration.test.mjs",
+      "size": 7562,
+      "sha256": "0c0c1e212f7bf88f1f22ab912298d781e21bc6ae65fd41a3ed0a7394d42d41f5"
+    },
+    {
+      "path": "test/control.test.mjs",
+      "size": 6794,
+      "sha256": "8ae36e8a8210532854823f2f3dad923450129f04dba1f3e801f07c46177c38b0"
+    },
+    {
+      "path": "test/helpers.mjs",
+      "size": 1574,
+      "sha256": "8b27c7e1c31642e4def0cc00e8c687562efebfb1949b94823cf5cce9d7601602"
+    },
+    {
+      "path": "test/recovery.test.mjs",
+      "size": 8756,
+      "sha256": "ea021680d18a866fc87786c456b2209c09862be683abf7a0fde3753fcf42c016"
+    },
+    {
+      "path": "test/safety.test.mjs",
+      "size": 1126,
+      "sha256": "42158015be2aad81e82844b8be0417382b358075c6fbc513732870376ec6feb9"
+    },
+    {
+      "path": "test/ui.test.mjs",
+      "size": 4170,
+      "sha256": "b49bfc0e66fd0583e91c90ff66d22204104d35c746b392c8d9102607523c1ad7"
+    },
+    {
+      "path": "ui/app.mjs",
+      "size": 11701,
+      "sha256": "1a446bcb4172a480b3da556e8867733a0119ea22e5ee924cd9545e613cc5324d"
+    },
+    {
+      "path": "ui/command.mjs",
+      "size": 1632,
+      "sha256": "fc5f0c2202dabfef4880fe1f0fec78f9f3fc64946198e7c3a0ae8d4520fbfce8"
+    },
+    {
+      "path": "ui/index.html",
+      "size": 1316,
+      "sha256": "542eb2d2e91e35d18e54155247f61c8c4d39c86eb9e9f0b0ca4ba79597f8546a"
+    },
+    {
+      "path": "ui/style.css",
+      "size": 1954,
+      "sha256": "d35973026685e5e95a24fdfea6ba1082cdec116ede8f9047e4bda63d7cc3850e"
+    }
+  ],
+  "sourceSnapshotStatus": " M test/collaboration.test.mjs\n M test/recovery.test.mjs\n M test/ui.test.mjs\n",
+  "threeFileUncommittedPatch": "docs/mac-handoff-uncommitted.patch",
+  "patchSHA256": "b74f701b1cc2e92b82194e612c08801af090a3652844055cd3fe3609d2f9128d",
+  "deliberateBackupMetadataDelta": {
+    "README.md": "Backup warning prepended; original frozen bytes are available via git show sourceHead:README.md",
+    "docs/mac-handoff-20261004.json": "New transfer metadata and frozen 42-file manifest",
+    "docs/mac-handoff-uncommitted.patch": "Exact original uncommitted patch, now already applied to the three test files"
+  },
+  "lastSourceHeadEvidence": {
+    "guardedTestsPassed": 51,
+    "staticModulesPassed": 24,
+    "currentWorkingSnapshotAllGreen": false
+  },
+  "openReviewFindings": [
+    "Archive/restore does not fully fence old task submission, meeting obligations or pending delivery generations",
+    "Attempt outcome_unknown is not visible in collapsed UI summary",
+    "Concurrent prepareCommand can overwrite pending identity; late lookup/receipt can delete another operation pending record",
+    "pendingRevision still allows old-target submission and acceptance"
+  ],
+  "extraCandidateBoundary": "Stored browser operation is not bound to a durable ledger instance when switching databases",
+  "cloudOwnership": "Parent confirms the exact backup head/tree and manifest; then a single cloud writer continues. Mac writer is stopped again after upload.",
+  "publicationGate": "First product main/feature upload and PR remain blocked until required cloud candidate practical tests and independent review. This backup ref is a separate user-authorized transfer exception."
+}

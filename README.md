@@ -1,3 +1,7 @@
+> **UNACCEPTED WIP BACKUP — NOT A RELEASE OR COMPLETE v0.1.**
+> Private Mac-to-cloud development handoff only. The snapshot includes 4 known failing RED regression cases and unresolved independent review findings. Native six-requirement acceptance and cloud candidate validation have not passed. No PR, main/feature upload, merge, deployment, tag or release is authorized by this backup.
+> See [the frozen handoff manifest](docs/mac-handoff-20261004.json) and [the exact three-file regression patch](docs/mac-handoff-uncommitted.patch). Product implementation is unchanged from `b42acc3`.
+
 # dsh-bot
 
 Private **0.1.0-alpha.1 control layer candidate**, based on the user's DSH bot v0.2.1 design. This is an independently implemented persistent control ledger and thin review UI. Native DSH owns all Session, Agent, model and tool execution. This project never starts a substitute agent runtime.
