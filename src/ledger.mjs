@@ -5,12 +5,12 @@ import { canonical, digest, requireValue } from './errors.mjs';
 
 export class Ledger {
   constructor(path) {
-    if(existsSync(path)) {
+    if(path!==':memory:' && existsSync(path)) {
       const reader=new DatabaseSync(path,{readOnly:true});
       try {const version=reader.prepare('PRAGMA user_version').get().user_version;requireValue(version===0 || version===1,'migration_required','Unsupported schema; no writer opened');if(version===0) requireValue(reader.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().n===0,'migration_required','Nonempty unversioned database requires explicit migration');}
       finally {reader.close();}
     }
-    mkdirSync(dirname(path),{recursive:true});
+    if(path!==':memory:') mkdirSync(dirname(path),{recursive:true});
     this.db=new DatabaseSync(path);
     this.db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=2000; PRAGMA synchronous=FULL;');
     const version=this.db.prepare('PRAGMA user_version').get().user_version;
