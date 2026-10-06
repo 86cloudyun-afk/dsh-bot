@@ -1,0 +1,7 @@
+{
+  "name": "b-runtime-export-evaluation",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test export.test.mjs"},
+  "engines": {"node": ">=24.19.0"}
+}

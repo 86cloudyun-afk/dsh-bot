@@ -1,0 +1,1347 @@
+diff --git a/tools/runtime-export/HANDOFF-MANIFEST.json b/tools/runtime-export/HANDOFF-MANIFEST.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..4c5d1a1dce1d871a25f0ae52ab13e854f0a867df
+--- /dev/null
++++ b/tools/runtime-export/HANDOFF-MANIFEST.json
+@@ -0,0 +1,175 @@
++{
++  "classification": "MINIMAL_PRIVATE_SOURCE_MODULE_HANDOFF_NOT_RUNTIME_RELEASE",
++  "repository": "86cloudyun-afk/dsh-bot",
++  "targetBranch": "integration/runtime-export-47d0ce7-20261006",
++  "baseCommit": "13d1fb15c0dbb59434ae066fb2b5a56e90d8b683",
++  "reviewedSourceCommit": "47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da",
++  "reviewedFullSourceTree": "2c745c4e615bf6451637dd46bb1fe777c31dbd91",
++  "selectedSourceRootTree": "5ce51b96731a2eebbe05070035cb29b1a0138756",
++  "selectedSourceModuleTree": "e4ee48ec0e7a0949eb8b6bf6eb95484bc2389bdd",
++  "sourceFiles": [
++    {
++      "path": "tools/runtime-export/export.mjs",
++      "bytes": 24866,
++      "sha256": "2d0a2faacc30106039f88b4befede54440fa6bb0761eee47ad46518971788f9d",
++      "gitBlob": "c424076a60901ba044921e06f6be3ebc7c18c887",
++      "sourceCommit": "47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da",
++      "byteEquivalentToReviewedCommit": true
++    },
++    {
++      "path": "tools/runtime-export/cli.mjs",
++      "bytes": 5855,
++      "sha256": "1b8631e0e6b2dfcd8909d4c7e25abea8ff76d230fc23567c4eca1bcba36828c0",
++      "gitBlob": "158481bcef9b66a91b2bc25b261f13d43fb3bc37",
++      "sourceCommit": "47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da",
++      "byteEquivalentToReviewedCommit": true
++    },
++    {
++      "path": "tools/runtime-export/export.test.mjs",
++      "bytes": 33870,
++      "sha256": "f2d43714f0e2dddfe05b6f022b770e1f7500adb81c4182cabc2aac2a5daadbf1",
++      "gitBlob": "c7ea9e9f76306acb1375e9cd64c9be4f64bd94bb",
++      "sourceCommit": "47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da",
++      "byteEquivalentToReviewedCommit": true
++    },
++    {
++      "path": "tools/runtime-export/offline-guard.mjs",
++      "bytes": 821,
++      "sha256": "aeca0bb56daaec8fb0f5c7662b71d57182d9604217ceee0786819f3b399eb728",
++      "gitBlob": "2c7cc4f7123855c20f1857dfb4e3415e42899951",
++      "sourceCommit": "47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da",
++      "byteEquivalentToReviewedCommit": true
++    },
++    {
++      "path": "tools/runtime-export/package.json",
++      "bytes": 173,
++      "sha256": "81058c8a26a3a05696cc446fd80eeaf3c7eac4cf6913df5a3b6b98daab52a734",
++      "gitBlob": "ae600402204a50054fcba7e0e29396c71852312a",
++      "sourceCommit": "47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da",
++      "byteEquivalentToReviewedCommit": true
++    },
++    {
++      "path": "tools/runtime-export/contracts/scripts__assemble-owner-runtime.mjs",
++      "bytes": 6013,
++      "sha256": "8bd5a84631a6011d2c3b594c5427a7625b3c56a2129f06c7a8004ef624eca4a8",
++      "gitBlob": "16306e3c85ab265dee84b5fa697e076575d00701",
++      "sourceCommit": "47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da",
++      "byteEquivalentToReviewedCommit": true
++    }
++  ],
++  "independentReview": {
++    "disposition": "SCOPED_PASS_R1_R2_R3",
++    "moduleTests": {
++      "tests": 52,
++      "pass": 52,
++      "fail": 0
++    },
++    "additionalCases": 44,
++    "replayGroups": 20,
++    "originalReviewSha256": "052685dd325878f3dbd47f83f7ba06760cadcde3c27152b5b14a9d27640d6065",
++    "evidence": [
++      {
++        "path": "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-identity.json",
++        "originalSha256": "f5e3dd40d64470cc58889f3b8824aaff241610150f058cbbe4c6fab6221653c7",
++        "sha256": "f5e3dd40d64470cc58889f3b8824aaff241610150f058cbbe4c6fab6221653c7",
++        "bytes": 152,
++        "sanitization": [
++          "none; unchanged bytes"
++        ]
++      },
++      {
++        "path": "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-suite.log",
++        "originalSha256": "c61c2ac3d503a098754293928679445c6cfa899bbf624fc343248b4a73565a9d",
++        "sha256": "c61c2ac3d503a098754293928679445c6cfa899bbf624fc343248b4a73565a9d",
++        "bytes": 4581,
++        "sanitization": [
++          "none; unchanged bytes"
++        ]
++      },
++      {
++        "path": "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-replay.jsonl",
++        "originalSha256": "b0f70fd70654d4fda952c377f6337ea5516e0da52b3168735aeb157e712d0273",
++        "sha256": "b0f70fd70654d4fda952c377f6337ea5516e0da52b3168735aeb157e712d0273",
++        "bytes": 4144,
++        "sanitization": [
++          "none; unchanged bytes"
++        ]
++      },
++      {
++        "path": "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-independent.jsonl",
++        "originalSha256": "0524a0e2a357dda5083f71186eb523091b92438caec16348fa583b15be3ac524",
++        "sha256": "61861e45e6c546a9345361caac6cf0cbf7cfadbc322c0c98d4f5ade8cd3e2623",
++        "bytes": 4203,
++        "sanitization": [
++          "fixture path removed",
++          "fixtureRoot path removed"
++        ]
++      },
++      {
++        "path": "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-boundaries.jsonl",
++        "originalSha256": "f4364fa8ce9240edef0d4e50f8523d81de8b4a540812df5552a31e414550aa7c",
++        "sha256": "f4364fa8ce9240edef0d4e50f8523d81de8b4a540812df5552a31e414550aa7c",
++        "bytes": 935,
++        "sanitization": [
++          "none; unchanged bytes"
++        ]
++      },
++      {
++        "path": "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-export-faults.jsonl",
++        "originalSha256": "d2c6ead5749602ceb7f37f44fbef7c30426426f21264ad5db240713e5a57311b",
++        "sha256": "d2c6ead5749602ceb7f37f44fbef7c30426426f21264ad5db240713e5a57311b",
++        "bytes": 1046,
++        "sanitization": [
++          "none; unchanged bytes"
++        ]
++      },
++      {
++        "path": "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-cli-internal.jsonl",
++        "originalSha256": "0a6b63e357a197a43bddd06ed6f7ecbb5fb75b6e4f392104df3fa8d628fa6048",
++        "sha256": "0a6b63e357a197a43bddd06ed6f7ecbb5fb75b6e4f392104df3fa8d628fa6048",
++        "bytes": 280,
++        "sanitization": [
++          "none; unchanged bytes"
++        ]
++      },
++      {
++        "path": "tools/runtime-export/evidence/handoff-47d0ce7/independent-review.md",
++        "originalSha256": "052685dd325878f3dbd47f83f7ba06760cadcde3c27152b5b14a9d27640d6065",
++        "sha256": "bef7adad9e0ef7e183302db47e8e32207903aeee93fffa715ff5fe919d6c869d",
++        "bytes": 10030,
++        "sanitization": [
++          "local Node/snapshot/evidence path labels replaced",
++          "appended synthetic reproduction source omitted; findings/disposition retained"
++        ]
++      }
++    ],
++    "notReexecutedDuringHandoff": true
++  },
++  "deliveryDocumentation": [
++    {
++      "path": "tools/runtime-export/README.md",
++      "sha256": "f1b882493f1c1bd515947009947b10b99b10c580ddba5d10321543659e6fad6f",
++      "bytes": 3026
++    },
++    {
++      "path": "tools/runtime-export/HANDOFF-SCAN.json",
++      "sha256": "2bfcd759ec1ba250383efcbb0422b5ae048d842f1dbcbd6c541070f0968b8dfd",
++      "bytes": 1657
++    }
++  ],
++  "unchangedConsumerFixtureSha256": "8bd5a84631a6011d2c3b594c5427a7625b3c56a2129f06c7a8004ef624eca4a8",
++  "unresolved": [
++    "real native payload missing",
++    "FIXED_ARTIFACT_IDENTITY_REQUIRED unchanged",
++    "external bytes absent",
++    "source/consumer identity migration unapproved",
++    "precise generation settlement unsupported",
++    "local modification distribution rights unknown"
++  ],
++  "scope": [
++    "only tools/runtime-export selected source and handoff docs/proofs",
++    "no A release/main/PR1 updates",
++    "no production manifest/schema/guard changes",
++    "no model/provider/deployment/publishing"
++  ]
++}
+diff --git a/tools/runtime-export/HANDOFF-SCAN.json b/tools/runtime-export/HANDOFF-SCAN.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ca854da0b9429c4cc7335aa54e4bfc76181ef9f
+--- /dev/null
++++ b/tools/runtime-export/HANDOFF-SCAN.json
+@@ -0,0 +1,38 @@
++{
++  "classification": "NARROW_ALLOWLIST_SCAN_OF_PRIVATE_MODULE_HANDOFF_ONLY",
++  "fileCount": 15,
++  "findings": [],
++  "status": "PASS",
++  "rules": [
++    "private_key",
++    "github_token",
++    "model_api_key",
++    "aws_access_key",
++    "bearer_value"
++  ],
++  "excludedContent": [
++    "source recipes and real Host preflight",
++    "Home/environment/credential/ledger files",
++    "internal private notes",
++    "real native binaries",
++    "future schema/consumer changes"
++  ],
++  "literalReferences": "Safety text, missing-native filenames, environment variable names and synthetic fixture strings are not credential values. No sensitive file locations were read.",
++  "files": [
++    "tools/runtime-export/README.md",
++    "tools/runtime-export/cli.mjs",
++    "tools/runtime-export/contracts/scripts__assemble-owner-runtime.mjs",
++    "tools/runtime-export/evidence/handoff-47d0ce7/independent-review.md",
++    "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-boundaries.jsonl",
++    "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-cli-internal.jsonl",
++    "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-export-faults.jsonl",
++    "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-identity.json",
++    "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-independent.jsonl",
++    "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-replay.jsonl",
++    "tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-suite.log",
++    "tools/runtime-export/export.mjs",
++    "tools/runtime-export/export.test.mjs",
++    "tools/runtime-export/offline-guard.mjs",
++    "tools/runtime-export/package.json"
++  ]
++}
+diff --git a/tools/runtime-export/README.md b/tools/runtime-export/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..ca070df1d3a14c63ee10626692b3a77da7cc87f5
+--- /dev/null
++++ b/tools/runtime-export/README.md
+@@ -0,0 +1,21 @@
++# Private runtime-export module handoff
++
++This handoff contains the exact six required implementation/test/fixture files from reviewed source commit 47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da. It includes the final CLI at that commit. README, handoff metadata and sanitized review copies are delivery documents. They introduce no runtime/schema changes.
++
++Independent review: scoped PASS for R1/R2/R3, 52/52 archived module tests, 44 additional cases and 20 replay groups. These are retained independent results, not reruns during upload. The review audited the full 93-file source tree 2c745c4e615bf6451637dd46bb1fe777c31dbd91; this delivery deliberately selects the six files required to run the isolated module and suite. Per-file byte equivalence is in HANDOFF-MANIFEST.json.
++
++From the repository root, under Node 24.19.0 or later:
++
++```sh
++node --test tools/runtime-export/export.test.mjs
++```
++
++The module exports planRuntime({sourceRoot,lock,roots,identity,platform,arch}), exportRuntime({plan,outputDirectory}) and verifyRuntime({directory,expectedManifestSha256}). Plans are immutable and belong to the creating module instance. RED plans refuse export. Use a caller-trusted manifest digest for source/build trust; unpinned verification establishes internal consistency only. External package bytes are inventoried but absent.
++
++CLI required absolute flags: --source, --identity, --roots, --report; optional --output. The supplied source must contain the fixed source-file identity and lock. YAML parsing uses the already installed js-yaml4.2.0 from that source tree; the CLI never installs dependencies. Report/output paths must be separate, canonical and exclusive. Cleanup deletes only paths with a retained matching inode/device. Metadata/removal failures can leave explicitly reported paths requiring deliberate recovery; there is no unconditional rollback or general hostile-concurrency guarantee.
++
++The captured contracts/scripts__assemble-owner-runtime.mjs is an unchanged test fixture, not a replacement for A scripts. It retains the original fixed commit, 74 declared/75 observed count checks and FIXED_ARTIFACT_IDENTITY_REQUIRED. Source identity, manifest2 and consumer contracts have not been migrated. Actual B runtime remains RED for missing bin/landlock-run and bin/musl/system.node; this is a tool source handoff, not a runtime export or release.
++
++Original source recipes, real Host preflight files, private project notes and local source/build trees are deliberately omitted. No models, live ledger, credential or Home content are included. A's sole writer owns the authorized integration. This delivery changes no A release/main/PR1 branch and grants no public-distribution rights.
++
++See evidence/handoff-47d0ce7/independent-review.md and the retained proof logs. The additive handoff patch can be checked with git apply --check; A must perform that check against its actual checkout. It is applicable when the delivered tool paths do not already exist; no existing module files are overwritten by that patch.
+diff --git a/tools/runtime-export/cli.mjs b/tools/runtime-export/cli.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..158481bcef9b66a91b2bc25b261f13d43fb3bc37
+--- /dev/null
++++ b/tools/runtime-export/cli.mjs
+@@ -0,0 +1,66 @@
++import * as fs from 'node:fs/promises';
++import { resolve, join, dirname, isAbsolute, sep } from 'node:path';
++import { createRequire } from 'node:module';
++import { createHash } from 'node:crypto';
++import { planRuntime, exportRuntime } from './export.mjs';
++const sha = bytes => createHash('sha256').update(bytes).digest('hex');
++const args = {};
++let reportPath, reportHandle, reportIdentity, artifact, reportPublished = false;
++async function removeOwned(path, identity, directory = false) {
++  if (!path || !identity) return;
++  const current = await fs.lstat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
++  if (current?.ino !== identity.ino || current?.dev !== identity.dev || !(directory ? current.isDirectory() : current.isFile())) return;
++  if (directory) await fs.rm(path, { recursive: true, force: true });
++  else await fs.unlink(path);
++}
++try {
++  const accepted = new Set(['--source', '--identity', '--roots', '--report', '--output']);
++  for (let i = 2; i < process.argv.length; i += 2) {
++    if (!accepted.has(process.argv[i]) || !process.argv[i + 1] || args[process.argv[i]]) throw Error('INVALID_ARGUMENTS');
++    args[process.argv[i]] = process.argv[i + 1];
++  }
++  for (const k of ['--source', '--identity', '--roots', '--report']) if (!args[k] || !isAbsolute(args[k])) throw Error('EXPLICIT_ABSOLUTE_INPUTS_REQUIRED');
++  const source = await fs.realpath(args['--source']); reportPath = resolve(args['--report']);
++  if (reportPath === source || reportPath.startsWith(source + sep) || await fs.realpath(dirname(reportPath)) !== dirname(reportPath)) throw Error('EXCLUSIVE_CANONICAL_REPORT_REQUIRED');
++  if (args['--output']) {
++    if (!isAbsolute(args['--output'])) throw Error('ABSOLUTE_OUTPUT_REQUIRED');
++    const output = resolve(args['--output']);
++    if (reportPath === output || reportPath.startsWith(output + sep) || output.startsWith(reportPath + sep)) throw Error('REPORT_OUTPUT_PATH_CONFLICT');
++  }
++  // Claim the report before exporting; existing caller entries are never opened for writing.
++  reportHandle = await fs.open(reportPath, 'wx', 0o600); reportIdentity = await reportHandle.stat();
++  const identity = JSON.parse(await fs.readFile(args['--identity'], 'utf8')); const roots = JSON.parse(await fs.readFile(args['--roots'], 'utf8'));
++  const raw = await fs.readFile(join(source, 'pnpm-lock.yaml')); const file = identity.sourceFiles?.find(x => x.path === 'pnpm-lock.yaml');
++  if (!file || file.sha256 !== sha(raw) || file.bytes !== raw.length) throw Error('SOURCE_LOCK_IDENTITY_REQUIRED');
++  let lock, parser;
++  if (raw.toString().trimStart().startsWith('{')) { lock = JSON.parse(raw); parser = 'JSON subset of YAML'; }
++  else {
++    // The parser is an already installed public dependency of this fixed source tree.
++    // No dependency installation or application package import occurs here.
++    const req = createRequire(join(source, 'apps/cli/package.json'));
++    if (req('js-yaml/package.json').version !== '4.2.0') throw Error('LOCKED_YAML_PARSER_VERSION_REQUIRED');
++    lock = req('js-yaml').load(raw.toString()); parser = 'js-yaml4.2.0';
++  }
++  if (String(lock.lockfileVersion) !== '9.0' && String(lock.lockfileVersion) !== '9') throw Error('PNPM_LOCK_VERSION_REQUIRED');
++  const plan = await planRuntime({ sourceRoot: source, roots, identity, lock });
++  if (args['--output'] && !plan.issues.length) artifact = await exportRuntime({ plan, outputDirectory: args['--output'] });
++  const report = { format: 1, classification: 'B_SOURCE_BUILD_OVERLAY_PREFLIGHT', parser, sourceLockSha256: sha(raw), sourceIdentityVerified: !plan.issues.some(x => x.code.startsWith('SOURCE_IDENTITY')), roots: plan.roots, platform: plan.platform, arch: plan.arch, corePackageCount: plan.packages.length, externalLockedSnapshotCount: plan.externalPackages.length,
++    exported: Boolean(artifact), issues: plan.issues, packages: plan.packages.map(({ absolute, ...x }) => x), externalPackages: plan.externalPackages, skipped: plan.skipped,
++    legacyConsumerCompatibility: { status: 'RED', releaseCommit: '3e57f2385d7fa5495e6277c4b1dbe03c046c7b32', assemblerSourceSha256: '8bd5a84631a6011d2c3b594c5427a7625b3c56a2129f06c7a8004ef624eca4a8', requiresCandidateCommit: '3fbedc25d3626caf4e401b14c31a7f0326a19ec7', requiresDeclaredCount: 74, requiresActualCount: 75, newManifestFormat: 2, note: 'A must separately design/test source identity and computed closure compatibility; existing guards unchanged' },
++    ...(artifact ? { artifactManifestSha256: sha(JSON.stringify(artifact.manifest, null, 2) + '\n') } : {}) };
++  await reportHandle.writeFile(JSON.stringify(report, null, 2) + '\n');
++  await reportHandle.close(); reportHandle = null; reportPublished = true;
++  process.stdout.write(JSON.stringify({ corePackageCount: report.corePackageCount, externalLockedSnapshotCount: report.externalLockedSnapshotCount, issueCount: report.issues.length, exported: report.exported, legacyConsumerCompatibility: 'RED', ...(report.artifactManifestSha256 ? { artifactManifestSha256: report.artifactManifestSha256 } : {}) }) + '\n');
++  process.exitCode = plan.issues.length ? 1 : 0;
++} catch (error) {
++  if (reportHandle) await reportHandle.close().catch(() => {});
++  let cleanupErrorCategory = error.cleanupErrorCategory;
++  if (reportHandle && !reportIdentity) cleanupErrorCategory ??= 'REPORT_OWNERSHIP_UNAVAILABLE';
++  if (!reportPublished) {
++    for (const [path, identity, directory] of [[artifact?.outputDirectory, artifact?.ownership, true], [reportPath, reportIdentity, false]]) {
++      try { await removeOwned(path, identity, directory); }
++      catch (cleanupError) { cleanupErrorCategory ??= cleanupError.code ?? cleanupError.message; }
++    }
++  }
++  process.stderr.write(JSON.stringify({ errorCategory: error.code ?? error.message, ...(cleanupErrorCategory ? { cleanupErrorCategory } : {}) }) + '\n'); process.exitCode = 1;
++}
+diff --git a/tools/runtime-export/contracts/scripts__assemble-owner-runtime.mjs b/tools/runtime-export/contracts/scripts__assemble-owner-runtime.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..16306e3c85ab265dee84b5fa697e076575d00701
+--- /dev/null
++++ b/tools/runtime-export/contracts/scripts__assemble-owner-runtime.mjs
+@@ -0,0 +1,57 @@
++/** Offline public-package assembly. Never copies a Home, config, environment or credential. */
++import { cp,mkdir,readFile,writeFile,readdir,rm,symlink,realpath } from 'node:fs/promises';
++import { resolve,join,isAbsolute } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { createHash } from 'node:crypto';
++const CORE='3fbedc25d3626caf4e401b14c31a7f0326a19ec7';
++const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
++const json=async path=>JSON.parse(await readFile(path,'utf8'));
++function target(root,name){if(!/^@[a-z0-9-]+\/[a-z0-9._-]+$/.test(name))throw Error('INVALID_PUBLIC_PACKAGE_NAME');return join(root,'node_modules',...name.split('/'));}
++export async function assembleOwnerRuntime({officialRoot,candidateRoot,outputDirectory,productRoot=resolve(import.meta.dirname,'..')}){
++ if(![officialRoot,candidateRoot,outputDirectory].every(p=>typeof p==='string' && isAbsolute(p)))throw Error('ABSOLUTE_ARTIFACT_PATHS_REQUIRED');
++ const official=await realpath(officialRoot),candidate=await realpath(candidateRoot),product=await realpath(productRoot),output=resolve(outputDirectory);
++ if(await realpath(resolve(output,'..'))!==resolve(output,'..'))throw Error('CANONICAL_OUTPUT_PARENT_REQUIRED');
++ if([official,candidate,product].some(path=>output===path || output.startsWith(path+'/')))throw Error('EXCLUSIVE_RUNTIME_OUTSIDE_INPUTS_REQUIRED');
++ const cli=await json(join(official,'node_modules','@deepseek-ai','dsh','package.json')),manifest=await json(join(candidate,'artifact-manifest.json'));
++ if(cli.version!=='0.2.0-rc.2' || manifest.candidateCommit!==CORE || manifest.corePackageCount!==74)throw Error('FIXED_ARTIFACT_IDENTITY_REQUIRED');
++ await mkdir(output,{mode:0o700});await cp(join(official,'node_modules'),join(output,'node_modules'),{recursive:true,verbatimSymlinks:true});
++ const overlays=[];
++ for(const directory of await readdir(join(candidate,'.packages'))){const source=join(candidate,'.packages',directory),pkg=await json(join(source,'package.json')),destination=target(output,pkg.name);
++  await rm(destination,{recursive:true,force:true});await mkdir(resolve(destination,'..'),{recursive:true});
++  // Archive rehydration links point back into the entire package graph. Packages
++  // resolve dependencies from the one staged root, so never copy that graph link.
++  await cp(source,destination,{recursive:true,dereference:true,filter:path=>path!==join(source,'node_modules')});
++  const lib=join(source,'lib','index.js');let runtimeHash=null;try{runtimeHash=sha(await readFile(lib));}catch(error){if(error.code!=='ENOENT')throw error;}
++  overlays.push({name:pkg.name,version:pkg.version,sourcePackageJsonSha256:sha(await readFile(join(source,'package.json'))),runtimeEntrySha256:runtimeHash});
++ }
++ // The fixed archive itself contains 75 directories; its manifest says 74.
++ // Preserve that discrepancy in the receipt instead of silently correcting it.
++ if(overlays.length!==75)throw Error('FIXED_PACKAGE_COUNT_REQUIRED');
++ // Convert only publishing metadata; executable built files remain byte-identical.
++ for(const overlay of overlays){const path=join(target(output,overlay.name),'package.json'),pkg=await json(path);
++  for(const section of ['dependencies','optionalDependencies','peerDependencies','devDependencies'])for(const [name,range] of Object.entries(pkg[section] ?? {}))if(range.startsWith('workspace:')){
++   let version;try{version=(await json(join(target(output,name),'package.json'))).version;}catch{continue;}
++   pkg[section][name]=(range==='workspace:~'?'~':range==='workspace:^'?'^':'')+version;
++  }
++  await writeFile(path,JSON.stringify(pkg,null,2)+'\n');
++ }
++ const destination=join(output,'node_modules','dsh-bot');await mkdir(destination);await cp(join(product,'src'),join(destination,'src'),{recursive:true});
++ await cp(join(product,'package.json'),join(destination,'package.json'));
++ const cliPath=join(output,'node_modules','@deepseek-ai','dsh','package.json'),stagedCli=await json(cliPath);stagedCli.dependencies['dsh-bot']=(await json(join(product,'package.json'))).version;
++ await writeFile(cliPath,JSON.stringify(stagedCli,null,2)+'\n');
++ const bin=join(output,'node_modules','.bin','dsh');await rm(bin,{force:true});await symlink('../@deepseek-ai/dsh/lib/bin.js',bin);
++ const productFiles={};for(const name of await readdir(join(product,'src')))if(name.endsWith('.mjs') || name.endsWith('.d.ts'))productFiles[`src/${name}`]=sha(await readFile(join(product,'src',name)));
++ productFiles['package.json']=sha(await readFile(join(product,'package.json')));
++ const receipt={format:1,officialDshVersion:cli.version,coreCandidate:CORE,officialRoot:official,candidateRoot:candidate,
++  officialCliBinSha256:sha(await readFile(join(official,'node_modules','@deepseek-ai','dsh','lib','bin.js'))),
++  declaredCorePackageCount:manifest.corePackageCount,actualPackageCount:overlays.length,
++  overlayPackages:overlays.sort((a,b)=>a.name.localeCompare(b.name)),productFiles,
++  executableFilesAltered:false,metadataWorkspaceRangesNormalized:true,credentialsOrHomesCopied:false,
++  qualification:'Private isolated official-launcher/candidate overlay for owner-entry acceptance; not stock npm rc.2 or a release.'};
++ await writeFile(join(output,'owner-runtime-manifest.json'),JSON.stringify(receipt,null,2)+'\n');return {runtimeDirectory:output,dsh:bin,manifest:receipt};
++}
++if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)){
++ const options={};for(let i=2;i<process.argv.length;i+=2)options[process.argv[i]]=process.argv[i+1];
++ try{const result=await assembleOwnerRuntime({officialRoot:options['--official'],candidateRoot:options['--candidate'],outputDirectory:options['--output']});process.stdout.write(JSON.stringify({runtimeDirectory:result.runtimeDirectory,dsh:result.dsh,coreCandidate:CORE,declaredPackageCount:74,overlayPackages:result.manifest.actualPackageCount,credentialsCopied:false})+'\n');}
++ catch(error){process.stderr.write(JSON.stringify({errorCategory:error.code ?? error.message})+'\n');process.exitCode=1;}
++}
+diff --git a/tools/runtime-export/evidence/handoff-47d0ce7/independent-review.md b/tools/runtime-export/evidence/handoff-47d0ce7/independent-review.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..3a9080dc00bfb85adb515b9ced71f55e8cbe87a1
+--- /dev/null
++++ b/tools/runtime-export/evidence/handoff-47d0ce7/independent-review.md
+@@ -0,0 +1,86 @@
++This is a sanitized handoff copy of the independent reviewer report. Findings, dispositions, metrics, source commit/tree, and evidence hashes are retained. Local execution paths are replaced and the appended synthetic reproduction source is omitted. The original report SHA256 is `052685dd325878f3dbd47f83f7ba06760cadcde3c27152b5b14a9d27640d6065`. This copy is delivery documentation; it is not a new review.
++
++# Independent bounded follow-up review: 47d0ce7
++
++**Disposition: independent scoped PASS for R1/R2/R3 bounded fixes.** No remaining blocker found within the authorized review scope. This closes the previous R3-A/P2 finding and accepts the explicit ownership-unavailable disposition; it does not claim every filesystem failure can roll back cleanly.
++
++## Exact reviewed revision
++
++- Follow-up BASE: `4115a762cfeccca244afca88e978a6fc1aa21404`.
++- Original R123 BASE: `c99a80e0af572d55b74db7d0ac744756435b2a53`.
++- HEAD: `47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da`.
++- Tree: `2c745c4e615bf6451637dd46bb1fe777c31dbd91`.
++- Snapshot: `<REVIEW_SNAPSHOT>`, independently extracted by `git archive` of that exact commit.
++- All93 archived files were independently hashed as Git blobs and matched `git ls-tree -rz` for HEAD. Tests and probes import only the archived module.
++- Runtime: Node24.19.0 at `node`. Runtime environment contains only PATH,LANG,TMPDIR; no inherited HOME,DSH_HOME or model-secret variables. Synthetic CLI children preload the archived offline guard; observed counters are all zero.
++- Only this report was newly written inside the repository by this reviewer. All prior reports, implementation, author evidence and external source/build trees remained read-only. Probe scripts, logs and fixtures are under `/tmp`.
++
++| File | Git blob | SHA256 |
++| --- | --- | --- |
++| cli.mjs | 158481bcef9b66a91b2bc25b261f13d43fb3bc37 | 1b8631e0e6b2dfcd8909d4c7e25abea8ff76d230fc23567c4eca1bcba36828c0 |
++| export.mjs | c424076a60901ba044921e06f6be3ebc7c18c887 | 2d0a2faacc30106039f88b4befede54440fa6bb0761eee47ad46518971788f9d |
++| export.test.mjs | c7ea9e9f76306acb1375e9cd64c9be4f64bd94bb | f2d43714f0e2dddfe05b6f022b770e1f7500adb81c4182cabc2aac2a5daadbf1 |
++
++Inspected the production diff against4115 and against the original c99 BASE, the changed regression tests, progress ruling, prior independent4115 report, new RED/GREEN logs/status and fresh replay results. R1/R2 checks remain intact. No manifest fields/schema, old assembler identity/count guards or A integration behavior changed.
++
++## Findings and dispositions
++
++| Review item | Result | Independent evidence |
++| --- | --- | --- |
++| R1 required external peer compatibility | PASS retained |18 cases across importer peerDependencies/dependencies/devDependencies: incompatible major, caret0 boundaries, compatible caret0, tilde upper bound, unsupported comparator and wildcard. Valid cases export/verify; invalid cases return RED and no output. Verifier regression remains passing. |
++| R2 declared main presence and ownership | PASS retained |7 cases: traversal, absolute path, internal dot traversal, directory, missing entry and null all rejected; safe `./lib/index.js` accepted. Reduced file-list missing-main replay rejects; original trusted pin rejects altered manifest. |
++| Original R3 deterministic report conflict | PASS retained | Existing report regular file/symlink preservation, path equality, both containment directions, canonical output parent and caller output/replacement protection pass. |
++|4115 R3-A/P2 swallowed cleanup lookup error | RESOLVED | `cli.mjs:11` treats only ENOENT as absent. After report-write ENOSPC, output/report lookup EACCES now produces cleanupErrorCategory:EACCES. The other owned path is independently cleaned. |
++| Report ownership acquisition unavailable | ACCEPTED bounded behavior | Handle stat EIO produces primary EIO and cleanupErrorCategory:REPORT_OWNERSHIP_UNAVAILABLE. Newly claimed report remains; no output is created and no ownership-blind deletion occurs. |
++| Output ownership acquisition unavailable | ACCEPTED bounded behavior | Post-mkdir stat EIO is inside exporter guarded handling. Primary EIO is preserved with ARTIFACT_OWNERSHIP_UNAVAILABLE; output remains without manifest and CLI removes its separately owned report. |
++| Internal exporter cleanup error/caller replacement handling | PASS |8 newly authored cases cover normal removal, lstat EACCES/EIO, rm EPERM, replacement directory/file/symlink and absent destination. Primary ENOSPC is preserved; applicable cleanup category is attached; all caller markers and replacements remain intact. |
++| Internal exporter error propagated through CLI | PASS | Additional CLI probe faults artifact-manifest write with ENOSPC and cleanup lookup with EACCES. stderr retains both categories, report is cleaned and output is retained. |
++
++The old R3-A reproduction still leaves a complete artifact when ownership lookup fails, and that artifact can internally verify. It now explicitly reports cleanup failure. Under the approved ruling, this is correct: uncertain ownership or denied metadata access must preserve paths rather than trigger blind deletion. This result is **not** a claim that the artifact was rolled back. On such errors, retry can encounter EEXIST; root/caller must deliberately inspect and recover the residual paths.
++
++Confirmed code behavior:
++
++- CLI cleanup attempts artifact and report independently; one lookup/removal failure cannot skip the other attempt.
++- Exporter ownership capture is inside its guarded block. If capture fails, the error explicitly carries ARTIFACT_OWNERSHIP_UNAVAILABLE.
++- When identity is known, exporter uses lstat, requires a directory and matching inode/device before recursive removal, and preserves the primary error if cleanup fails.
++- Existing caller output is rejected before an output claim. Existing report is rejected by exclusive wx. Distinct replacement identities are preserved. Deterministic replacement probes are safety checks, not a general adversarial concurrency guarantee.
++- ENOENT remains an allowed absent-path result. A removed output does not incorrectly add a cleanup failure.
++
++## Independent verification
++
++Full archived module suite: **52 tests,52 pass,0 fail**, exit0. This includes the existing caller-file/replacement and concurrent-winner tests, pin checks and synthetic legacy assembler rejection.
++
++```sh
++cd <REVIEW_SNAPSHOT>
++env -i PATH=<NODE24_BIN>:/usr/bin:/bin LANG=C.UTF-8 TMPDIR=/tmp node --test tools/runtime-export/export.test.mjs
++```
++
++Independent additional assertions:18 R1 cases +7 R2 cases +6 CLI controls/faults +4 path-boundary cases +8 internal-export failure/replacement cases +1 CLI internal-error-propagation case = **44 cases**, all completed successfully. The ownership failure assertions intentionally require residual paths plus explicit blocked-cleanup diagnostics, not deletion.
++
++Replayed the archived20-group fresh-probes script against the archive. Result SHA256 is `b0f70fd70654d4fda952c377f6337ea5516e0da52b3168735aeb157e712d0273`, exactly matching prior expected JSONL. The replay maintains previous symlink/source-change/duplicate-identity, manifest pin, glob, unexpected-payload and concurrent-output checks. The author’s new RED log records48pass/4fail and GREEN records52pass/0fail; those were inspected as supporting history, not substituted for independent execution.
++
++Evidence files and SHA256:
++
++- `./review-47d0ce7-identity.json`: `f5e3dd40d64470cc58889f3b8824aaff241610150f058cbbe4c6fab6221653c7`
++- `./review-47d0ce7-suite.log`: `c61c2ac3d503a098754293928679445c6cfa899bbf624fc343248b4a73565a9d`
++- `./review-47d0ce7-replay.jsonl`: `b0f70fd70654d4fda952c377f6337ea5516e0da52b3168735aeb157e712d0273`
++- `./review-47d0ce7-independent.mjs`: `3fd42de1fc0fd8d331eaa4cb394d6d2a4609ef40575d31d85740b46a399ddb4f`
++- `./review-47d0ce7-independent.jsonl`: `0524a0e2a357dda5083f71186eb523091b92438caec16348fa583b15be3ac524`
++- `./review-47d0ce7-boundaries.mjs`: `93bc2c1a6869a75ddc95af2029d82980e77826fff02912c621ea3b41733d9d7b`
++- `./review-47d0ce7-boundaries.jsonl`: `f4364fa8ce9240edef0d4e50f8523d81de8b4a540812df5552a31e414550aa7c`
++- `./review-47d0ce7-export-faults.mjs`: `a732be39ce306a807ffb966aad363089da063e4061faa7702adacf25e589f43e`
++- `./review-47d0ce7-export-faults.jsonl`: `d2c6ead5749602ceb7f37f44fbef7c30426426f21264ad5db240713e5a57311b`
++- `./review-47d0ce7-cli-internal.mjs`: `8f3c7a9c65f9199b6695ce2463e3098aa4eb4f579784b4bc7dd356ce75a44901`
++- `./review-47d0ce7-cli-internal.jsonl`: `0a6b63e357a197a43bddd06ed6f7ecbb5fb75b6e4f392104df3fa8d628fa6048`
++
++## Remaining contract and coverage limits
++
++- This PASS applies only to isolated tools/runtime-export R1/R2/R3 bounded fixes. It does not approve actual B export, Host integration, dependency installation, release, public distribution or licensing.
++- Unpinned verifier success means internal consistency only. Source/build trust acceptance still requires a caller-trusted manifest digest; a self-supplied digest does not authenticate provenance.
++- External package bytes remain absent. The overlay is not a standalone runtime installation.
++- Historical real-B evidence remains55 workspace packages/20 external snapshots/94 indexed source files, with `bin/landlock-run` and `bin/musl/system.node` missing. No real-B preflight/export was rerun and no real runtime artifact was generated.
++- The unchanged legacy assembler continues to reject with FIXED_ARTIFACT_IDENTITY_REQUIRED; old3fbedc25/74/75 assumptions have not been migrated. Consumer/root contract decisions remain open.
++- No full build, Host141/28, install, API/model call, secret/Home/ledger inspection, push/merge or publication was performed.
++- Malicious concurrent replacement and globally atomic multi-path visibility remain excluded by the existing README. Filesystem I/O faults can leave explicit residual claims requiring deliberate recovery, as now documented in progress. No unconditional rollback guarantee is asserted.
++- R2 scope remains declared main; this review did not expand bin/exports/native schema coverage or semver support.
++
+diff --git a/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-boundaries.jsonl b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-boundaries.jsonl
+new file mode 100644
+index 0000000000000000000000000000000000000000..f80e37424bf57ba0bd74faaf4cc20b62370902ae
+--- /dev/null
++++ b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-boundaries.jsonl
+@@ -0,0 +1,4 @@
++{"name":"report-parent-of-output","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"REPORT_OUTPUT_PATH_CONFLICT\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":true,"outputExists":false}
++{"name":"output-parent-of-report","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"REPORT_OUTPUT_PATH_CONFLICT\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":true}
++{"name":"equal","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"REPORT_OUTPUT_PATH_CONFLICT\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":false}
++{"name":"output-symlink-parent","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"CANONICAL_OUTPUT_PARENT_REQUIRED\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":false}
+diff --git a/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-cli-internal.jsonl b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-cli-internal.jsonl
+new file mode 100644
+index 0000000000000000000000000000000000000000..342f126c1516888161bfb15044240a5b3efc8eaf
+--- /dev/null
++++ b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-cli-internal.jsonl
+@@ -0,0 +1 @@
++{"name":"CLI-internal-export-cleanup-propagation","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"ENOSPC\",\"cleanupErrorCategory\":\"EACCES\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":true,"pass":true}
+diff --git a/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-export-faults.jsonl b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-export-faults.jsonl
+new file mode 100644
+index 0000000000000000000000000000000000000000..97d15cb6791f0302f8b552a5243cbd8b6aad6fb1
+--- /dev/null
++++ b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-export-faults.jsonl
+@@ -0,0 +1,8 @@
++{"name":"export-internal-normal-clean","primary":"ENOSPC","cleanup":null,"outputExists":false,"callerPreserved":true,"pass":true}
++{"name":"export-internal-lookup-EACCES","primary":"ENOSPC","cleanup":"EACCES","outputExists":true,"callerPreserved":true,"pass":true}
++{"name":"export-internal-lookup-EIO","primary":"ENOSPC","cleanup":"EIO","outputExists":true,"callerPreserved":true,"pass":true}
++{"name":"export-internal-rm-EPERM","primary":"ENOSPC","cleanup":"EPERM","outputExists":true,"callerPreserved":true,"pass":true}
++{"name":"export-internal-replacement-dir","primary":"ENOSPC","cleanup":null,"outputExists":true,"callerPreserved":true,"pass":true}
++{"name":"export-internal-replacement-file","primary":"ENOSPC","cleanup":null,"outputExists":true,"callerPreserved":true,"pass":true}
++{"name":"export-internal-replacement-symlink","primary":"ENOSPC","cleanup":null,"outputExists":true,"callerPreserved":true,"pass":true}
++{"name":"export-internal-removed","primary":"ENOSPC","cleanup":null,"outputExists":false,"callerPreserved":true,"pass":true}
+diff --git a/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-identity.json b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-identity.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..4127d8741fbd6a87796d820b186055ff071af0be
+--- /dev/null
++++ b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-identity.json
+@@ -0,0 +1,6 @@
++{
++  "commit": "47d0ce7c123bef7560a3d8f4d6e7bc3da880f7da",
++  "tree": "2c745c4e615bf6451637dd46bb1fe777c31dbd91",
++  "blobCount": 93,
++  "allMatch": true
++}
+diff --git a/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-independent.jsonl b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-independent.jsonl
+new file mode 100644
+index 0000000000000000000000000000000000000000..a8ff54793642aedc664c7633d4e082570ed4f417
+--- /dev/null
++++ b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-independent.jsonl
+@@ -0,0 +1,32 @@
++{"name":"R1-matrix","section":"dependencies","range":"^2.0.0","version":"1.9.9","valid":false,"pass":true}
++{"name":"R1-matrix","section":"dependencies","range":"^0.2.3","version":"0.2.4","valid":true,"pass":true}
++{"name":"R1-matrix","section":"dependencies","range":"^0.2.3","version":"0.3.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"dependencies","range":"~1.2.3","version":"1.3.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"dependencies","range":">=1.0.0","version":"2.0.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"dependencies","range":"*","version":"2.0.0","valid":true,"pass":true}
++{"name":"R1-matrix","section":"devDependencies","range":"^2.0.0","version":"1.9.9","valid":false,"pass":true}
++{"name":"R1-matrix","section":"devDependencies","range":"^0.2.3","version":"0.2.4","valid":true,"pass":true}
++{"name":"R1-matrix","section":"devDependencies","range":"^0.2.3","version":"0.3.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"devDependencies","range":"~1.2.3","version":"1.3.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"devDependencies","range":">=1.0.0","version":"2.0.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"devDependencies","range":"*","version":"2.0.0","valid":true,"pass":true}
++{"name":"R1-matrix","section":"peerDependencies","range":"^2.0.0","version":"1.9.9","valid":false,"pass":true}
++{"name":"R1-matrix","section":"peerDependencies","range":"^0.2.3","version":"0.2.4","valid":true,"pass":true}
++{"name":"R1-matrix","section":"peerDependencies","range":"^0.2.3","version":"0.3.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"peerDependencies","range":"~1.2.3","version":"1.3.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"peerDependencies","range":">=1.0.0","version":"2.0.0","valid":false,"pass":true}
++{"name":"R1-matrix","section":"peerDependencies","range":"*","version":"2.0.0","valid":true,"pass":true}
++{"name":"R2-main","main":"../b/lib/index.js","pass":true}
++{"name":"R2-main","main":"/tmp/index.js","pass":true}
++{"name":"R2-main","main":"lib/../lib/index.js","pass":true}
++{"name":"R2-main","main":"lib","pass":true}
++{"name":"R2-main","main":"missing.js","pass":true}
++{"name":"R2-main","main":null,"pass":true}
++{"name":"R2-main","main":"./lib/index.js","pass":true}
++{"name":"R3-none","exit":0,"stdout":"{\"corePackageCount\":1,\"externalLockedSnapshotCount\":0,\"issueCount\":0,\"exported\":true,\"legacyConsumerCompatibility\":\"RED\",\"artifactManifestSha256\":\"d0c2a12f7f5e02873723eb93c6c59df0be3fb92bd1bfcae324a663407e957df2\"}","stderr":"{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":true,"outputExists":true,"fixture":"<SYNTHETIC_FIXTURE>"}
++{"name":"R3-write","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"ENOSPC\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":false,"fixture":"<SYNTHETIC_FIXTURE>"}
++{"name":"R3-lstat-output","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"ENOSPC\",\"cleanupErrorCategory\":\"EACCES\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":true,"artifactVerifies":true,"fixture":"<SYNTHETIC_FIXTURE>"}
++{"name":"R3-lstat-report","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"ENOSPC\",\"cleanupErrorCategory\":\"EACCES\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":true,"outputExists":false,"fixture":"<SYNTHETIC_FIXTURE>"}
++{"name":"R3-report-stat","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"EIO\",\"cleanupErrorCategory\":\"REPORT_OWNERSHIP_UNAVAILABLE\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":true,"outputExists":false,"fixture":"<SYNTHETIC_FIXTURE>"}
++{"name":"R3-output-stat","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"EIO\",\"cleanupErrorCategory\":\"ARTIFACT_OWNERSHIP_UNAVAILABLE\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":true,"fixture":"<SYNTHETIC_FIXTURE>"}
++{"fixtureRoot":"<SYNTHETIC_FIXTURE_ROOT>","completed":true}
+diff --git a/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-replay.jsonl b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-replay.jsonl
+new file mode 100644
+index 0000000000000000000000000000000000000000..fab70808423324c22021d942895eb5cf8615e5e6
+--- /dev/null
++++ b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-replay.jsonl
+@@ -0,0 +1,20 @@
++{"name":"original1-forbidden-extra","accepted":false,"error":"ARTIFACT_FILE_SET_MISMATCH"}
++{"name":"original1-empty-extra","accepted":false,"error":"ARTIFACT_FILE_SET_MISMATCH"}
++{"name":"original2-source-parent-symlink","issues":[{"code":"SOURCE_IDENTITY_MISMATCH","path":"alias/source.txt"}]}
++{"name":"original2-payload-parent-replaced","accepted":false,"error":"INPUT_CHANGED_AFTER_PLAN"}
++{"name":"original3-source-changed","accepted":false,"error":"SOURCE_IDENTITY_CHANGED","outputExists":false}
++{"name":"original3-caller-mutation-duplicate","detached":true,"issues":[{"code":"SOURCE_IDENTITY_DUPLICATE","path":"source.txt"}]}
++{"name":"original4-external-peer-missing","issues":[{"code":"EXTERNAL_PEER_RESOLUTION_REQUIRED","package":"external@1.0.0","dependency":"ghost"}]}
++{"name":"remaining-workspace-external-peer-incompatible","issues":[{"code":"EXTERNAL_PEER_VERSION_NOT_VERIFIED","package":"a","dependency":"external","range":"^2.0.0","resolved":"1.0.0"}],"exportAccepted":false,"verification":{"accepted":false,"error":"ENOENT"}}
++{"name":"original5-empty-package-list","accepted":false,"error":"ARTIFACT_MANIFEST_INVALID"}
++{"name":"original5-trusted-pin","accepted":false,"error":"ARTIFACT_MANIFEST_HASH_MISMATCH"}
++{"name":"remaining-verifier-missing-main","accepted":false,"error":"ARTIFACT_RUNTIME_ENTRY_MISSING"}
++{"name":"original6-glob-descendants","issues":[],"files":["lib/index.js","lib/sub/deep.js","package.json"]}
++{"name":"original7-exclusive-concurrent-destination","results":["exported","OUTPUT_ALREADY_EXISTS"],"verification":{"accepted":true,"result":{"verified":true,"verificationScope":"internal integrity and declared closure; external bytes absent; source/build provenance requires caller pin","trustedManifestPinChecked":false,"packageCount":1,"fileCount":2,"manifestSha256":"0083fc2975ceffa27171e95e42f1a496a334b37553e807e1b3492044b14480f1"}}}
++{"name":"cli-green-report","exit":0,"stdout":"{\"corePackageCount\":1,\"externalLockedSnapshotCount\":0,\"issueCount\":0,\"exported\":false,\"legacyConsumerCompatibility\":\"RED\"}","stderr":"{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":true}
++{"name":"cli-existing-report-with-output","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"EEXIST\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportUnchanged":true,"outputExists":false,"artifactManifestExists":false,"artifactVerification":{"accepted":false,"error":"ENOENT"}}
++{"name":"cli-report-output-same-path","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"REPORT_OUTPUT_PATH_CONFLICT\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","outputExists":false,"artifactManifestExists":false,"artifactVerification":{"accepted":false,"error":"ENOENT"}}
++{"name":"cli-report-symlink-parent","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"EXCLUSIVE_CANONICAL_REPORT_REQUIRED\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false}
++{"name":"cli-report-inside-source","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"EXCLUSIVE_CANONICAL_REPORT_REQUIRED\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false}
++{"name":"cli-output-relative-green","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"ABSOLUTE_OUTPUT_REQUIRED\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}"}
++{"name":"cli-invalid-arguments","unknown":{"exit":1,"stdout":"","stderr":"{\"errorCategory\":\"INVALID_ARGUMENTS\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}"},"missing":{"exit":1,"stdout":"","stderr":"{\"errorCategory\":\"INVALID_ARGUMENTS\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}"},"duplicate":{"exit":1,"stdout":"","stderr":"{\"errorCategory\":\"INVALID_ARGUMENTS\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}"},"relative":{"exit":1,"stdout":"","stderr":"{\"errorCategory\":\"EXPLICIT_ABSOLUTE_INPUTS_REQUIRED\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}"}}
+diff --git a/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-suite.log b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-suite.log
+new file mode 100644
+index 0000000000000000000000000000000000000000..4326a26c69cc671f48617485d6c3fb4652331db4
+--- /dev/null
++++ b/tools/runtime-export/evidence/handoff-47d0ce7/review-47d0ce7-suite.log
+@@ -0,0 +1,60 @@
++✔ closure follows declared production edges and excludes unrelated/dev packages (29.014164ms)
++✔ missing required workspace edge yields a precise RED plan (7.060308ms)
++✔ manifest and lock specifier mismatch cannot silently pick another resolution (6.529104ms)
++✔ workspace link escape is rejected (6.085263ms)
++✔ external dependency without registry integrity keeps export RED (5.207115ms)
++✔ foreign snapshot transitive dependency missing from lock is reported (4.864507ms)
++✔ explicitly declared missing payload file blocks export (7.419661ms)
++✔ payload symlink is refused before export (9.103864ms)
++✔ source identity mismatch is RED and writes no output (7.676174ms)
++✔ output within an input tree is refused without mutation (7.113217ms)
++✔ symlinked output parent is refused (6.557697ms)
++✔ exports only selected regular files and preserves executable bytes and private metadata (15.753185ms)
++✔ two exports from fixed inputs have byte-identical manifest and file index (22.377352ms)
++✔ independent verifier rejects altered executable bytes (9.337832ms)
++✔ independent verifier rejects unexpected payload files (13.811447ms)
++✔ verifier sees forbidden node_modules and empty directories instead of hiding them (15.204274ms)
++✔ verifier rejects an unlisted empty directory (10.552408ms)
++✔ source identity refuses a symlinked ancestor (5.730226ms)
++✔ changed source identity after planning blocks all output writes (4.348537ms)
++✔ export plan identity is frozen and detached from caller mutations (4.863015ms)
++✔ required external peers must have an exact resolved dependency (4.842654ms)
++✔ manifest cannot detach package identities from the retained payload (11.900117ms)
++✔ payload parent replaced by symlink after planning cannot escape input root (7.926848ms)
++✔ workspace peer version requirements cannot be ignored (5.642964ms)
++✔ publish wildcard includes descendants of matching directories (5.908005ms)
++✔ exclusive output rejects an independently created destination directory (5.134395ms)
++✔ CLI preflight uses source lock and writes a truthful report without an artifact (51.554417ms)
++✔ unchanged fixed release assembler rejects the new manifest format before output writes (15.041528ms)
++✔ a pinned workspace override is accepted only when both lock and link target agree (5.289699ms)
++✔ native publication manifest cannot reference an absent binary (6.020155ms)
++✔ duplicate source identity paths cannot inflate verified input count (4.600257ms)
++✔ resolved external required peer must satisfy a supported locked version range (4.550052ms)
++✔ caller-pinned manifest hash rejects a rewritten internally valid manifest (11.954899ms)
++✔ R1 workspace required external peer rejects incompatible exact importer resolution (12.744004ms)
++✔ R1 unsupported workspace external peer range stays RED (4.940772ms)
++✔ R1 verifier rejects internally incompatible workspace external peer metadata (12.778316ms)
++✔ R2 verifier rejects a manifest and disk that omit the declared main (17.413535ms)
++✔ R2 declared main cannot escape its owning package (11.054559ms)
++✔ R2 trusted original manifest pin rejects the reduced missing-main manifest first (8.953992ms)
++✔ R3 existing report is preserved and blocks every artifact write (55.617583ms)
++✔ R3 existing report symlink and target bytes are preserved before artifact writes (53.533726ms)
++✔ R3 equal report and artifact path fails before creating either (57.623652ms)
++✔ R3 late report write failure removes only this invocation artifact and report (80.087209ms)
++✔ R3 existing caller output survives failure and newly claimed report is cleaned (70.929084ms)
++✔ R3 failure cleanup preserves caller replacements with different ownership (86.909932ms)
++✔ R3 successful CLI publishes complete report and artifact with matching trusted digest (78.223044ms)
++✔ R3 concurrent CLI report claims preserve exactly one successful complete result (79.899715ms)
++✔ R3 artifact cleanup failure still cleans the independently owned report (82.122957ms)
++✔ R3 cleanup output inspection failure is explicit and report cleanup still runs (80.380347ms)
++✔ R3 cleanup report inspection failure is explicit and preserves unknown ownership (83.294549ms)
++✔ R3 report claim identity failure explicitly reports blocked cleanup without blind deletion (53.654684ms)
++✔ R3 artifact claim identity failure explicitly reports blocked cleanup without blind deletion (74.064242ms)
++ℹ tests 52
++ℹ suites 0
++ℹ pass 52
++ℹ fail 0
++ℹ cancelled 0
++ℹ skipped 0
++ℹ todo 0
++ℹ duration_ms 1409.321275
+diff --git a/tools/runtime-export/export.mjs b/tools/runtime-export/export.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..c424076a60901ba044921e06f6be3ebc7c18c887
+--- /dev/null
++++ b/tools/runtime-export/export.mjs
+@@ -0,0 +1,295 @@
++import * as fs from 'node:fs/promises';
++import { resolve, join, dirname, relative, isAbsolute, sep } from 'node:path';
++import { createHash } from 'node:crypto';
++const sha = bytes => createHash('sha256').update(bytes).digest('hex');
++const fail = code => Object.assign(new Error(code), { code });
++const inside = (root, path) => path === root || path.startsWith(root + sep);
++const safeRelative = path => typeof path === 'string' && path !== '' && !isAbsolute(path) && !path.split(/[\\/]/).some(p => p === '..' || p === '.' || p === '');
++const prohibited = path => path.split(/[\\/]/).some(p => p === 'node_modules' || p === '.git' || p === '.env' || p.startsWith('.env.') || p === '.aws' || p === '.codex' || p === '.agents');
++const packageName = name => typeof name === 'string' && /^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(name);
++const slot = name => name.replace('/', '+');
++const sorted = values => [...values].sort();
++function verifiedPeerRange(range, version) {
++  if (range === version) return true;
++  const v = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
++  if (!v) return false;
++  if (range === '*') return true;
++  const r = /^([~^])(\d+)\.(\d+)\.(\d+)$/.exec(range);
++  if (!r) return false; // Unsupported ranges remain RED rather than assumed compatible.
++  const value = v.slice(1).map(Number), lower = r.slice(2).map(Number);
++  const compare = (a, b) => a[0]-b[0] || a[1]-b[1] || a[2]-b[2];
++  const upper = r[1] === '~' ? [lower[0], lower[1]+1, 0]
++    : lower[0] ? [lower[0]+1, 0, 0] : lower[1] ? [0, lower[1]+1, 0] : [0, 0, lower[2]+1];
++  return compare(value, lower) >= 0 && compare(value, upper) < 0;
++}
++const plans = new WeakSet();
++function freeze(value) { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; }
++async function canonicalFile(path) { const stat = await fs.lstat(path); return stat.isFile() && !stat.isSymbolicLink() && await fs.realpath(path) === path; }
++async function checkSourceIdentity(root, identity) {
++  for (const file of identity.sourceFiles) {
++    try { const path = join(root, file.path); if (!await canonicalFile(path)) return false; const bytes = await fs.readFile(path); if (sha(bytes) !== file.sha256 || bytes.length !== file.bytes) return false; }
++    catch { return false; }
++  }
++  return true;
++}
++const readJson = async path => JSON.parse(await fs.readFile(path, 'utf8'));
++const compatible = (meta, platform, arch) => {
++  const accepts = (list, value) => !list || ((!list.includes('!' + value)) && (list.every(x => x.startsWith('!')) || list.includes(value)));
++  return accepts(meta.os, platform) && accepts(meta.cpu, arch);
++};
++function patternRegex(pattern) {
++  let out = '';
++  for (let i = 0; i < pattern.length; i++) {
++    const c = pattern[i];
++    if (c === '*' && pattern[i + 1] === '*') {
++      i++; if (pattern[i + 1] === '/') { i++; out += '(?:.*/)?'; } else out += '.*';
++    } else if (c === '*') out += '[^/]*';
++    else if (c === '?') out += '[^/]';
++    else if ('[]{}!'.includes(c)) throw fail('UNSUPPORTED_PUBLISH_PATTERN');
++    else out += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
++  }
++  return new RegExp('^' + out + '$');
++}
++async function walk(root, at = '', result = [], options = {}) {
++  for (const item of await fs.readdir(join(root, at), { withFileTypes: true })) {
++    const path = at ? at + '/' + item.name : item.name;
++    if (prohibited(path) && options.skipForbidden !== false) continue;
++    if (item.isDirectory()) { if (options.directories) result.push({ path, directory: true }); await walk(root, path, result, options); }
++    else result.push({ path, symbolic: item.isSymbolicLink() });
++  }
++  return result;
++}
++async function payload(record, issues) {
++  const issue = (code, path) => issues.push({ code, package: record.name, path });
++  if (!Array.isArray(record.meta.files) || record.meta.files.length === 0) { issue('PUBLISH_FILES_REQUIRED'); return []; }
++  const available = await walk(record.absolute);
++  const selected = new Set(['package.json']);
++  for (const value of record.meta.files) {
++    if (typeof value !== 'string') { issue('INVALID_PUBLISH_PATTERN'); continue; }
++    const exclude = value.startsWith('!'); const clean = (exclude ? value.slice(1) : value).replace(/\/$/, '');
++    if (!safeRelative(clean) || prohibited(clean)) { issue('UNSAFE_PUBLISH_PATTERN', value); continue; }
++    let matches;
++    try {
++      const regexp = patternRegex(clean);
++      matches = available.filter(x => regexp.test(x.path) || x.path.startsWith(clean + '/') || x.path.split('/').slice(0, -1).some((_, i) => regexp.test(x.path.split('/').slice(0, i + 1).join('/'))));
++    } catch (error) { issue(error.code, value); continue; }
++    if (!exclude && matches.length === 0) issue('DECLARED_FILE_MISSING', value);
++    for (const file of matches) exclude ? selected.delete(file.path) : selected.add(file.path);
++  }
++  // Publication identity and root license/notice are included only when present.
++  for (const file of available) if (/^(?:LICENSE|COPYING|NOTICE|README)(?:\..*)?$/i.test(file.path)) selected.add(file.path);
++  const entries = [];
++  for (const path of sorted(selected)) {
++    const absolute = join(record.absolute, path); const stat = await fs.lstat(absolute);
++    if (!stat.isFile() || stat.isSymbolicLink() || await fs.realpath(absolute) !== absolute) { issue('PAYLOAD_SYMLINK_REFUSED', path); continue; }
++    const bytes = await fs.readFile(absolute);
++    entries.push({ path, bytes: bytes.length, sha256: sha(bytes), mode: stat.mode & 0o777 });
++  }
++  const expected = [];
++  if (typeof record.meta.main === 'string') expected.push(record.meta.main);
++  if (typeof record.meta.types === 'string') expected.push(record.meta.types);
++  if (typeof record.meta.bin === 'string') expected.push(record.meta.bin);
++  else expected.push(...Object.values(record.meta.bin ?? {}));
++  const exports = value => {
++    if (typeof value === 'string' && !value.includes('*')) expected.push(value);
++    else if (value && typeof value === 'object') Object.values(value).forEach(exports);
++  };
++  exports(record.meta.exports);
++  for (const value of expected) {
++    const path = value.replace(/^\.\//, '');
++    if (!safeRelative(path) || !entries.some(x => x.path === path)) issue('RUNTIME_ENTRY_MISSING', path);
++  }
++  if (entries.some(x => x.path === 'prebuilds.json')) {
++    try {
++      const native = await readJson(join(record.absolute, 'prebuilds.json'));
++      if (!Array.isArray(native.binaries)) issue('NATIVE_BINARY_MANIFEST_INVALID', 'prebuilds.json');
++      else for (const binary of native.binaries) if (!safeRelative(binary.path) || !entries.some(x => x.path === binary.path)) issue('NATIVE_BINARY_MISSING', binary.path);
++    } catch { issue('NATIVE_BINARY_MANIFEST_INVALID', 'prebuilds.json'); }
++  }
++  return entries;
++}
++export async function planRuntime({ sourceRoot, lock, roots, identity, platform = process.platform, arch = process.arch }) {
++  const root = await fs.realpath(sourceRoot); const issues = []; const skipped = [];
++  const issue = (code, details = {}) => issues.push({ code, ...details });
++  const commits = ['publicBaseCommit', 'sourceMaterialCommit', 'supplementCommit', 'declaredLocalHead'];
++  const sourcePaths = new Set();
++  if (!identity || !commits.every(k => /^[a-f0-9]{40}$/.test(identity[k] ?? '')) || identity.sourceMode !== 'public-base-plus-verified-overlay' || !Array.isArray(identity.sourceFiles) || identity.sourceFiles.length === 0) {
++    issue('SOURCE_IDENTITY_REQUIRED');
++  } else for (const file of identity.sourceFiles) {
++    if (sourcePaths.has(file.path)) issue('SOURCE_IDENTITY_DUPLICATE', { path: file.path });
++    sourcePaths.add(file.path);
++    if (!safeRelative(file.path) || prohibited(file.path) || !/^[a-f0-9]{64}$/.test(file.sha256)) { issue('SOURCE_IDENTITY_PATH_INVALID', { path: file.path }); continue; }
++    try {
++      const path = join(root, file.path); const stat = await fs.lstat(path);
++      if (!stat.isFile() || stat.isSymbolicLink() || await fs.realpath(path) !== path) { issue('SOURCE_IDENTITY_MISMATCH', { path: file.path }); continue; }
++      const bytes = await fs.readFile(path);
++      if (sha(bytes) !== file.sha256 || bytes.length !== file.bytes) issue('SOURCE_IDENTITY_MISMATCH', { path: file.path });
++    } catch { issue('SOURCE_IDENTITY_MISMATCH', { path: file.path }); }
++  }
++  if (!lock?.importers || !lock.packages || !lock.snapshots) throw fail('PNPM_LOCK_SCHEMA_REQUIRED');
++  const indexed = new Map();
++  for (const [folder, importer] of Object.entries(lock.importers)) {
++    if (folder === '.') continue;
++    if (!safeRelative(folder) || prohibited(folder)) { issue('IMPORTER_PATH_INVALID', { path: folder }); continue; }
++    try {
++      const absolute = join(root, folder); if (await fs.realpath(absolute) !== absolute) { issue('IMPORTER_SYMLINK_REFUSED', { path: folder }); continue; }
++      const meta = await readJson(join(absolute, 'package.json'));
++      if (!packageName(meta.name) || typeof meta.version !== 'string') { issue('PACKAGE_IDENTITY_INVALID', { path: folder }); continue; }
++      if (indexed.has(meta.name)) { issue('DUPLICATE_WORKSPACE_PACKAGE', { package: meta.name }); continue; }
++      indexed.set(meta.name, { name: meta.name, path: folder, absolute, meta, importer });
++    } catch (error) { issue('IMPORTER_PACKAGE_UNAVAILABLE', { path: folder, reason: error.code ?? error.name }); }
++  }
++  if (!Array.isArray(roots) || roots.length === 0 || !roots.every(packageName)) throw fail('EXPLICIT_PACKAGE_ROOTS_REQUIRED');
++  const selected = new Map(), external = new Map(), pending = sorted(new Set(roots));
++  function addExternal(name, reference, from, optional = false) {
++    const key = name + '@' + reference;
++    const metadataKey = name + '@' + reference.replace(/\(.*/, '');
++    const meta = lock.packages[key] ?? lock.packages[metadataKey]; const snapshot = lock.snapshots[key];
++    if (!meta || !snapshot) { issue('EXTERNAL_LOCK_ENTRY_REQUIRED', { package: from, dependency: name, reference }); return; }
++    if (!compatible(meta, platform, arch)) {
++      if (optional) skipped.push({ package: from, dependency: name, reason: 'PLATFORM_OPTIONAL' });
++      else issue('REQUIRED_DEPENDENCY_PLATFORM_MISMATCH', { package: from, dependency: name });
++      return;
++    }
++    if (external.has(key)) return;
++    const integrity = meta.resolution?.integrity;
++    if (typeof integrity !== 'string' || !/^sha(?:256|384|512)-[A-Za-z0-9+/]+=*$/.test(integrity)) issue('EXTERNAL_INTEGRITY_REQUIRED', { package: from, dependency: name, reference });
++    external.set(key, { name, reference, integrity: integrity ?? null, lockPackageKey: metadataKey, dependencies: snapshot.dependencies ?? {}, optionalDependencies: snapshot.optionalDependencies ?? {} });
++    for (const [dep, range] of Object.entries(meta.peerDependencies ?? {})) if (!meta.peerDependenciesMeta?.[dep]?.optional) {
++      const resolved = snapshot.dependencies?.[dep];
++      if (!resolved) issue('EXTERNAL_PEER_RESOLUTION_REQUIRED', { package: key, dependency: dep });
++      else if (!verifiedPeerRange(range, resolved.replace(/\(.*/, ''))) issue('EXTERNAL_PEER_VERSION_NOT_VERIFIED', { package: key, dependency: dep, range, resolved });
++    }
++    for (const [dep, ref] of Object.entries(snapshot.dependencies ?? {})) addExternal(dep, ref, key);
++    for (const [dep, ref] of Object.entries(snapshot.optionalDependencies ?? {})) addExternal(dep, ref, key, true);
++  }
++  for (let i = 0; i < pending.length; i++) {
++    const name = pending[i]; if (selected.has(name)) continue;
++    const item = indexed.get(name);
++    if (!item) { issue('UNRESOLVED_REQUIRED_DEPENDENCY', { dependency: name }); continue; }
++    if (!compatible(item.meta, platform, arch)) { issue('REQUIRED_DEPENDENCY_PLATFORM_MISMATCH', { dependency: name }); continue; }
++    selected.set(name, item);
++    for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
++      for (const [dep, specifier] of Object.entries(item.meta[section] ?? {})) {
++        if (section === 'peerDependencies' && item.meta.peerDependenciesMeta?.[dep]?.optional) { skipped.push({ package: name, dependency: dep, reason: 'OPTIONAL_PEER' }); continue; }
++        const optional = section === 'optionalDependencies'; const workspace = indexed.get(dep);
++        if (workspace) {
++          if (!compatible(workspace.meta, platform, arch) && optional) { skipped.push({ package: name, dependency: dep, reason: 'PLATFORM_OPTIONAL' }); continue; }
++          if (section !== 'peerDependencies') {
++            const binding = item.importer[section]?.[dep];
++            if (!binding) { issue('LOCK_DEPENDENCY_REQUIRED', { package: name, dependency: dep }); continue; }
++            const override = lock.overrides?.[dep];
++            const verifiedOverride = typeof override === 'string' && override.startsWith('link:') && resolve(root, override.slice(5)) === workspace.absolute && typeof binding.specifier === 'string' && binding.specifier.startsWith('link:') && resolve(item.absolute, binding.specifier.slice(5)) === workspace.absolute;
++            if (binding.specifier !== specifier && !verifiedOverride) issue('LOCK_SPECIFIER_MISMATCH', { package: name, dependency: dep });
++            if (!binding.version?.startsWith('link:') || resolve(item.absolute, binding.version.slice(5)) !== workspace.absolute) issue('WORKSPACE_LINK_MISMATCH', { package: name, dependency: dep });
++          } else {
++            const range = specifier.replace(/^workspace:/, '');
++            if (!['*', '^', '~', workspace.meta.version, '^' + workspace.meta.version, '~' + workspace.meta.version].includes(range)) issue('PEER_VERSION_NOT_VERIFIED', { package: name, dependency: dep, specifier });
++          }
++          pending.push(dep);
++        } else if (specifier.startsWith('workspace:') || specifier.startsWith('link:')) {
++          if (optional) skipped.push({ package: name, dependency: dep, reason: 'OPTIONAL_WORKSPACE_UNAVAILABLE' });
++          else issue('UNRESOLVED_REQUIRED_DEPENDENCY', { package: name, dependency: dep });
++        } else {
++          const binding = item.importer[section]?.[dep] ?? (section === 'peerDependencies' ? item.importer.dependencies?.[dep] ?? item.importer.devDependencies?.[dep] : undefined);
++          if (!binding) { issue('LOCK_DEPENDENCY_REQUIRED', { package: name, dependency: dep }); continue; }
++          if (binding.specifier !== specifier) issue('LOCK_SPECIFIER_MISMATCH', { package: name, dependency: dep });
++          if (section === 'peerDependencies' && (typeof binding.version !== 'string' || !verifiedPeerRange(specifier, binding.version.replace(/\(.*/, '')))) issue('EXTERNAL_PEER_VERSION_NOT_VERIFIED', { package: name, dependency: dep, range: specifier, resolved: binding.version });
++          addExternal(dep, binding.version, name, optional);
++        }
++      }
++    }
++  }
++  const packages = [];
++  for (const item of [...selected.values()].sort((a, b) => a.name.localeCompare(b.name))) packages.push({ name: item.name, version: item.meta.version, sourcePath: item.path, absolute: item.absolute, slot: slot(item.name), files: await payload(item, issues) });
++  const plan = freeze({ sourceRoot: root, roots: sorted(new Set(roots)), identity: structuredClone(identity), platform, arch, packages, externalPackages: [...external.values()].sort((a, b) => (a.name + a.reference).localeCompare(b.name + b.reference)), skipped, issues, lockSha256: sha(JSON.stringify(lock)) });
++  plans.add(plan); return plan;
++}
++export async function exportRuntime({ plan, outputDirectory }) {
++  if (!plans.has(plan)) throw fail('INVALID_EXPORT_PLAN');
++  if (plan.issues.length) throw fail('EXPORT_PLAN_RED');
++  if (!isAbsolute(outputDirectory)) throw fail('ABSOLUTE_OUTPUT_REQUIRED');
++  const out = resolve(outputDirectory);
++  if (inside(plan.sourceRoot, out) || inside(out, plan.sourceRoot)) throw fail('EXCLUSIVE_OUTPUT_REQUIRED');
++  if (await fs.realpath(dirname(out)) !== dirname(out)) throw fail('CANONICAL_OUTPUT_PARENT_REQUIRED');
++  if (!await checkSourceIdentity(plan.sourceRoot, plan.identity)) throw fail('SOURCE_IDENTITY_CHANGED');
++  // Claim the destination exclusively; rename must never replace another writer's directory.
++  try { await fs.mkdir(out, { mode: 0o700 }); } catch (error) { if (error.code === 'EEXIST') throw fail('OUTPUT_ALREADY_EXISTS'); throw error; }
++  let claimed; const staging = out;
++  try {
++    claimed = await fs.stat(out);
++    const allFiles = [];
++    for (const item of plan.packages) for (const file of item.files) {
++      const source = join(item.absolute, file.path); const stat = await fs.lstat(source);
++      if (!stat.isFile() || stat.isSymbolicLink() || await fs.realpath(source) !== source) throw fail('INPUT_CHANGED_AFTER_PLAN');
++      const bytes = await fs.readFile(source); if (sha(bytes) !== file.sha256 || bytes.length !== file.bytes) throw fail('INPUT_CHANGED_AFTER_PLAN');
++      const path = '.packages/' + item.slot + '/' + file.path;
++      await fs.mkdir(dirname(join(staging, path)), { recursive: true });
++      await fs.writeFile(join(staging, path), bytes, { flag: 'wx', mode: file.mode }); await fs.chmod(join(staging, path), file.mode);
++      allFiles.push({ path, bytes: file.bytes, sha256: file.sha256, mode: file.mode });
++    }
++    const sourceIdentity = { ...plan.identity }; delete sourceIdentity.sourceFiles;
++    const manifest = { format: 2, classification: 'PRIVATE_SOURCE_BUILD_OVERLAY_NOT_STANDALONE_RUNTIME', sourceIdentity, sourceFileIndexSha256: sha(JSON.stringify(plan.identity.sourceFiles)), verifiedSourceFileCount: plan.identity.sourceFiles.length,
++      lockObjectSha256: plan.lockSha256, platform: plan.platform, arch: plan.arch, roots: plan.roots, corePackageCount: plan.packages.length, sourceAliases: false, externalDependenciesIncluded: false,
++      packages: plan.packages.map(({ absolute, files, ...item }) => ({ ...item, packageJsonSha256: files.find(x => x.path === 'package.json').sha256 })), externalPackages: plan.externalPackages, skipped: plan.skipped,
++      files: allFiles.sort((a, b) => a.path.localeCompare(b.path)), executableBytesAltered: false };
++    await fs.writeFile(join(staging, 'artifact-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
++    if (!await checkSourceIdentity(plan.sourceRoot, plan.identity)) throw fail('SOURCE_IDENTITY_CHANGED');
++    await verifyRuntime({ directory: staging });
++    return { manifest, outputDirectory: out, ownership: Object.freeze({ ino: claimed.ino, dev: claimed.dev }) };
++  } catch (error) {
++    if (!claimed) error.cleanupErrorCategory = 'ARTIFACT_OWNERSHIP_UNAVAILABLE';
++    else {
++      try { const current = await fs.lstat(staging); if (current.isDirectory() && current.ino === claimed.ino && current.dev === claimed.dev) await fs.rm(staging, { recursive: true, force: true }); }
++      catch (cleanupError) { if (cleanupError.code !== 'ENOENT') error.cleanupErrorCategory = cleanupError.code ?? cleanupError.message; }
++    }
++    throw error;
++  }
++}
++export async function verifyRuntime({ directory, expectedManifestSha256 }) {
++  const root = await fs.realpath(directory); const manifest = await readJson(join(root, 'artifact-manifest.json'));
++  const manifestBytes = await fs.readFile(join(root, 'artifact-manifest.json'));
++  if (expectedManifestSha256 !== undefined && sha(manifestBytes) !== expectedManifestSha256) throw fail('ARTIFACT_MANIFEST_HASH_MISMATCH');
++  if (manifest.format !== 2 || manifest.classification !== 'PRIVATE_SOURCE_BUILD_OVERLAY_NOT_STANDALONE_RUNTIME' || manifest.sourceAliases !== false || manifest.externalDependenciesIncluded !== false || manifest.executableBytesAltered !== false || !Array.isArray(manifest.files) || !Array.isArray(manifest.packages) || !manifest.packages.length || manifest.corePackageCount !== manifest.packages.length || !Array.isArray(manifest.roots) || !manifest.roots.length || !manifest.roots.every(packageName) || !Array.isArray(manifest.externalPackages) || !Array.isArray(manifest.skipped)
++    || !['publicBaseCommit', 'sourceMaterialCommit', 'supplementCommit', 'declaredLocalHead'].every(k => /^[a-f0-9]{40}$/.test(manifest.sourceIdentity?.[k] ?? '')) || manifest.sourceIdentity.sourceMode !== 'public-base-plus-verified-overlay' || !/^[a-f0-9]{64}$/.test(manifest.sourceFileIndexSha256 ?? '') || !/^[a-f0-9]{64}$/.test(manifest.lockObjectSha256 ?? '') || !Number.isSafeInteger(manifest.verifiedSourceFileCount) || manifest.verifiedSourceFileCount < 1) throw fail('ARTIFACT_MANIFEST_INVALID');
++  const expected = new Set(['artifact-manifest.json']); const seen = new Set();
++  const allowedSlots = new Set(manifest.packages.map(x => x.slot)); const expectedDirs = new Set(['.packages']);
++  for (const file of manifest.files) {
++    if (!safeRelative(file.path) || prohibited(file.path) || !file.path.startsWith('.packages/') || !allowedSlots.has(file.path.split('/')[1]) || expected.has(file.path) || !/^[a-f0-9]{64}$/.test(file.sha256 ?? '') || !Number.isSafeInteger(file.bytes) || file.bytes < 0 || !Number.isInteger(file.mode) || file.mode < 0 || file.mode > 0o777) throw fail('ARTIFACT_FILE_SET_MISMATCH');
++    let parent = dirname(file.path); while (parent !== '.') { expectedDirs.add(parent); parent = dirname(parent); }
++    expected.add(file.path); const path = join(root, file.path); const stat = await fs.lstat(path);
++    if (!stat.isFile() || stat.isSymbolicLink() || await fs.realpath(path) !== path) throw fail('ARTIFACT_FILE_SET_MISMATCH');
++    const bytes = await fs.readFile(path);
++    if (bytes.length !== file.bytes || sha(bytes) !== file.sha256 || (stat.mode & 0o777) !== file.mode) throw fail('ARTIFACT_HASH_MISMATCH');
++  }
++  const packageMetadata = new Map();
++  for (const item of manifest.packages) {
++    if (!packageName(item.name) || item.slot !== slot(item.name) || seen.has(item.name)) throw fail('ARTIFACT_PACKAGE_IDENTITY_INVALID');
++    seen.add(item.name); const p = '.packages/' + item.slot + '/package.json';
++    if (!expected.has(p)) throw fail('ARTIFACT_PACKAGE_IDENTITY_INVALID');
++    const bytes = await fs.readFile(join(root, p)); const pkg = JSON.parse(bytes);
++    if (pkg.name !== item.name || pkg.version !== item.version || sha(bytes) !== item.packageJsonSha256) throw fail('ARTIFACT_PACKAGE_IDENTITY_INVALID');
++    if (pkg.main !== undefined) {
++      const main = typeof pkg.main === 'string' ? pkg.main.replace(/^\.\//, '') : '';
++      if (!safeRelative(main) || prohibited(main) || !expected.has('.packages/' + item.slot + '/' + main)) throw fail('ARTIFACT_RUNTIME_ENTRY_MISSING');
++    }
++    packageMetadata.set(item.name, pkg);
++  }
++  if (manifest.roots.some(name => !packageMetadata.has(name))) throw fail('ARTIFACT_MANIFEST_INVALID');
++  const externalKeys = new Set(); const externalNames = new Set();
++  for (const item of manifest.externalPackages) {
++    const key = item.name + '@' + item.reference;
++    if (!packageName(item.name) || typeof item.reference !== 'string' || typeof item.lockPackageKey !== 'string' || !/^sha(?:256|384|512)-[A-Za-z0-9+/]+=*$/.test(item.integrity ?? '') || !item.dependencies || typeof item.dependencies !== 'object' || !item.optionalDependencies || typeof item.optionalDependencies !== 'object' || externalKeys.has(key)) throw fail('ARTIFACT_EXTERNAL_CLOSURE_INVALID');
++    externalKeys.add(key); externalNames.add(item.name);
++  }
++  for (const item of manifest.externalPackages) for (const [name, ref] of Object.entries(item.dependencies)) if (!externalKeys.has(name + '@' + ref)) throw fail('ARTIFACT_EXTERNAL_CLOSURE_INVALID');
++  for (const [name, pkg] of packageMetadata) for (const section of ['dependencies', 'peerDependencies', 'optionalDependencies']) for (const [dep, range] of Object.entries(pkg[section] ?? {})) {
++    if (section === 'peerDependencies' && pkg.peerDependenciesMeta?.[dep]?.optional) continue;
++    if (section === 'optionalDependencies' && manifest.skipped.some(x => x.package === name && x.dependency === dep && x.reason.startsWith('PLATFORM_'))) continue;
++    if (range.startsWith('workspace:') ? !packageMetadata.has(dep) : !packageMetadata.has(dep) && !externalNames.has(dep)) throw fail('ARTIFACT_DEPENDENCY_CLOSURE_INVALID');
++    if (section === 'peerDependencies' && !packageMetadata.has(dep) && !manifest.externalPackages.filter(x => x.name === dep).every(x => verifiedPeerRange(range, x.reference.replace(/\(.*/, '')))) throw fail('ARTIFACT_PEER_VERSION_NOT_VERIFIED');
++  }
++  const actual = await walk(root, '', [], { skipForbidden: false, directories: true });
++  if (actual.length !== expected.size + expectedDirs.size || actual.some(x => x.symbolic || (x.directory ? !expectedDirs.has(x.path) : !expected.has(x.path)))) throw fail('ARTIFACT_FILE_SET_MISMATCH');
++  return { verified: true, verificationScope: 'internal integrity and declared closure; external bytes absent; source/build provenance requires caller pin', trustedManifestPinChecked: expectedManifestSha256 !== undefined, packageCount: manifest.packages.length, fileCount: manifest.files.length, manifestSha256: sha(manifestBytes) };
++}
+diff --git a/tools/runtime-export/export.test.mjs b/tools/runtime-export/export.test.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..c7ea9e9f76306acb1375e9cd64c9be4f64bd94bb
+--- /dev/null
++++ b/tools/runtime-export/export.test.mjs
+@@ -0,0 +1,356 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import * as fs from 'node:fs/promises';
++import { join } from 'node:path';
++import { createHash } from 'node:crypto';
++import { spawnSync, spawn } from 'node:child_process';
++import { fileURLToPath } from 'node:url';
++const mod = await import('./export.mjs').catch(error => {
++  if (error.code === 'ERR_MODULE_NOT_FOUND') return {};
++  throw error;
++});
++const api = name => { assert.equal(typeof mod[name], 'function', `Missing implementation: ${name}`); return mod[name]; };
++const hash = value => createHash('sha256').update(value).digest('hex');
++const integrity = 'sha512-' + Buffer.alloc(64).toString('base64');
++async function fixture(t) {
++  const tmp = await fs.mkdtemp(join(process.env.TMPDIR ?? '/tmp', 'runtime-export-test-'));
++  t.after(() => fs.rm(tmp, { recursive: true, force: true }));
++  const root = join(tmp, 'source'); await fs.mkdir(root);
++  const lock = { importers: {}, packages: { 'external@1.0.0': { resolution: { integrity } } }, snapshots: { 'external@1.0.0': {} } };
++  async function pkg(name, folder, extra = {}) {
++    const dir = join(root, folder); await fs.mkdir(join(dir, 'lib'), { recursive: true });
++    await fs.writeFile(join(dir, 'package.json'), JSON.stringify({ name, version: '1.0.0', private: true, type: 'module', main: 'lib/index.js', files: ['lib/'], ...extra }) + '\n');
++    await fs.writeFile(join(dir, 'lib/index.js'), `export const name = ${JSON.stringify(name)};\n`);
++    lock.importers[folder] = {}; return dir;
++  }
++  const a = await pkg('@fixture/a', 'packages/a', { dependencies: { '@fixture/b': 'workspace:*' }, devDependencies: { '@fixture/unused': 'workspace:*' } });
++  const b = await pkg('@fixture/b', 'packages/b', { dependencies: { external: '1.0.0' } });
++  await pkg('@fixture/unused', 'packages/unused');
++  lock.importers['packages/a'].dependencies = { '@fixture/b': { specifier: 'workspace:*', version: 'link:../b' } };
++  lock.importers['packages/a'].devDependencies = { '@fixture/unused': { specifier: 'workspace:*', version: 'link:../unused' } };
++  lock.importers['packages/b'].dependencies = { external: { specifier: '1.0.0', version: '1.0.0' } };
++  await fs.writeFile(join(root, 'fixture-source.txt'), 'synthetic source fixture\n');
++  const identity = { publicBaseCommit: 'a'.repeat(40), sourceMaterialCommit: 'b'.repeat(40), supplementCommit: 'c'.repeat(40), declaredLocalHead: 'd'.repeat(40), sourceMode: 'public-base-plus-verified-overlay', localPatchRights: 'UNKNOWN', sourceFiles: [{ path: 'fixture-source.txt', sha256: hash('synthetic source fixture\n'), bytes: 25 }] };
++  return { tmp, root, a, b, lock, identity, pkg, options: { sourceRoot: root, lock, roots: ['@fixture/a'], identity, platform: 'linux', arch: 'x64' } };
++}
++test('closure follows declared production edges and excludes unrelated/dev packages', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options);
++  assert.deepEqual(p.packages.map(x => x.name), ['@fixture/a', '@fixture/b']);
++  assert.equal(p.externalPackages.length, 1); assert.deepEqual(p.issues, []);
++});
++test('missing required workspace edge yields a precise RED plan', async t => {
++  const f = await fixture(t); delete f.lock.importers['packages/b'];
++  const p = await api('planRuntime')(f.options);
++  assert.ok(p.issues.some(x => x.code === 'UNRESOLVED_REQUIRED_DEPENDENCY' && x.dependency === '@fixture/b'));
++});
++test('manifest and lock specifier mismatch cannot silently pick another resolution', async t => {
++  const f = await fixture(t); f.lock.importers['packages/a'].dependencies['@fixture/b'].specifier = 'workspace:~';
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'LOCK_SPECIFIER_MISMATCH'));
++});
++test('workspace link escape is rejected', async t => {
++  const f = await fixture(t); f.lock.importers['packages/a'].dependencies['@fixture/b'].version = 'link:../../../outside';
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'WORKSPACE_LINK_MISMATCH'));
++});
++test('external dependency without registry integrity keeps export RED', async t => {
++  const f = await fixture(t); delete f.lock.packages['external@1.0.0'].resolution.integrity;
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'EXTERNAL_INTEGRITY_REQUIRED'));
++});
++test('foreign snapshot transitive dependency missing from lock is reported', async t => {
++  const f = await fixture(t); f.lock.snapshots['external@1.0.0'].dependencies = { absent: '2.0.0' };
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'EXTERNAL_LOCK_ENTRY_REQUIRED' && x.dependency === 'absent'));
++});
++test('explicitly declared missing payload file blocks export', async t => {
++  const f = await fixture(t); const q = JSON.parse(await fs.readFile(join(f.a, 'package.json'))); q.files.push('missing.bin'); await fs.writeFile(join(f.a, 'package.json'), JSON.stringify(q));
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'DECLARED_FILE_MISSING' && x.path === 'missing.bin'));
++});
++test('payload symlink is refused before export', async t => {
++  const f = await fixture(t); await fs.symlink('/etc/hostname', join(f.a, 'lib/leak.js'));
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'PAYLOAD_SYMLINK_REFUSED'));
++});
++test('source identity mismatch is RED and writes no output', async t => {
++  const f = await fixture(t); f.identity.sourceFiles[0].sha256 = '0'.repeat(64);
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'SOURCE_IDENTITY_MISMATCH'));
++  await assert.rejects(() => api('exportRuntime')({ plan: p, outputDirectory: join(f.tmp, 'output') }), { code: 'EXPORT_PLAN_RED' });
++  await assert.rejects(fs.access(join(f.tmp, 'output')), { code: 'ENOENT' });
++});
++test('output within an input tree is refused without mutation', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options);
++  await assert.rejects(() => api('exportRuntime')({ plan: p, outputDirectory: join(f.root, 'output') }), { code: 'EXCLUSIVE_OUTPUT_REQUIRED' });
++  await assert.rejects(fs.access(join(f.root, 'output')), { code: 'ENOENT' });
++});
++test('symlinked output parent is refused', async t => {
++  const f = await fixture(t); await fs.symlink(f.tmp, join(f.tmp, 'alias')); const p = await api('planRuntime')(f.options);
++  await assert.rejects(() => api('exportRuntime')({ plan: p, outputDirectory: join(f.tmp, 'alias/output') }), { code: 'CANONICAL_OUTPUT_PARENT_REQUIRED' });
++});
++test('exports only selected regular files and preserves executable bytes and private metadata', async t => {
++  const f = await fixture(t); await fs.writeFile(join(f.a, 'excluded.txt'), 'never copied'); await fs.chmod(join(f.a, 'lib/index.js'), 0o755);
++  const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); const result = await api('exportRuntime')({ plan: p, outputDirectory: out });
++  assert.equal(result.manifest.corePackageCount, 2); assert.equal(result.manifest.externalDependenciesIncluded, false); assert.equal(result.manifest.format, 2); assert.equal(result.manifest.candidateCommit, undefined);
++  const a = join(out, '.packages', '@fixture+a');
++  assert.equal(await fs.readFile(join(a, 'lib/index.js'), 'utf8'), await fs.readFile(join(f.a, 'lib/index.js'), 'utf8'));
++  assert.equal((await fs.stat(join(a, 'lib/index.js'))).mode & 0o777, 0o755);
++  assert.equal(JSON.parse(await fs.readFile(join(a, 'package.json'))).private, true);
++  await assert.rejects(fs.access(join(a, 'excluded.txt')), { code: 'ENOENT' });
++  assert.equal((await api('verifyRuntime')({ directory: out })).verified, true);
++});
++test('two exports from fixed inputs have byte-identical manifest and file index', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options);
++  const a = await api('exportRuntime')({ plan: p, outputDirectory: join(f.tmp, 'one') }); const b = await api('exportRuntime')({ plan: p, outputDirectory: join(f.tmp, 'two') });
++  assert.deepEqual(a.manifest, b.manifest);
++  assert.equal(await fs.readFile(join(f.tmp, 'one/artifact-manifest.json'), 'utf8'), await fs.readFile(join(f.tmp, 'two/artifact-manifest.json'), 'utf8'));
++});
++test('independent verifier rejects altered executable bytes', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  await fs.writeFile(join(out, '.packages/@fixture+a/lib/index.js'), 'tampered');
++  await assert.rejects(() => api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_HASH_MISMATCH' });
++});
++test('independent verifier rejects unexpected payload files', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  await fs.writeFile(join(out, '.packages/@fixture+a/extra.js'), 'unlisted');
++  await assert.rejects(() => api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_FILE_SET_MISMATCH' });
++});
++test('verifier sees forbidden node_modules and empty directories instead of hiding them', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  await fs.mkdir(join(out, '.packages/@fixture+a/node_modules/hidden'), { recursive: true });
++  await fs.writeFile(join(out, '.packages/@fixture+a/node_modules/hidden/file.js'), 'extra');
++  await assert.rejects(() => api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_FILE_SET_MISMATCH' });
++});
++test('verifier rejects an unlisted empty directory', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  await fs.mkdir(join(out, '.packages/@fixture+a/extra-empty'));
++  await assert.rejects(() => api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_FILE_SET_MISMATCH' });
++});
++test('source identity refuses a symlinked ancestor', async t => {
++  const f = await fixture(t); const outside = join(f.tmp, 'outside'); await fs.mkdir(outside); await fs.writeFile(join(outside, 'source.txt'), 'real outside bytes'); await fs.symlink(outside, join(f.root, 'alias'));
++  f.identity.sourceFiles = [{ path: 'alias/source.txt', bytes: 18, sha256: hash('real outside bytes') }];
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'SOURCE_IDENTITY_MISMATCH'));
++});
++test('changed source identity after planning blocks all output writes', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); await fs.writeFile(join(f.root, 'fixture-source.txt'), 'changed');
++  await assert.rejects(() => api('exportRuntime')({ plan: p, outputDirectory: join(f.tmp, 'out') }), { code: 'SOURCE_IDENTITY_CHANGED' });
++  await assert.rejects(fs.access(join(f.tmp, 'out')), { code: 'ENOENT' });
++});
++test('export plan identity is frozen and detached from caller mutations', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); f.identity.publicBaseCommit = 'not-a-commit';
++  assert.equal(p.identity.publicBaseCommit, 'a'.repeat(40));
++  assert.throws(() => { p.identity.publicBaseCommit = 'not-a-commit'; }, TypeError);
++});
++test('required external peers must have an exact resolved dependency', async t => {
++  const f = await fixture(t); f.lock.packages['external@1.0.0'].peerDependencies = { ghost: '^2.0.0' };
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'EXTERNAL_PEER_RESOLUTION_REQUIRED'));
++});
++test('manifest cannot detach package identities from the retained payload', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  const mp = join(out, 'artifact-manifest.json'); const m = JSON.parse(await fs.readFile(mp)); m.packages = []; m.corePackageCount = 0; await fs.writeFile(mp, JSON.stringify(m));
++  await assert.rejects(() => api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_MANIFEST_INVALID' });
++});
++test('payload parent replaced by symlink after planning cannot escape input root', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); await fs.rename(join(f.a, 'lib'), join(f.tmp, 'escaped-lib')); await fs.symlink(join(f.tmp, 'escaped-lib'), join(f.a, 'lib'));
++  await assert.rejects(() => api('exportRuntime')({ plan: p, outputDirectory: join(f.tmp, 'out') }), { code: 'INPUT_CHANGED_AFTER_PLAN' });
++});
++test('workspace peer version requirements cannot be ignored', async t => {
++  const f = await fixture(t); const file = join(f.a, 'package.json'); const p = JSON.parse(await fs.readFile(file)); p.peerDependencies = { '@fixture/b': 'workspace:^9.0.0' }; await fs.writeFile(file, JSON.stringify(p));
++  const result = await api('planRuntime')(f.options); assert.ok(result.issues.some(x => x.code === 'PEER_VERSION_NOT_VERIFIED'));
++});
++test('publish wildcard includes descendants of matching directories', async t => {
++  const f = await fixture(t); await fs.mkdir(join(f.a, 'lib/sub')); await fs.writeFile(join(f.a, 'lib/sub/deep.js'), 'nested'); const file = join(f.a, 'package.json'); const m = JSON.parse(await fs.readFile(file)); m.files = ['lib/*']; await fs.writeFile(file, JSON.stringify(m));
++  const p = await api('planRuntime')(f.options); assert.ok(p.packages[0].files.some(x => x.path === 'lib/sub/deep.js'));
++});
++test('exclusive output rejects an independently created destination directory', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await fs.mkdir(out); const before = (await fs.stat(out)).ino;
++  await assert.rejects(() => api('exportRuntime')({ plan: p, outputDirectory: out }), { code: 'OUTPUT_ALREADY_EXISTS' }); assert.equal((await fs.stat(out)).ino, before);
++});
++test('CLI preflight uses source lock and writes a truthful report without an artifact', async t => {
++  const f = await fixture(t); f.lock.lockfileVersion = '9.0'; const raw = JSON.stringify(f.lock); await fs.writeFile(join(f.root, 'pnpm-lock.yaml'), raw);
++  f.identity.sourceFiles.push({ path: 'pnpm-lock.yaml', bytes: Buffer.byteLength(raw), sha256: hash(raw) });
++  const identity = join(f.tmp, 'identity.json'), roots = join(f.tmp, 'roots.json'), report = join(f.tmp, 'report.json'); await fs.writeFile(identity, JSON.stringify(f.identity)); await fs.writeFile(roots, JSON.stringify(['@fixture/a']));
++  const p = spawnSync(process.execPath, [fileURLToPath(new URL('./cli.mjs', import.meta.url)), '--source', f.root, '--identity', identity, '--roots', roots, '--report', report], { encoding: 'utf8' });
++  assert.equal(p.status, 0, p.stderr); const result = JSON.parse(await fs.readFile(report)); assert.equal(result.corePackageCount, 2); assert.equal(result.exported, false); assert.equal(result.legacyConsumerCompatibility.status, 'RED');
++});
++test('unchanged fixed release assembler rejects the new manifest format before output writes', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const candidate = join(f.tmp, 'candidate'); await api('exportRuntime')({ plan: p, outputDirectory: candidate });
++  const official = join(f.tmp, 'official'); await fs.mkdir(join(official, 'node_modules/@deepseek-ai/dsh'), { recursive: true }); await fs.writeFile(join(official, 'node_modules/@deepseek-ai/dsh/package.json'), JSON.stringify({ version: '0.2.0-rc.2' }));
++  const { assembleOwnerRuntime } = await import('./contracts/scripts__assemble-owner-runtime.mjs');
++  const output = join(f.tmp, 'assembled'); await assert.rejects(() => assembleOwnerRuntime({ officialRoot: official, candidateRoot: candidate, outputDirectory: output, productRoot: f.root }), /FIXED_ARTIFACT_IDENTITY_REQUIRED/);
++  await assert.rejects(fs.access(output), { code: 'ENOENT' });
++});
++test('a pinned workspace override is accepted only when both lock and link target agree', async t => {
++  const f = await fixture(t); f.lock.overrides = { '@fixture/b': 'link:packages/b' }; f.lock.importers['packages/a'].dependencies['@fixture/b'].specifier = 'link:../b';
++  const p = await api('planRuntime')(f.options); assert.deepEqual(p.issues, []);
++});
++test('native publication manifest cannot reference an absent binary', async t => {
++  const f = await fixture(t); const meta = JSON.parse(await fs.readFile(join(f.b, 'package.json'))); meta.files.push('prebuilds.json', 'bin/'); await fs.writeFile(join(f.b, 'package.json'), JSON.stringify(meta));
++  await fs.mkdir(join(f.b, 'bin')); await fs.writeFile(join(f.b, 'bin/present'), 'real bytes'); await fs.writeFile(join(f.b, 'prebuilds.json'), JSON.stringify({ binaries: [{ path: 'bin/absent' }] }));
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'NATIVE_BINARY_MISSING' && x.path === 'bin/absent'));
++});
++
++test('duplicate source identity paths cannot inflate verified input count', async t => {
++  const f = await fixture(t); f.identity.sourceFiles.push({...f.identity.sourceFiles[0]});
++  const p = await api('planRuntime')(f.options);
++  assert.ok(p.issues.some(x => x.code === 'SOURCE_IDENTITY_DUPLICATE'));
++});
++test('resolved external required peer must satisfy a supported locked version range', async t => {
++  const f = await fixture(t);
++  f.lock.packages['external@1.0.0'].peerDependencies = { ghost: '^2.0.0' };
++  f.lock.snapshots['external@1.0.0'].dependencies = { ghost: '1.0.0' };
++  f.lock.packages['ghost@1.0.0'] = {resolution:{integrity}};f.lock.snapshots['ghost@1.0.0'] = {};
++  const p = await api('planRuntime')(f.options);
++  assert.ok(p.issues.some(x => x.code === 'EXTERNAL_PEER_VERSION_NOT_VERIFIED'));
++});
++test('caller-pinned manifest hash rejects a rewritten internally valid manifest', async t => {
++  const f=await fixture(t); const p=await api('planRuntime')(f.options);const out=join(f.tmp,'out');await api('exportRuntime')({plan:p,outputDirectory:out});
++  const file=join(out,'artifact-manifest.json');const bytes=await fs.readFile(file);const trusted=hash(bytes);
++  assert.equal((await api('verifyRuntime')({directory:out,expectedManifestSha256:trusted})).trustedManifestPinChecked,true);
++  const manifest=JSON.parse(bytes);manifest.sourceIdentity.publicBaseCommit='e'.repeat(40);await fs.writeFile(file,JSON.stringify(manifest,null,2)+'\n');
++  await assert.rejects(api('verifyRuntime')({directory:out,expectedManifestSha256:trusted}),{code:'ARTIFACT_MANIFEST_HASH_MISMATCH'});
++});
++
++test('R1 workspace required external peer rejects incompatible exact importer resolution', async t => {
++  for (const section of ['peerDependencies', 'dependencies', 'devDependencies']) {
++    const f = await fixture(t); const path = join(f.a, 'package.json'); const pkg = JSON.parse(await fs.readFile(path));
++    pkg.peerDependencies = { external: '^2.0.0' }; await fs.writeFile(path, JSON.stringify(pkg));
++    f.lock.importers['packages/a'][section] = { ...(f.lock.importers['packages/a'][section] ?? {}), external: { specifier: '^2.0.0', version: '1.0.0' } };
++    const p = await api('planRuntime')(f.options);
++    assert.ok(p.issues.some(x => x.code === 'EXTERNAL_PEER_VERSION_NOT_VERIFIED' && x.package === '@fixture/a' && x.dependency === 'external'), section);
++    await assert.rejects(api('exportRuntime')({ plan: p, outputDirectory: join(f.tmp, 'out') }), { code: 'EXPORT_PLAN_RED' });
++    await assert.rejects(fs.access(join(f.tmp, 'out')), { code: 'ENOENT' });
++  }
++});
++test('R1 unsupported workspace external peer range stays RED', async t => {
++  const f = await fixture(t); const path = join(f.a, 'package.json'); const pkg = JSON.parse(await fs.readFile(path));
++  pkg.peerDependencies = { external: '^1.0.0 || ^2.0.0' }; await fs.writeFile(path, JSON.stringify(pkg));
++  f.lock.importers['packages/a'].devDependencies.external = { specifier: '^1.0.0 || ^2.0.0', version: '1.0.0' };
++  const p = await api('planRuntime')(f.options); assert.ok(p.issues.some(x => x.code === 'EXTERNAL_PEER_VERSION_NOT_VERIFIED'));
++});
++test('R1 verifier rejects internally incompatible workspace external peer metadata', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  const path = '.packages/@fixture+a/package.json'; const pkg = JSON.parse(await fs.readFile(join(out, path))); pkg.peerDependencies = { external: '^2.0.0' };
++  const bytes = Buffer.from(JSON.stringify(pkg)); await fs.writeFile(join(out, path), bytes);
++  const mp = join(out, 'artifact-manifest.json'); const manifest = JSON.parse(await fs.readFile(mp)); const file = manifest.files.find(x => x.path === path); file.bytes = bytes.length; file.sha256 = hash(bytes); manifest.packages.find(x => x.name === pkg.name).packageJsonSha256 = hash(bytes); await fs.writeFile(mp, JSON.stringify(manifest));
++  await assert.rejects(api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_PEER_VERSION_NOT_VERIFIED' });
++});
++
++test('R2 verifier rejects a manifest and disk that omit the declared main', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  const mp = join(out, 'artifact-manifest.json'); const original = await fs.readFile(mp); const m = JSON.parse(original);
++  m.files = m.files.filter(x => x.path !== '.packages/@fixture+a/lib/index.js'); await fs.rm(join(out, '.packages/@fixture+a/lib'), { recursive: true }); await fs.writeFile(mp, JSON.stringify(m));
++  await assert.rejects(api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_RUNTIME_ENTRY_MISSING' });
++});
++test('R2 declared main cannot escape its owning package', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  const path = '.packages/@fixture+a/package.json'; const pkg = JSON.parse(await fs.readFile(join(out, path))); pkg.main = '../@fixture+b/lib/index.js'; const bytes = Buffer.from(JSON.stringify(pkg)); await fs.writeFile(join(out, path), bytes);
++  const mp = join(out, 'artifact-manifest.json'); const m = JSON.parse(await fs.readFile(mp)); const file = m.files.find(x => x.path === path); file.bytes = bytes.length; file.sha256 = hash(bytes); m.packages.find(x => x.name === pkg.name).packageJsonSha256 = hash(bytes); await fs.writeFile(mp, JSON.stringify(m));
++  await assert.rejects(api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_RUNTIME_ENTRY_MISSING' });
++});
++test('R2 trusted original manifest pin rejects the reduced missing-main manifest first', async t => {
++  const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
++  const mp = join(out, 'artifact-manifest.json'); const original = await fs.readFile(mp); const m = JSON.parse(original); m.files = m.files.filter(x => x.path !== '.packages/@fixture+a/lib/index.js'); await fs.rm(join(out, '.packages/@fixture+a/lib'), { recursive: true }); await fs.writeFile(mp, JSON.stringify(m));
++  await assert.rejects(api('verifyRuntime')({ directory: out, expectedManifestSha256: hash(original) }), { code: 'ARTIFACT_MANIFEST_HASH_MISMATCH' });
++});
++
++async function cliFixture(t) {
++  const f = await fixture(t); f.lock.lockfileVersion = '9.0'; const raw = JSON.stringify(f.lock); await fs.writeFile(join(f.root, 'pnpm-lock.yaml'), raw);
++  f.identity.sourceFiles.push({ path: 'pnpm-lock.yaml', bytes: Buffer.byteLength(raw), sha256: hash(raw) });
++  const id = join(f.tmp, 'identity.json'), roots = join(f.tmp, 'roots.json'); await fs.writeFile(id, JSON.stringify(f.identity)); await fs.writeFile(roots, JSON.stringify(['@fixture/a']));
++  return { ...f, report: join(f.tmp, 'report.json'), out: join(f.tmp, 'out'), args: ['--source', f.root, '--identity', id, '--roots', roots] };
++}
++const cliEnv = { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8', TMPDIR: '/tmp' };
++function cliArgs(f, imports = []) {
++  return ['--import', fileURLToPath(new URL('./offline-guard.mjs', import.meta.url)), ...imports.flatMap(p => ['--import', p]), fileURLToPath(new URL('./cli.mjs', import.meta.url)), ...f.args, '--report', f.report, '--output', f.out];
++}
++function runCli(f, imports = []) { return spawnSync(process.execPath, cliArgs(f, imports), { encoding: 'utf8', env: cliEnv }); }
++async function reportFailurePreload(f, replacement = false) {
++  const path = join(f.tmp, 'report-write-fault.mjs');
++  await fs.writeFile(path, `import fs from 'node:fs/promises';
++import {syncBuiltinESMExports} from 'node:module';
++const target=${JSON.stringify(f.report)}, output=${JSON.stringify(f.out)}, replacement=${replacement};
++const originalOpen=fs.open.bind(fs), originalWrite=fs.writeFile.bind(fs);
++async function failWrite(){
++ if(replacement){
++  try{await fs.rename(target,target+'.owned');}catch(e){if(e.code!=='ENOENT')throw e;}
++  await originalWrite(target,'caller replacement report',{flag:'wx'});
++  await fs.rename(output,output+'.owned');await fs.mkdir(output);await originalWrite(output+'/caller.txt','caller replacement output',{flag:'wx'});
++ }
++ const error=new Error('SIMULATED_REPORT_WRITE_FAILURE');error.code='EIO';throw error;
++}
++fs.open=async(...args)=>{const handle=await originalOpen(...args);if(args[0]===target)handle.writeFile=failWrite;return handle;};
++fs.writeFile=async(path,...args)=>path===target?failWrite():originalWrite(path,...args);
++syncBuiltinESMExports();
++`);
++  return path;
++}
++test('R3 existing report is preserved and blocks every artifact write', async t => {
++  const f = await cliFixture(t); await fs.writeFile(f.report, 'caller original report'); const before = await fs.stat(f.report);
++  const r = runCli(f); assert.equal(r.status, 1); assert.equal(await fs.readFile(f.report, 'utf8'), 'caller original report'); assert.equal((await fs.stat(f.report)).ino, before.ino);
++  await assert.rejects(fs.access(f.out), { code: 'ENOENT' });
++});
++test('R3 existing report symlink and target bytes are preserved before artifact writes', async t => {
++  const f = await cliFixture(t); const target = join(f.tmp, 'caller.txt'); await fs.writeFile(target, 'caller secret-free fixture'); await fs.symlink(target, f.report);
++  const r = runCli(f); assert.equal(r.status, 1); assert.equal((await fs.lstat(f.report)).isSymbolicLink(), true); assert.equal(await fs.readFile(target, 'utf8'), 'caller secret-free fixture');
++  await assert.rejects(fs.access(f.out), { code: 'ENOENT' });
++});
++test('R3 equal report and artifact path fails before creating either', async t => {
++  const f = await cliFixture(t); f.report = f.out; const r = runCli(f); assert.equal(r.status, 1);
++  await assert.rejects(fs.access(f.out), { code: 'ENOENT' });
++});
++test('R3 late report write failure removes only this invocation artifact and report', async t => {
++  const f = await cliFixture(t); const preload = await reportFailurePreload(f); const r = runCli(f, [preload]); assert.equal(r.status, 1); assert.match(r.stderr, /EIO/);
++  await assert.rejects(fs.access(f.out), { code: 'ENOENT' }); await assert.rejects(fs.access(f.report), { code: 'ENOENT' });
++});
++test('R3 existing caller output survives failure and newly claimed report is cleaned', async t => {
++  const f = await cliFixture(t); await fs.mkdir(f.out); await fs.writeFile(join(f.out, 'caller.txt'), 'caller existing output'); const before = await fs.stat(f.out);
++  const r = runCli(f); assert.equal(r.status, 1); assert.equal((await fs.stat(f.out)).ino, before.ino); assert.equal(await fs.readFile(join(f.out, 'caller.txt'), 'utf8'), 'caller existing output');
++  await assert.rejects(fs.access(f.report), { code: 'ENOENT' });
++});
++test('R3 failure cleanup preserves caller replacements with different ownership', async t => {
++  const f = await cliFixture(t); const preload = await reportFailurePreload(f, true); const r = runCli(f, [preload]); assert.equal(r.status, 1); assert.match(r.stderr, /EIO/);
++  assert.equal(await fs.readFile(f.report, 'utf8'), 'caller replacement report'); assert.equal(await fs.readFile(join(f.out, 'caller.txt'), 'utf8'), 'caller replacement output');
++});
++test('R3 successful CLI publishes complete report and artifact with matching trusted digest', async t => {
++  const f = await cliFixture(t); const r = runCli(f); assert.equal(r.status, 0, r.stderr); const report = JSON.parse(await fs.readFile(f.report)); const stdout = JSON.parse(r.stdout);
++  assert.equal(report.exported, true); assert.equal(report.artifactManifestSha256, stdout.artifactManifestSha256);
++  const v = await api('verifyRuntime')({ directory: f.out, expectedManifestSha256: report.artifactManifestSha256 }); assert.equal(v.verified, true); assert.equal(v.trustedManifestPinChecked, true);
++});
++test('R3 concurrent CLI report claims preserve exactly one successful complete result', async t => {
++  const f = await cliFixture(t);
++  const launch = () => new Promise((resolve, reject) => { const child = spawn(process.execPath, cliArgs(f), { env: cliEnv }); let stdout = '', stderr = ''; child.stdout.on('data', c => { stdout += c; }); child.stderr.on('data', c => { stderr += c; }); child.on('error', reject); child.on('close', status => resolve({ status, stdout, stderr })); });
++  const results = await Promise.all([launch(), launch()]); assert.deepEqual(results.map(x => x.status).sort(), [0, 1]);
++  const report = JSON.parse(await fs.readFile(f.report)); assert.equal(report.exported, true); assert.equal((await api('verifyRuntime')({ directory: f.out, expectedManifestSha256: report.artifactManifestSha256 })).verified, true);
++});
++
++test('R3 artifact cleanup failure still cleans the independently owned report', async t => {
++  const f = await cliFixture(t); const writeFault = await reportFailurePreload(f); const cleanupFault = join(f.tmp, 'cleanup-fault.mjs');
++  await fs.writeFile(cleanupFault, `import fs from 'node:fs/promises';import {syncBuiltinESMExports} from 'node:module';
++const target=${JSON.stringify(f.out)}, original=fs.rm.bind(fs);fs.rm=async(path,...args)=>{if(path===target){const error=new Error('SIMULATED_CLEANUP_PERMISSION_FAILURE');error.code='EACCES';throw error;}return original(path,...args);};syncBuiltinESMExports();\n`);
++  const r = runCli(f, [writeFault, cleanupFault]); assert.equal(r.status, 1); assert.match(r.stderr, /"errorCategory":"EIO"/); assert.match(r.stderr, /"cleanupErrorCategory":"EACCES"/);
++  assert.equal((await fs.stat(f.out)).isDirectory(), true); await assert.rejects(fs.access(f.report), { code: 'ENOENT' });
++});
++
++async function ownershipFaultPreload(f, mode) {
++  const path = join(f.tmp, 'ownership-fault.mjs');
++  await fs.writeFile(path, `import fs from 'node:fs/promises';import {syncBuiltinESMExports} from 'node:module';
++const report=${JSON.stringify(f.report)},output=${JSON.stringify(f.out)},mode=${JSON.stringify(mode)};
++const open=fs.open.bind(fs),stat=fs.stat.bind(fs),lstat=fs.lstat.bind(fs);const fail=code=>{throw Object.assign(new Error('SIMULATED_OWNERSHIP_FAILURE'),{code});};
++fs.open=async(...args)=>{const h=await open(...args);if(mode==='report-stat'&&args[0]===report)h.stat=async()=>fail('EIO');return h;};
++fs.stat=async(path,...args)=>mode==='output-stat'&&path===output?fail('EIO'):stat(path,...args);
++fs.lstat=async(path,...args)=>(mode==='lstat-output'&&path===output)||(mode==='lstat-report'&&path===report)?fail('EACCES'):lstat(path,...args);syncBuiltinESMExports();\n`);
++  return path;
++}
++test('R3 cleanup output inspection failure is explicit and report cleanup still runs', async t => {
++  const f = await cliFixture(t); const write = await reportFailurePreload(f); const lookup = await ownershipFaultPreload(f, 'lstat-output'); const r = runCli(f, [write, lookup]);
++  assert.equal(r.status, 1); assert.match(r.stderr, /"cleanupErrorCategory":"EACCES"/); assert.equal((await fs.stat(f.out)).isDirectory(), true); await assert.rejects(fs.access(f.report), { code: 'ENOENT' });
++});
++test('R3 cleanup report inspection failure is explicit and preserves unknown ownership', async t => {
++  const f = await cliFixture(t); const write = await reportFailurePreload(f); const lookup = await ownershipFaultPreload(f, 'lstat-report'); const r = runCli(f, [write, lookup]);
++  assert.equal(r.status, 1); assert.match(r.stderr, /"cleanupErrorCategory":"EACCES"/); assert.equal((await fs.stat(f.report)).isFile(), true); await assert.rejects(fs.access(f.out), { code: 'ENOENT' });
++});
++test('R3 report claim identity failure explicitly reports blocked cleanup without blind deletion', async t => {
++  const f = await cliFixture(t); const fault = await ownershipFaultPreload(f, 'report-stat'); const r = runCli(f, [fault]);
++  assert.equal(r.status, 1); assert.match(r.stderr, /"errorCategory":"EIO"/); assert.match(r.stderr, /"cleanupErrorCategory":"REPORT_OWNERSHIP_UNAVAILABLE"/);
++  assert.equal((await fs.stat(f.report)).isFile(), true); await assert.rejects(fs.access(f.out), { code: 'ENOENT' });
++});
++test('R3 artifact claim identity failure explicitly reports blocked cleanup without blind deletion', async t => {
++  const f = await cliFixture(t); const fault = await ownershipFaultPreload(f, 'output-stat'); const r = runCli(f, [fault]);
++  assert.equal(r.status, 1); assert.match(r.stderr, /"errorCategory":"EIO"/); assert.match(r.stderr, /"cleanupErrorCategory":"ARTIFACT_OWNERSHIP_UNAVAILABLE"/);
++  assert.equal((await fs.stat(f.out)).isDirectory(), true); await assert.rejects(fs.access(join(f.out, 'artifact-manifest.json')), { code: 'ENOENT' }); await assert.rejects(fs.access(f.report), { code: 'ENOENT' });
++});
+diff --git a/tools/runtime-export/offline-guard.mjs b/tools/runtime-export/offline-guard.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..2c7cc4f7123855c20f1857dfb4e3415e42899951
+--- /dev/null
++++ b/tools/runtime-export/offline-guard.mjs
+@@ -0,0 +1,13 @@
++import net from 'node:net';
++import http from 'node:http';
++import https from 'node:https';
++import dns from 'node:dns';
++import dgram from 'node:dgram';
++import child from 'node:child_process';
++const attempts = { network: 0, listener: 0, subprocess: 0, fetch: 0 };
++const deny = name => () => { attempts[name]++; throw Error('OFFLINE_' + name); };
++net.Socket.prototype.connect = deny('network'); net.Server.prototype.listen = deny('listener');
++http.request = https.request = http.get = https.get = dns.lookup = dns.resolve = dgram.createSocket = deny('network');
++for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) child[name] = deny('subprocess');
++globalThis.fetch = deny('fetch');
++process.on('exit', () => process.stderr.write(JSON.stringify({ offlineIO: attempts }) + '\n'));
+diff --git a/tools/runtime-export/package.json b/tools/runtime-export/package.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..ae600402204a50054fcba7e0e29396c71852312a
+--- /dev/null
++++ b/tools/runtime-export/package.json
+@@ -0,0 +1,7 @@
++{
++  "name": "b-runtime-export-evaluation",
++  "private": true,
++  "type": "module",
++  "scripts": {"test": "node --test export.test.mjs"},
++  "engines": {"node": ">=24.19.0"}
++}
