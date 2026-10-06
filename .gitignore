@@ -1,9 +1,0 @@
-.local/
-.test-runtime/
-node_modules
-*.sqlite*
-*.db*
-.DS_Store
-coverage/
-.env*
-!.env.example

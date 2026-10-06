@@ -1,0 +1,154 @@
+{
+  "classification": "SDK_LOCK_HANDOFF_ONLY; not application/native/GUI/model acceptance",
+  "repository": "86cloudyun-afk/dsh-bot",
+  "source_commit": "3e57f2385d7fa5495e6277c4b1dbe03c046c7b32",
+  "branch": "ci/sdk-lock-handoff-20261006",
+  "manifest": {
+    "source_commit": "3e57f2385d7fa5495e6277c4b1dbe03c046c7b32",
+    "source_git_blob": "5cafceb5325c475e13ad2d98a60bd35538b48db5",
+    "source_sha256": "ab293711f131474ed0e69c23ca476c8515b35d5b8ca58f98de3c9944e4b4eb82",
+    "input_sha256": "d2a9cbd59e3c19b981ed705c665842ff1a26e0092b65656e0be4dea533b3b698",
+    "expected_input_sha256": "d2a9cbd59e3c19b981ed705c665842ff1a26e0092b65656e0be4dea533b3b698",
+    "matches_exact_spec": true,
+    "bytes": 4489
+  },
+  "tool_versions": {
+    "node": "v24.19.0",
+    "npm": "11.17.0"
+  },
+  "initial_failure": {
+    "phase": "generate",
+    "args": [
+      "npm",
+      "install",
+      "--package-lock-only",
+      "--lockfile-version=3",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--registry=https://registry.npmjs.org/"
+    ],
+    "status": "COMPLETED",
+    "start_utc": "2026-10-06T14:37:03.334848+00:00",
+    "fresh_home": true,
+    "fresh_cache": true,
+    "ignore_scripts": true,
+    "environment_inherited": false,
+    "total_limit_seconds": 600,
+    "exit": 1,
+    "timed_out": false,
+    "seconds": 6.3,
+    "end_utc": "2026-10-06T14:37:09.635688+00:00"
+  },
+  "initial_failure_detail": "ECONNREFUSED to unchanged official registry after standard platform network proxy was excluded from isolated environment; preserved. Same-registry curl with platform network transport returned HTTP200. No403 observed, no alternate URL used.",
+  "generation": {
+    "phase": "generate",
+    "args": [
+      "npm",
+      "install",
+      "--package-lock-only",
+      "--lockfile-version=3",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--registry=https://registry.npmjs.org/"
+    ],
+    "status": "COMPLETED",
+    "start_utc": "2026-10-06T14:38:22.719191+00:00",
+    "fresh_home": true,
+    "fresh_cache": true,
+    "ignore_scripts": true,
+    "environment_inherited": false,
+    "selected_platform_network_transport_keys": [
+      "HTTP_PROXY",
+      "HTTPS_PROXY",
+      "NO_PROXY",
+      "http_proxy",
+      "https_proxy",
+      "no_proxy",
+      "NODE_EXTRA_CA_CERTS"
+    ],
+    "proxy_auth_userinfo": false,
+    "total_limit_seconds": 600,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 60.83,
+    "end_utc": "2026-10-06T14:39:23.549468+00:00"
+  },
+  "consumer": {
+    "phase": "consumer",
+    "args": [
+      "npm",
+      "ci",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--registry=https://registry.npmjs.org/"
+    ],
+    "status": "COMPLETED",
+    "start_utc": "2026-10-06T14:39:50.038006+00:00",
+    "fresh_home": true,
+    "fresh_cache": true,
+    "ignore_scripts": true,
+    "environment_inherited": false,
+    "selected_platform_network_transport_keys": [
+      "HTTP_PROXY",
+      "HTTPS_PROXY",
+      "NO_PROXY",
+      "http_proxy",
+      "https_proxy",
+      "no_proxy",
+      "NODE_EXTRA_CA_CERTS"
+    ],
+    "proxy_auth_userinfo": false,
+    "total_limit_seconds": 600,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 17.945,
+    "end_utc": "2026-10-06T14:40:07.983671+00:00"
+  },
+  "lock": {
+    "lockfileVersion": 3,
+    "lock_sha256": "75c5f79b1e3b7ee8bbbfcc2ef08fb8b62f2bcb4cc584f130f5088c81b4c5ed1a",
+    "bytes": 386505,
+    "package_entries_including_root": 609,
+    "registry_hosts": {
+      "registry.npmjs.org": 608
+    },
+    "missing_resolved_or_integrity": [],
+    "invalid_sources_or_integrity": [],
+    "all_package_integrity_algorithms": [
+      "sha512"
+    ],
+    "dsh_version": "0.2.0-rc.2"
+  },
+  "consumer_observed_install_summary": "added 538 packages in 18s",
+  "consumer_installed_sdk_versions": {
+    "@deepseek-ai/dsh": "0.2.0-rc.2",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-session": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.2.0-rc.2"
+  },
+  "consumer_input_and_lock_unchanged": true,
+  "isolation": {
+    "generation_and_consumer_separate_empty_home_cache_directories": true,
+    "no_old_node_modules_or_cache_reused": true,
+    "node_toolchain_reused_for_same_verified_version_only": true,
+    "credential_environment_or_private_configs_inherited": false,
+    "platform_transport_only_explicitly_allowlisted": true,
+    "proxy_url_contains_auth_userinfo": false,
+    "transport_values_or_certificate_contents_in_report": false,
+    "lifecycle_scripts_disabled": true,
+    "auth_material_created": false,
+    "model_calls_or_gui_or_service_started": false
+  },
+  "validation_scope": "Manifest semantics, exact input bytes, official registry resolved/integrity, clean consumer npm ci --ignore-scripts. No dsh-bot tests were run from this transport-only tree. A must review/integrate and run CI on its candidate.",
+  "handoff_tree": "Exactly package.json, package-lock.json, sdk-lock-validation.json; transport-only snapshot. Copy reviewed files into A candidate; do not merge snapshot tree into implementation branch.",
+  "review_time_utc": "2026-10-06T14:41:17.370523+00:00"
+}
