@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { digest,requireValue,text } from './errors.mjs';
 
 function activeMember(group,botId) { const m=group.members[botId];requireValue(m?.active,'membership_revoked');return m; }
+function requireMeetingEpochs(meeting) {
+ requireValue(Object.values(meeting.participants).every(p=>Number.isSafeInteger(p?.botEpoch) && p.botEpoch>0),'migration_required');
+}
 function canonicalTargets(host,group,names) {
   const bots=host.ledger.list('bot');
   return [...new Set(names.map(name=>{
@@ -46,7 +49,8 @@ export function registerCollaboration(host) {
    return this.save('meeting',{meetingId:randomUUID(),groupId:g.groupId,namespace:g.namespace,topic,topicDigest:digest(topic),materials:structuredClone(p.materials),materialDigest:digest(p.materials),participants,epoch:1,revision:1,stage:'independent',round:1,opinions:[],budget:{maxOpinions:p.maxOpinions,usedOpinions:0},nativeMeetingVerified:false,mode:'manual-control-record',createdAt:e.createdAt});
   },
   submitOpinion(p,e,actor) {
-   const m=this.object('meeting',p.meetingId,e),g=this.object('group',m.groupId),participant=m.participants[p.botId];
+   const m=this.object('meeting',p.meetingId,e);requireMeetingEpochs(m);
+   const g=this.object('group',m.groupId),participant=m.participants[p.botId];
    requireValue(m.stage==='independent','stage_conflict');requireValue(participant,'unknown_target');
    const membership=activeMember(g,p.botId);requireValue(membership.generation===participant.membershipGeneration,'membership_revoked');
    const bot=this.object('bot',p.botId);requireValue(bot.lifecycle==='active','bot_unavailable');requireValue(bot.epoch===participant.botEpoch,'membership_revoked');
@@ -55,7 +59,8 @@ export function registerCollaboration(host) {
    this.save('meeting',{...m,revision:m.revision+1,opinions:[...m.opinions,opinion],budget:{...m.budget,usedOpinions:m.budget.usedOpinions+1}});return opinion;
   },
   revealOpinions(p,e) {
-   const m=this.object('meeting',p.meetingId,e),g=this.object('group',m.groupId);
+   const m=this.object('meeting',p.meetingId,e);requireMeetingEpochs(m);
+   const g=this.object('group',m.groupId);
    const revoked=Object.keys(m.participants).filter(id=>!g.members[id]?.active || g.members[id].generation!==m.participants[id].membershipGeneration || this.object('bot',id).lifecycle!=='active' || this.object('bot',id).epoch!==m.participants[id].botEpoch);
    const valid=Object.keys(m.participants).filter(id=>!revoked.includes(id));
    requireValue(valid.every(id=>m.opinions.some(o=>o.botId===id)),'waiting_opinions');
