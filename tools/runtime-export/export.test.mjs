@@ -13,7 +13,7 @@ const api = name => { assert.equal(typeof mod[name], 'function', `Missing implem
 const hash = value => createHash('sha256').update(value).digest('hex');
 const integrity = 'sha512-' + Buffer.alloc(64).toString('base64');
 async function fixture(t) {
-  const tmp = await fs.mkdtemp(join(process.env.TMPDIR ?? '/tmp', 'runtime-export-test-'));
+  const tmp = await fs.realpath(await fs.mkdtemp(join(process.env.TMPDIR ?? '/tmp', 'runtime-export-test-')));
   t.after(() => fs.rm(tmp, { recursive: true, force: true }));
   const root = join(tmp, 'source'); await fs.mkdir(root);
   const lock = { importers: {}, packages: { 'external@1.0.0': { resolution: { integrity } } }, snapshots: { 'external@1.0.0': {} } };
@@ -33,6 +33,10 @@ async function fixture(t) {
   const identity = { publicBaseCommit: 'a'.repeat(40), sourceMaterialCommit: 'b'.repeat(40), supplementCommit: 'c'.repeat(40), declaredLocalHead: 'd'.repeat(40), sourceMode: 'public-base-plus-verified-overlay', localPatchRights: 'UNKNOWN', sourceFiles: [{ path: 'fixture-source.txt', sha256: hash('synthetic source fixture\n'), bytes: 25 }] };
   return { tmp, root, a, b, lock, identity, pkg, options: { sourceRoot: root, lock, roots: ['@fixture/a'], identity, platform: 'linux', arch: 'x64' } };
 }
+test('fixture temp root is canonical before constructing export destinations', async t => {
+  const f = await fixture(t);
+  assert.equal(f.tmp, await fs.realpath(f.tmp));
+});
 test('closure follows declared production edges and excludes unrelated/dev packages', async t => {
   const f = await fixture(t); const p = await api('planRuntime')(f.options);
   assert.deepEqual(p.packages.map(x => x.name), ['@fixture/a', '@fixture/b']);
