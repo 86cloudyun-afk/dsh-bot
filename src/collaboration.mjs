@@ -42,33 +42,33 @@ export function registerCollaboration(host) {
    const topic=text(p.topic,'topic',2000);requireValue(Array.isArray(p.materials),'invalid_material');
    for(const m of p.materials) {requireValue(m.namespace===g.namespace,'scope_denied');text(m.text,'material');text(m.version,'materialVersion',200);}
    const ids=Object.keys(g.members).filter(id=>g.members[id].active);requireValue(Number.isSafeInteger(p.maxOpinions) && p.maxOpinions>=ids.length && p.maxOpinions<=100,'invalid_budget');
-   const participants=Object.fromEntries(ids.map(id=>[id,{membershipGeneration:g.members[id].generation,obligationId:randomUUID()}]));
+   const participants=Object.fromEntries(ids.map(id=>[id,{membershipGeneration:g.members[id].generation,botEpoch:this.object('bot',id).epoch,obligationId:randomUUID()}]));
    return this.save('meeting',{meetingId:randomUUID(),groupId:g.groupId,namespace:g.namespace,topic,topicDigest:digest(topic),materials:structuredClone(p.materials),materialDigest:digest(p.materials),participants,epoch:1,revision:1,stage:'independent',round:1,opinions:[],budget:{maxOpinions:p.maxOpinions,usedOpinions:0},nativeMeetingVerified:false,mode:'manual-control-record',createdAt:e.createdAt});
   },
   submitOpinion(p,e,actor) {
    const m=this.object('meeting',p.meetingId,e),g=this.object('group',m.groupId),participant=m.participants[p.botId];
    requireValue(m.stage==='independent','stage_conflict');requireValue(participant,'unknown_target');
    const membership=activeMember(g,p.botId);requireValue(membership.generation===participant.membershipGeneration,'membership_revoked');
-   requireValue(this.object('bot',p.botId).lifecycle==='active','bot_unavailable');
+   const bot=this.object('bot',p.botId);requireValue(bot.lifecycle==='active','bot_unavailable');requireValue(bot.epoch===participant.botEpoch,'membership_revoked');
    requireValue(!m.opinions.some(o=>o.botId===p.botId),'obligation_conflict');requireValue(m.budget.usedOpinions<m.budget.maxOpinions,'blocked_budget');
    const opinion={opinionId:randomUUID(),meetingId:m.meetingId,botId:p.botId,obligationId:participant.obligationId,content:text(p.content,'opinion'),producer:actor,evidence:'manually recorded; no model request',sealed:true,membershipGeneration:membership.generation,meetingEpoch:m.epoch};
    this.save('meeting',{...m,revision:m.revision+1,opinions:[...m.opinions,opinion],budget:{...m.budget,usedOpinions:m.budget.usedOpinions+1}});return opinion;
   },
   revealOpinions(p,e) {
    const m=this.object('meeting',p.meetingId,e),g=this.object('group',m.groupId);
-   const revoked=Object.keys(m.participants).filter(id=>!g.members[id]?.active || g.members[id].generation!==m.participants[id].membershipGeneration || this.object('bot',id).lifecycle!=='active');
+   const revoked=Object.keys(m.participants).filter(id=>!g.members[id]?.active || g.members[id].generation!==m.participants[id].membershipGeneration || this.object('bot',id).lifecycle!=='active' || this.object('bot',id).epoch!==m.participants[id].botEpoch);
    const valid=Object.keys(m.participants).filter(id=>!revoked.includes(id));
    requireValue(valid.every(id=>m.opinions.some(o=>o.botId===id)),'waiting_opinions');
    this.save('meeting',{...m,revision:m.revision+1,stage:'discussion',missing:revoked.map(botId=>({botId,reason:'revoked'})),opinions:m.opinions.map(o=>({...o,sealed:revoked.includes(o.botId)}))});
    return this.publicMeeting(m.meetingId);
   },
   submitTask(p,e,actor) {
-   const t=this.object('task',p.taskId,e);requireValue(t.stop.state==='none','task_stopped');requireValue(this.object('bot',t.ownerBotId).lifecycle==='active','owner_unavailable');requireValue(p.expectedAuthorityEpoch===this.ledger.get('grant','root').epoch,'authority_conflict');
+   const t=this.object('task',p.taskId);requireValue(this.object('bot',t.ownerBotId).lifecycle==='active','owner_unavailable');this.object('task',p.taskId,e);requireValue(t.stop.state==='none','task_stopped');requireValue(!t.pendingRevision,'revision_pending');requireValue(p.expectedAuthorityEpoch===this.ledger.get('grant','root').epoch,'authority_conflict');
    requireValue(/^[a-f0-9]{64}$/.test(p.artifactDigest),'invalid_artifact');
    return this.save('task',{...t,revision:t.revision+1,responsibility:'submitted',artifactDigest:p.artifactDigest,submission:{producer:actor,evidence:text(p.evidence,'evidence'),nativeExecutionVerified:false}});
   },
   acceptTask(p,e,actor) {
-   const t=this.object('task',p.taskId,e);requireValue(t.stop.state==='none','task_stopped');requireValue(t.responsibility==='submitted','not_submitted');
+   const t=this.object('task',p.taskId,e);requireValue(t.stop.state==='none','task_stopped');requireValue(!t.pendingRevision,'revision_pending');requireValue(t.responsibility==='submitted','not_submitted');
    requireValue(p.artifactDigest===t.artifactDigest && p.acceptanceVersion===t.acceptanceVersion,'acceptance_conflict');
    requireValue(['passed','failed','inconclusive'].includes(p.outcome),'invalid_acceptance');
    const check={checkId:randomUUID(),taskRevision:t.revision,artifactDigest:p.artifactDigest,acceptanceVersion:p.acceptanceVersion,actor,outcome:p.outcome};

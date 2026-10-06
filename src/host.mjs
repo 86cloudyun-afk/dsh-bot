@@ -91,6 +91,8 @@ export class Host {
     },
     archive(p,e) {
       requireValue(p.kind==='bot','unsupported','Native session archival unavailable'); const b=this.object('bot',p.id,e);
+      for(const t of this.ledger.list('task').filter(t=>t.ownerBotId===b.botId && t.responsibility!=='verified')) this.save('task',{...t,epoch:t.epoch+1,revision:t.revision+1});
+      for(const kind of ['delivery','outbox']) for(const d of this.ledger.list(kind).filter(d=>d.botId===b.botId && !['consumed','replied','confirmed','failed','revoked'].includes(d.state))) this.save(kind,{...d,state:d.state==='outcome_unknown'?d.state:'revoked',revoked:true,revocationReason:'bot_archived'});
       return this.save('bot',{...b,lifecycle:'archived',epoch:b.epoch+1,revision:b.revision+1,nativeArchive:'unsupported',stop:'unsupported'});
     },
     restore(p,e) {
