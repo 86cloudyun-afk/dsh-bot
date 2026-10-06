@@ -1,0 +1,641 @@
+{
+  "synthetic": true,
+  "classification": "deterministic-offline-test-fixture",
+  "schema": "current-session-v4-and-product-eligibility",
+  "namespace": "synthetic-ci-bot",
+  "usage": "fabricated counters; not API evidence",
+  "history": "constructed from current schema; no restored or converted historical data",
+  "entry": {
+    "botId": "synthetic-ci-bot",
+    "mainSessionId": "synthetic-ci-main",
+    "cwd": "/synthetic/ci-bot-fixture"
+  },
+  "bot": {
+    "botId": "synthetic-ci-bot",
+    "contactSessionId": "synthetic-ci-main",
+    "lifecycle": "active"
+  },
+  "work": {
+    "botId": "synthetic-ci-bot",
+    "task_id": "fixture-one",
+    "taskId": "synthetic-ci-task-1",
+    "sessionId": "synthetic-ci-work-1",
+    "generation": 1
+  },
+  "generation": {
+    "taskId": "synthetic-ci-task-1",
+    "sessionId": "synthetic-ci-work-1",
+    "generation": 1,
+    "held": true,
+    "state": "unknown",
+    "fence": null
+  },
+  "route": {
+    "botId": "synthetic-ci-bot",
+    "taskId": "synthetic-ci-task-1",
+    "sessionId": "synthetic-ci-work-1",
+    "generation": 1,
+    "producerId": "synthetic-ci-producer",
+    "originSessionId": "synthetic-ci-main",
+    "callId": "synthetic-ci-delegate-1",
+    "rootCallId": "synthetic-ci-delegate-1",
+    "inputMessageId": "synthetic-ci-work-input-1",
+    "responseMessageId": "synthetic-ci-synthetic-ci-work-1-answer-1",
+    "responseSeq": 5,
+    "turn": 1,
+    "step": 1,
+    "text": "CHAIN_ONE_731",
+    "textDigest": "e2c48b7699b9a3309cf06f77f7f5775d6260d2e6a04e582d3b277bba450ef5c4",
+    "nativeSettlementVerified": false,
+    "routing": "durably-queued",
+    "resultInputMessageId": "synthetic-ci-main-result-1"
+  },
+  "mainLog": {
+    "header": {
+      "type": "session",
+      "version": 4,
+      "id": "synthetic-ci-main",
+      "createdAt": 1000,
+      "cwd": "/synthetic/ci-bot-fixture",
+      "isSeeded": false,
+      "delegationDepth": 0,
+      "agentPreset": "chain/empty"
+    },
+    "events": [
+      {
+        "seq": 0,
+        "time": 1000,
+        "type": "agent/inbox/spliced",
+        "data": {
+          "target": "next-turn",
+          "start": 0,
+          "removedCount": 0,
+          "inserted": [
+            {
+              "id": "synthetic-ci-goal-1",
+              "role": "user",
+              "source": {
+                "kind": "user"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "A harmless first goal"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "seq": 1,
+        "time": 1001,
+        "type": "turn/start",
+        "data": {
+          "turn": 1
+        }
+      },
+      {
+        "seq": 2,
+        "time": 1002,
+        "type": "step/start",
+        "data": {
+          "turn": 1,
+          "step": 1
+        }
+      },
+      {
+        "seq": 3,
+        "time": 1003,
+        "type": "agent/inbox/spliced",
+        "data": {
+          "target": "next-turn",
+          "start": 0,
+          "removedCount": 1,
+          "inserted": []
+        }
+      },
+      {
+        "seq": 4,
+        "time": 1004,
+        "type": "user/message",
+        "data": {
+          "id": "synthetic-ci-goal-1",
+          "role": "user",
+          "source": {
+            "kind": "user"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "A harmless first goal"
+            }
+          ]
+        },
+        "surfaceOp": "append"
+      },
+      {
+        "seq": 5,
+        "time": 1005,
+        "type": "assistant/message",
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "id": "synthetic-ci-synthetic-ci-main-answer-1",
+            "role": "assistant",
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "First harmless goal accepted."
+              }
+            ]
+          },
+          "usage": {
+            "inputTokens": 7,
+            "outputTokens": 2
+          },
+          "stream": [
+            {
+              "time": 0,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "stop"
+                }
+              }
+            }
+          ]
+        },
+        "surfaceOp": "append"
+      },
+      {
+        "seq": 6,
+        "time": 1006,
+        "type": "step/end",
+        "data": {
+          "turn": 1,
+          "step": 1
+        }
+      },
+      {
+        "seq": 7,
+        "time": 1007,
+        "type": "turn/end",
+        "data": {
+          "turn": 1,
+          "reason": {
+            "kind": "completed"
+          }
+        }
+      },
+      {
+        "seq": 8,
+        "time": 1008,
+        "type": "agent/inbox/spliced",
+        "data": {
+          "target": "next-turn",
+          "start": 0,
+          "removedCount": 0,
+          "inserted": [
+            {
+              "id": "synthetic-ci-main-result-1",
+              "role": "user",
+              "source": {
+                "kind": "dsh-bot-work-result",
+                "botId": "synthetic-ci-bot",
+                "taskId": "synthetic-ci-task-1",
+                "sessionId": "synthetic-ci-work-1",
+                "generation": 1,
+                "producerId": "synthetic-ci-producer",
+                "originSessionId": "synthetic-ci-main",
+                "callId": "synthetic-ci-delegate-1",
+                "rootCallId": "synthetic-ci-delegate-1",
+                "task_id": "fixture-one"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Observed work result (fixture-one): CHAIN_ONE_731"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "seq": 9,
+        "time": 1009,
+        "type": "turn/start",
+        "data": {
+          "turn": 2
+        }
+      },
+      {
+        "seq": 10,
+        "time": 1010,
+        "type": "step/start",
+        "data": {
+          "turn": 2,
+          "step": 1
+        }
+      },
+      {
+        "seq": 11,
+        "time": 1011,
+        "type": "agent/inbox/spliced",
+        "data": {
+          "target": "next-turn",
+          "start": 0,
+          "removedCount": 1,
+          "inserted": []
+        }
+      },
+      {
+        "seq": 12,
+        "time": 1012,
+        "type": "user/message",
+        "data": {
+          "id": "synthetic-ci-main-result-1",
+          "role": "user",
+          "source": {
+            "kind": "dsh-bot-work-result",
+            "botId": "synthetic-ci-bot",
+            "taskId": "synthetic-ci-task-1",
+            "sessionId": "synthetic-ci-work-1",
+            "generation": 1,
+            "producerId": "synthetic-ci-producer",
+            "originSessionId": "synthetic-ci-main",
+            "callId": "synthetic-ci-delegate-1",
+            "rootCallId": "synthetic-ci-delegate-1",
+            "task_id": "fixture-one"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Observed work result (fixture-one): CHAIN_ONE_731"
+            }
+          ]
+        },
+        "surfaceOp": "append"
+      },
+      {
+        "seq": 13,
+        "time": 1013,
+        "type": "assistant/message",
+        "data": {
+          "turn": 2,
+          "step": 1,
+          "message": {
+            "id": "synthetic-ci-synthetic-ci-main-answer-2",
+            "role": "assistant",
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "fixture-one CHAIN_ONE_731 received; ready."
+              }
+            ]
+          },
+          "usage": {
+            "inputTokens": 7,
+            "outputTokens": 2
+          },
+          "stream": [
+            {
+              "time": 0,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "stop"
+                }
+              }
+            }
+          ]
+        },
+        "surfaceOp": "append"
+      },
+      {
+        "seq": 14,
+        "time": 1014,
+        "type": "step/end",
+        "data": {
+          "turn": 2,
+          "step": 1
+        }
+      },
+      {
+        "seq": 15,
+        "time": 1015,
+        "type": "turn/end",
+        "data": {
+          "turn": 2,
+          "reason": {
+            "kind": "completed"
+          }
+        }
+      }
+    ]
+  },
+  "workLog": {
+    "header": {
+      "type": "session",
+      "version": 4,
+      "id": "synthetic-ci-work-1",
+      "createdAt": 1000,
+      "cwd": "/synthetic/ci-bot-fixture",
+      "isSeeded": false,
+      "delegationDepth": 0,
+      "agentPreset": "chain/empty"
+    },
+    "events": [
+      {
+        "seq": 0,
+        "time": 1000,
+        "type": "agent/inbox/spliced",
+        "data": {
+          "target": "next-turn",
+          "start": 0,
+          "removedCount": 0,
+          "inserted": [
+            {
+              "id": "synthetic-ci-work-input-1",
+              "role": "user",
+              "source": {
+                "kind": "dsh-bot",
+                "botId": "synthetic-ci-bot",
+                "taskId": "synthetic-ci-task-1",
+                "sessionId": "synthetic-ci-work-1",
+                "generation": 1,
+                "producerId": "synthetic-ci-producer",
+                "originSessionId": "synthetic-ci-main",
+                "callId": "synthetic-ci-delegate-1",
+                "rootCallId": "synthetic-ci-delegate-1"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Return harmless marker CHAIN_ONE_731"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "seq": 1,
+        "time": 1001,
+        "type": "turn/start",
+        "data": {
+          "turn": 1
+        }
+      },
+      {
+        "seq": 2,
+        "time": 1002,
+        "type": "step/start",
+        "data": {
+          "turn": 1,
+          "step": 1
+        }
+      },
+      {
+        "seq": 3,
+        "time": 1003,
+        "type": "agent/inbox/spliced",
+        "data": {
+          "target": "next-turn",
+          "start": 0,
+          "removedCount": 1,
+          "inserted": []
+        }
+      },
+      {
+        "seq": 4,
+        "time": 1004,
+        "type": "user/message",
+        "data": {
+          "id": "synthetic-ci-work-input-1",
+          "role": "user",
+          "source": {
+            "kind": "dsh-bot",
+            "botId": "synthetic-ci-bot",
+            "taskId": "synthetic-ci-task-1",
+            "sessionId": "synthetic-ci-work-1",
+            "generation": 1,
+            "producerId": "synthetic-ci-producer",
+            "originSessionId": "synthetic-ci-main",
+            "callId": "synthetic-ci-delegate-1",
+            "rootCallId": "synthetic-ci-delegate-1"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Return harmless marker CHAIN_ONE_731"
+            }
+          ]
+        },
+        "surfaceOp": "append"
+      },
+      {
+        "seq": 5,
+        "time": 1005,
+        "type": "assistant/message",
+        "data": {
+          "turn": 1,
+          "step": 1,
+          "message": {
+            "id": "synthetic-ci-synthetic-ci-work-1-answer-1",
+            "role": "assistant",
+            "source": {
+              "kind": "model",
+              "provider": "deepseek-official",
+              "model": "deepseek-flash"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "CHAIN_ONE_731"
+              }
+            ]
+          },
+          "usage": {
+            "inputTokens": 7,
+            "outputTokens": 2
+          },
+          "stream": [
+            {
+              "time": 0,
+              "chunk": {
+                "type": "finish",
+                "reason": {
+                  "kind": "stop"
+                }
+              }
+            }
+          ]
+        },
+        "surfaceOp": "append"
+      },
+      {
+        "seq": 6,
+        "time": 1006,
+        "type": "step/end",
+        "data": {
+          "turn": 1,
+          "step": 1
+        }
+      },
+      {
+        "seq": 7,
+        "time": 1007,
+        "type": "turn/end",
+        "data": {
+          "turn": 1,
+          "reason": {
+            "kind": "completed"
+          }
+        }
+      }
+    ]
+  },
+  "requests": [
+    {
+      "requestId": "synthetic-ci-request-01",
+      "sessionId": "synthetic-ci-main",
+      "kind": "main",
+      "scenario": "synthetic-ci-purpose-1",
+      "startedMs": 1100,
+      "elapsedMs": 1,
+      "outcome": "confirmed",
+      "effectStarted": true,
+      "wirePrepared": true,
+      "fetchAttempts": 1,
+      "rawTerminalObserved": true,
+      "actualResponseModel": "deepseek-flash",
+      "requestedProvider": "deepseek-official",
+      "requestedModel": "deepseek-flash",
+      "maxOutputTokens": 256,
+      "worstReservationCny": 2.0992,
+      "responseStatus": 200,
+      "rawUsage": {
+        "input_tokens": 10,
+        "output_tokens": 2,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "usage": {
+        "inputTokens": 10,
+        "outputTokens": 2,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0
+      },
+      "usageUpperCny": 0.000036
+    },
+    {
+      "requestId": "synthetic-ci-request-02",
+      "sessionId": "synthetic-ci-main",
+      "kind": "main",
+      "scenario": "synthetic-ci-purpose-2",
+      "startedMs": 1110,
+      "elapsedMs": 1,
+      "outcome": "confirmed",
+      "effectStarted": true,
+      "wirePrepared": true,
+      "fetchAttempts": 1,
+      "rawTerminalObserved": true,
+      "actualResponseModel": "deepseek-flash",
+      "requestedProvider": "deepseek-official",
+      "requestedModel": "deepseek-flash",
+      "maxOutputTokens": 256,
+      "worstReservationCny": 2.0992,
+      "responseStatus": 200,
+      "rawUsage": {
+        "input_tokens": 11,
+        "output_tokens": 3,
+        "cache_read_input_tokens": 1,
+        "cache_creation_input_tokens": 1
+      },
+      "usage": {
+        "inputTokens": 11,
+        "outputTokens": 3,
+        "cacheReadTokens": 1,
+        "cacheWriteTokens": 1
+      },
+      "usageUpperCny": 0.00005
+    },
+    {
+      "requestId": "synthetic-ci-request-03",
+      "sessionId": "synthetic-ci-work-1",
+      "kind": "work",
+      "scenario": "synthetic-ci-purpose-3",
+      "startedMs": 1120,
+      "elapsedMs": 1,
+      "outcome": "confirmed",
+      "effectStarted": true,
+      "wirePrepared": true,
+      "fetchAttempts": 1,
+      "rawTerminalObserved": true,
+      "actualResponseModel": "deepseek-flash",
+      "requestedProvider": "deepseek-official",
+      "requestedModel": "deepseek-flash",
+      "maxOutputTokens": 256,
+      "worstReservationCny": 2.0992,
+      "responseStatus": 200,
+      "rawUsage": {
+        "input_tokens": 12,
+        "output_tokens": 4,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 2
+      },
+      "usage": {
+        "inputTokens": 12,
+        "outputTokens": 4,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 2
+      },
+      "usageUpperCny": 0.00006
+    },
+    {
+      "requestId": "synthetic-ci-request-04",
+      "sessionId": "synthetic-ci-main",
+      "kind": "main",
+      "scenario": "synthetic-ci-purpose-4",
+      "startedMs": 1130,
+      "elapsedMs": 1,
+      "outcome": "confirmed",
+      "effectStarted": true,
+      "wirePrepared": true,
+      "fetchAttempts": 1,
+      "rawTerminalObserved": true,
+      "actualResponseModel": "deepseek-flash",
+      "requestedProvider": "deepseek-official",
+      "requestedModel": "deepseek-flash",
+      "maxOutputTokens": 256,
+      "worstReservationCny": 2.0992,
+      "responseStatus": 200,
+      "rawUsage": {
+        "input_tokens": 13,
+        "output_tokens": 5,
+        "cache_read_input_tokens": 1,
+        "cache_creation_input_tokens": 0
+      },
+      "usage": {
+        "inputTokens": 13,
+        "outputTokens": 5,
+        "cacheReadTokens": 1,
+        "cacheWriteTokens": 0
+      },
+      "usageUpperCny": 0.000068
+    }
+  ]
+}
