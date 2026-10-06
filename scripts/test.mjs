@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const root = resolve(import.meta.dirname, '..');
-const temp = mkdtempSync(resolve(tmpdir(), 'dsh-bot-tests-'));
+const temp = realpathSync(mkdtempSync(resolve(tmpdir(), 'dsh-bot-tests-')));
 try {
   const result = spawnSync(process.execPath, [
     '--permission', `--allow-fs-read=${root}`, `--allow-fs-read=${temp}`,
