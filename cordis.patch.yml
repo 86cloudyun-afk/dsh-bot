@@ -1,0 +1,6 @@
+# Select this bundle once in a compatible Web profile with no existing dsh-bot row.
+# The plugin exposes capability status only; no host data or execution settings are supplied.
+- insert:
+    - id: dsh-bot
+      name: dsh-bot
+      config: {}

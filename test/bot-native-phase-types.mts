@@ -1,0 +1,5 @@
+import{verifyNativeStageEligibility}from'dsh-bot/bot-chain-native-owner-app';import{installChainRequestGuard}from'dsh-bot/bot-chain-request-guard';import type{OwnedBotProducerOptions}from'dsh-bot/bot-producer';import type{Agent}from'@deepseek-ai/dsh-agent';import type{Context}from'@deepseek-ai/cordis';
+declare const ctx:Context,agent:Agent,opts:OwnedBotProducerOptions;
+const g=installChainRequestGuard({ownerCtx:ctx,ledger:{put(){}},enabled:false,maxRequests:8});g.bind(agent,'work','A-wait',{isCurrent:()=>true,admit:()=> 'A-wait',toolPolicy:{gate:'fixed',neutralTools:[]}});verifyNativeStageEligibility({}, {botId:'same',mainSessionId:'same',historyDigest:'known',cwd:'/harmless'});const withHooks:OwnedBotProducerOptions={...opts,execution:{beforeExecute:async()=>({expectedMarker:'A',waitWitness:()=>({})}),isCurrent:()=>true,concludeDelegation:true,onFailure:()=>{},assertTargetTools:()=>true,beforeRoute:async()=>{}}};void withHooks;
+// @ts-expect-error Browser authority cannot replace real Context.
+installChainRequestGuard({ownerCtx:{},ledger:{put(){}},enabled:true,maxRequests:8});

@@ -1,0 +1,41 @@
+# Restricted native owner app design
+
+This is a thin entry over the existing protected controller, not a new execution engine. The user has selected this design's restricted owner scope and requested independent review before code/TDD. Baseline product `93463b809beddf7ec0ae49f4bead252225825697`; runtime baseline `a09222cc`; fixed core candidate `3fbedc25`.
+
+## Who may call and why
+
+Only the OS user who explicitly starts the dedicated native `dsh --profile dsh-bot-owner` process may supply its inherited stdin commands. Code/plugins executing with that process's privileges are already inside its trust boundary. There is no HTTP listener, SDK product endpoint, remote user entry, authenticated human principal, service account, token, role assignment or Gateway bootstrap.
+
+The app receives launcher-owned `cmdlineArgs`, `appReady`, `appExit` and native services. At trusted activation it retains its actual `ctx.fiber` in a lexical closure and constructs `OwnedNativeController` privately. The command path always supplies that exact fiber. It neither accepts caller/actor/grant fields nor registers controller, Host, ledger or fiber as a service. A bare object, UUID, persisted grant row, Session role or Gateway peer cannot reconstruct the capability. `publicHumanAuthorityVerified:false` remains mandatory.
+
+## Lifetime and persistence
+
+Authority exists only in that process's actual Context/fiber. Before EOF, explicit `close`, SIGINT/SIGTERM teardown or plugin unload, stop accepting input and remove stream listeners; the normal cleanup path awaits existing controller close/drain before closing the product ledger. The unchanged native launcher forces process exit after five seconds or a repeated interrupt. That boundary may prevent completed cleanup reporting; it must never be described as confirmed local drain/remote cancellation or reservation release. Do not force-unlock or clear unknown. A later deliberate OS launch reads the original journal outcome.
+
+Startup in a later process requires another deliberate OS-owned `dsh --profile` invocation; no daemon, autostart or background transport is installed. Persisted files contain profile configuration, operation identities, Session/binding/epoch/fence/outcome data and existing native-owner guard metadata. They contain no serialized capability, new credential, account or enduring admission token. The existing native-owner row is a fence input, not independently callable authority. Retain its current semantics; do not add permissions/scopes. For fresh private-owner ledgers, omit the legacy configured-human `root` grant that Host currently creates unconditionally; offline human preview remains unchanged. Old ledgers are never modified or reclassified by this task.
+
+Installing an app/profile persists ordinary program/configuration files; it does not create access to another account, network surface, Home or resources. This scope adds no persistent access grant. If implementation instead needs an account, credential, ACL/network/security change or authorization recoverable from persisted data alone, stop for root/user confirmation with that concrete design.
+
+## Home isolation and supported launch
+
+Use a newly created absolute independent DSH Home. A setup helper exclusively creates that Home and its empty, standalone `dsh-bot-owner` profile; do not inherit base/sdk-minimal profiles, user coding patches, BrowserAuth or model tools. App state lives at one fixed child directory inside the configured Home. `--init` claims that state directory exclusively; `--resume` accepts only the app's own versioned layout and exact native binding. Before constructing any Ledger/controller writer, validate canonical Home/state paths, reject escaping links, and require existing layout/database/native binding/native-owner fence metadata. Missing or incomplete resume data is rejected without initialization, mkdir, WAL setup or grant repair. Test a symlink to a separate temporary prior-state fixture and prove its bytes unchanged. No arbitrary journal-path argument, migration or import of the earlier acceptance Homes exists.
+
+The app/profile can be developed using existing archive artifacts. For complete native launch verification, stage a separate runtime from public installed official rc.2 files and overlay the fixed candidate's built packages at one physical package resolution root, plus this product snapshot. Record artifact hashes and provenance; never mutate official installation, archived artifacts or core source. Use the real `dsh` bin/profile boot, not a standalone application bin or substitute Context launcher. Setup/build scripts are offline filesystem tools, not model tools or alternative runtimes. All child verification receives fresh scrubbed environment and network/listener/child fuses.
+
+## Minimal user commands
+
+Launcher arguments are exactly `--init` or `--resume`; optional `--enable-model-requests` is a per-process functional opt-in, off by default and never persisted. Help/invalid invocation should start no app state writer. The default mode is fully usable for native initialization, operation preparation/admission, inspection and pre-dispatch stop with zero model calls. Real text drive requires explicit opt-in; no real drive occurs in this round.
+
+The inherited stdin carries bounded UTF-8 JSON lines, with no actor fields. Allow only these commands: `status`, `prepare` (required original `operationId`, contact/execution kind and 1–4096-byte text), `admit`, `run`, `inspect`, `stop` (all by original operationId), and `close`. Frames are at most 8192 bytes. Reject unknown properties and unsupported commands before any product effect. Return safe categories and bounded operation/receipt projections, not raw diagnostics/configuration/credentials.
+
+Preparation persists a complete original product envelope before execution. Repeating an ID with identical payload uses that envelope; conflicting text/kind is rejected. Admission/inspection of an admission still pending is rejected as busy, avoiding premature native lookup. Run returns an immediate started marker and later emits its original-ID result; stop and inspection remain usable while it is running. Existing controller/native run gates enforce same-ID no replay, Session capacity and unknown retention. No automatic retry or resubmission occurs on resume.
+
+Fresh initialization uses the existing fixed deepseek-official/deepseek-flash route, reasoning off, empty healthy preset, two distinct zero-tool Sessions, and bounded capacity/maxTokens. Provider auth remains the existing official runtime reference path; product app/setup never read, print or store raw keys. If the user later explicitly enables model requests, only the existing provider internally resolves that reference. The profile only states `apiKeyEnv:DEEPSEEK_API_KEY` and official baseURL as nonsecret configuration. No placeholder key or credential file is generated.
+
+## Verification and scope
+
+Write red tests before implementation: missing entry; exact native Context/fiber ownership; fake JSON actor/caller rejection; no model opt-in; malformed/oversized frames; stable original identity; conflicting ID; no legacy human grant for owner; teardown; input/stop remains callable during pending work; fresh/resume Home boundaries. Offline external response/auth simulations remain separately labeled.
+
+Then launch the real staged native profile with official provider factory and no key/auth resolution/model drive: initialize two durable empty Sessions, prepare/admit/inspect, deny run by default, pre-dispatch stop, close, resume original IDs and inspect with zero fetch. Test public execute and forged owner objects still fail closed. Hash all old 12 SQLite/WAL/SHM files before/after. Preserve every failed probe and old review output. Support matrix must say paid owner-entry drive is not newly measured, ordinary SDK/browser/human authentication and broader Bot/model/group/tool/archive product features remain unsupported.
+
+The earlier review-input deficiency is addressed through clear material/evidence constraints in documentation; this feature does not rerun reviews or discard unfavorable samples. Full-source review packet preparation may be a separate bounded followup, not a requirement to ship this entry.

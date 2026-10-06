@@ -1,0 +1,765 @@
+{
+  "authority": "public-static-types-only",
+  "nativeRuntimeLoaded": false,
+  "scannedPackages": [
+    "dsh",
+    "cordis",
+    "dsh-api-session-controller",
+    "dsh-agent",
+    "dsh-subagent",
+    "dsh-workspace",
+    "dsh-tools",
+    "dsh-fs-sandbox",
+    "dsh-llm",
+    "dsh-plan-mode",
+    "dsh-permission-presets"
+  ],
+  "packages": [
+    {
+      "name": "@deepseek-ai/dsh",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/args.d.ts",
+          "sha256": "dc1054bdca71a3a3d840eab441c03a6ca6c31aaec649652faa1788317790a9a9",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/bin.d.ts",
+          "sha256": "7e403cae4c0bae0845e07d3698ce3e7459d74132c7accb5119bb47d39c201609",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/dump-config-schema.d.ts",
+          "sha256": "75484f0f442dde459de9da50d28eec911a4c660f1e31afe378f1c167fa3c3faf",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/dump-config.d.ts",
+          "sha256": "48e9c71f3d20376c928bdfc683e03dd8d821d57d494611e2428811b931d28ce7",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/plugin.d.ts",
+          "sha256": "13f7bdcf1892b22b13064a996348c0526de89750d706fa04164b634c3920dc71",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/process-shutdown.d.ts",
+          "sha256": "ac138facee40b2a01436b3778a47bc086ccc8ece145b9ee04e9317dafa628bc4",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/profile-boot.d.ts",
+          "sha256": "1e9672c740c855aec2fab3224b8ca7bb80931401c6145c59f4dcd1e0b560d96c",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/startup-diagnostics.d.ts",
+          "sha256": "3d18c7fb6c3c38e198acf2c00e24956947cd96500194934ea334cfed58c84051",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/cordis",
+      "version": "4.0.4",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/context.d.ts",
+          "sha256": "ddbdfbaace4a8e1982dded8fdb9a05b3f14b4db3613628caff53e623542f5b71",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/events.d.ts",
+          "sha256": "f72cc0e13b57c436817ab8199268bc7defc609c7121f8fda49018ca919bf84c9",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/fiber.d.ts",
+          "sha256": "eec0d229849c8a293ede90cc2b107c54262db28acfdcdf9181cfec5cd1d0a7d4",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "51237bf92ef225c92c897c5fb0aa8e4482267a5ae6ff1cf768726a40c9a7db86",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/logger.d.ts",
+          "sha256": "fcc969c54b945c21a4ad9a9e4565ae0d535f45c1755910a882826c5785f160f8",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/reflect.d.ts",
+          "sha256": "84a46d00b1a6528add43e0f27c1f27bab158f1454d8d05c7ea120a0907a6dc7b",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/registry.d.ts",
+          "sha256": "1188a67702253930766e6b03670b8f906e87ac11623c9aa69012215552a6f354",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/service.d.ts",
+          "sha256": "1bb754c0d12ad9f1b371e9a1496e0caba5b5a7a750796c5de81e123750e2fb09",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/utils.d.ts",
+          "sha256": "87149646f2227b818f9bdef4980fedc0539572b4574b63d75e1bbb7702390acb",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-api-session-controller",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/agent.d.ts",
+          "sha256": "9c0c629d74772da7d5c943de95f0fe4f5e4d3ae707bd8ff03f2d4b06d1ac0050",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/archived-session-gate.d.ts",
+          "sha256": "7489019393b10edf80218dabfe5a316ff41b554671e5e0d33499989f9d4a72c5",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/assistant-stream.d.ts",
+          "sha256": "893fe013ea2b8a90547127e1f8d8a0eb033a87df6699c5b452cb4c0c737d3fc0",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/catalog.d.ts",
+          "sha256": "d584485eabf634ff4e8400cb5fa137759850fc5f38625742ae90455d99cfbebc",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/contract/events.d.ts",
+          "sha256": "286bba5d5ff4336328323d9c5c852bdad6d4f76300579babfdde16fbbb11112f",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/contract/session.d.ts",
+          "sha256": "c0e4edf6424d138a240f9c05de41be435566d8dc90571948ea798dd72fc75f9b",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/contract/sessions.d.ts",
+          "sha256": "e1761a563cfe12dcad0d1165067ce796d9e49a22cbd058309eaa69d4abea37ad",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/contract/snapshot.d.ts",
+          "sha256": "917110bd7ea3a69553183a9cbf07a50083c9481a70bd512840be5cb1bbfcb796",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/index.d.ts",
+          "sha256": "963fbe76ba82816760ba766d4ba82ce386e47be25e4968f8c21aa3ca82299e57",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/ordered-baseline.d.ts",
+          "sha256": "53af22aa688c5441fa978c17db9f804869d789ebfeb3807c8c67a34ef02ceafe",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/scope.d.ts",
+          "sha256": "62b2668ffa15b6f5cbb89d3659362a0063b4b2560947a623b02dece0d61dbeab",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/session-wire-event.d.ts",
+          "sha256": "f19623929c40ee012440e91c3be671ffc20016c7620023d06794cbc51a978a8a",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/assistant-stream.d.ts",
+          "sha256": "99d3a40ea26be9cda3e17afae37a76a3c8d5cb75fe026c375796a39f4e69a75f",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/history-records.d.ts",
+          "sha256": "f2a82534f3f3fb71affa5c051e7b4fc0e277c2fdfb194452ef39d451adf57be8",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/lineage.d.ts",
+          "sha256": "01dba3772f092138ae7ee1cf11280d86052cf49af675ffc7f95ea26f3c8ef2f5",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/manager.d.ts",
+          "sha256": "463c00c80b81d0468dfed792ebae30346ad92fb16974ddb40313572e29c85e2e",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/notifier.d.ts",
+          "sha256": "04f597540995d3077ec63349e961734c6ead736b637b25ac3e195cbc8cdcec7f",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/projection-store.d.ts",
+          "sha256": "ac1fb3bc3890ddf1fdd17b3c551544ef5163ecabf5671976e892bc12c7565101",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/remotes.d.ts",
+          "sha256": "8f7ed24b86218bde67ac5c83a3e443f0e6836fd402ac8a45f041add1022ff525",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/service.d.ts",
+          "sha256": "772cad31a6c6514b9aa4bc91dfececfca35bd070d030691ca2a202483e51f537",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/sessions/session.d.ts",
+          "sha256": "9c1a5a5e0016c0381527bfdb90ec072c02a79b180c8c11b38c8a62c87bd7859a",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/time-zone.d.ts",
+          "sha256": "673ed1c561b90c34f6ea2cd8d63b6ac50c5f4e6ab07c3bc54b845ec9d0b9a258",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client/transport.d.ts",
+          "sha256": "ceb5014c70d13468dd1d85d0a1f57f696a4fd094f78f21fd4cff09c297257d46",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/commands.d.ts",
+          "sha256": "7014e7237c339edc7a94588859f625da590c7efb5dfbf688f5ff307b7e9890e3",
+          "signals": {
+            "selectModel": [
+              27
+            ]
+          }
+        },
+        {
+          "path": "lib/types/control.d.ts",
+          "sha256": "8b9b2c84360cd75250009fd55bff6f765770faa7fceaa7b798097d62cb24c717",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/file-references.d.ts",
+          "sha256": "0f1583202e5df3eb9826fd5275be61daac98a466da014eb8f92e0c043aac8919",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/history.d.ts",
+          "sha256": "45edcf8804e2ee502fc087dcf61225278e42fdf4e2a632b852ae52710c1b1e4a",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "2ef63ce19073dde402bfeb9b4d95d8b04e9fc3e5bc4235afe4c9629e6a69d895",
+          "signals": {
+            "selectModel": [
+              99
+            ]
+          }
+        },
+        {
+          "path": "lib/types/list.d.ts",
+          "sha256": "fd4121a8e740a18409db1986e9c0b8f7f65547c2940aa98f5efc4c6952e9525a",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/media-references.d.ts",
+          "sha256": "a244e818e3913589bab48ccb39ada431f66ce6da31fcdc448f03809ca8092ec3",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/model-selection-projection.d.ts",
+          "sha256": "6d5c65c03d355556a43c516dacf62bf6984a7a41d78eb8ea90e0cb2c3ca8ddab",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/remote-events.d.ts",
+          "sha256": "6239cfe5143ed571ac3f11e837979267c1fe8373d40021fc7e850f7476d44792",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/skill-catalog.d.ts",
+          "sha256": "c7c8c5b8b69ce5eca2d81ba52ffc3568bc5982cc2fec806fd5c30eb8a8b41d7f",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/types.d.ts",
+          "sha256": "1b4d81ed8f89ccd5d3c477a38fe2ab8c993f24af0e21539d0e0b7d22d7c2e7b8",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-agent",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/archive-admission.d.ts",
+          "sha256": "60211b691d2075776d34c13448194051acdbf35282462368ebf22413ad013b06",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/consumed-work.d.ts",
+          "sha256": "a31f9a50593553d85af6d217bb06b70364753a56025c84a665854118756269ce",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/dispatch.d.ts",
+          "sha256": "eab5517bdeca9dc752bccf2a6fc305c8dc330ce6d51c71273806ea449137912b",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "3531899158347ff10627228732c67462c78ea0352e31a7eabc19631f90b08bc1",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/invariant.d.ts",
+          "sha256": "7403fee3a1d98a73dddfbc22ad56d5ed90b6120522ed8ca1f593b65349cb1799",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/model-selection.d.ts",
+          "sha256": "5ba6099d4dd5f4616324fa59f46ebe6736fcabe8f8d2b5b97c6cb9a76c2af7be",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/projection.d.ts",
+          "sha256": "0e006d59620c00f562a105f8a23ffa645be62dbb6d50a9e9b56c808e663f8aa2",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/runtime-types.d.ts",
+          "sha256": "07e00646b0c07eda239c102ea736a3bf29c431f34aee97fd7619ea0150d3c71a",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/types.d.ts",
+          "sha256": "5a081173f2064e948b5652f9090ccdc41351fc3ef49d3f9b9e9f11e7ce18bbf7",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-subagent",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/archive-admission.d.ts",
+          "sha256": "7bc1ffadefccf96a118f6d89c5f5297d9750a3b43bacda7d61cf71a54f906aa1",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/assistant-output.d.ts",
+          "sha256": "bdee371ec3b6550a52548163df1018f9f8449084130139b37e71411a47adbba5",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/catalog.d.ts",
+          "sha256": "b5afc3140b0ed987632b2d148d0b496afaa0b3d2da2c98b9f79008ccea1d6ea4",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/child-agent.d.ts",
+          "sha256": "52b19c3866b85bf032847ae5d1c1635519768525029fcf1bc32bf5b1069ed4e9",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/client.d.ts",
+          "sha256": "d24bdc36d164e03ed0342b0633d845f925c3a62ab697a61d915267eb4cf49f10",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/continuation-activation.d.ts",
+          "sha256": "1d20569cdbea3012834a9f2637e9cdb28a687f3b7cd3cb1138f0850ffeb3d6bc",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/continuation-messages.d.ts",
+          "sha256": "1edbeb3f6e559d651ca5389fbbc0539192970371c1af9dc8d199da5ee1e5acf1",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/continuation.d.ts",
+          "sha256": "7e728978c3636d6b97905f8bacb02079c5bd75f4e2c4566592d144f0371bd3fb",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/control-types.d.ts",
+          "sha256": "c9d7acd7abff2453256c9c7acae499613cf098b1343cd93edfc0093ae531c5e9",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/control.d.ts",
+          "sha256": "99739f692446bcab708b0642ce72a22b511ec017c3153cafb542b3169e731c08",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/depth.d.ts",
+          "sha256": "514c5f694abfad4b70a728fab4a01d1c96ca168c4add93330964c164d0c2555d",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/descriptor.d.ts",
+          "sha256": "a97b3083008bb0201374cf9333873cfb0edd8fff4a4a9c069d59fbc3d307b6e8",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/error.d.ts",
+          "sha256": "28974769966de1ebeaf042e52d8fd6ac72668a8b251e41cf9f8d6767d9867c9f",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/inbox.d.ts",
+          "sha256": "2da8330654064bc9e8a60f3bfc73b01e2f69ee96ea4434188bcf8f6a9bc7eee5",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "674879b514f8af54213ecc4985cf7a8e8b00c8a00086261fcccce1b0d6325ee4",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/internal.d.ts",
+          "sha256": "b876f315378c5d458ee2d8dd5c4115185a241a840b3b2f9fb38da37b74af4e1e",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/invariant.d.ts",
+          "sha256": "a9849e475be9cf76a266b25aa77f5c67d83c57f60992c8d4ec7eb1ffe72b843f",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/lifecycle.d.ts",
+          "sha256": "e7b69d07c644da91052e748fb4cf85f0c7d32d741540701f0e817bc0f971d4ec",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/list-children.d.ts",
+          "sha256": "d921c0e2b8a47cf283ea72e9a2e8b2d2d612d88a8e1658a047f9f354e9f36705",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/out-of-process.d.ts",
+          "sha256": "fb4e88ceddb4498ad4fc3cfc50af42201c0c4d3fc2b066200779b38f3ff8b1e4",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/projection-types.d.ts",
+          "sha256": "d9bb9312145916b344bd7869de10d6f98155413360612b76747271afd61ded7e",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/projection.d.ts",
+          "sha256": "ab91a624a085f93ad490ccf45e8d1f98236bfb594e5a47b2bf8eebef44c400e7",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/run-settlement.d.ts",
+          "sha256": "e70927cdbe680e98baafd49f7d2374822729122234c529e95a38fdb9b8337f71",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/types.d.ts",
+          "sha256": "e5cadbdece5be5c323334fd71cff23db6c193ca2f3f59e378d514ae9d9923a65",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-workspace",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/entity.d.ts",
+          "sha256": "f3e8ca64e711199bed8e1f1b6356964c4f51b46f951ac5f94e9fe546aac94cd0",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "8069f2ce290df52607c537c4e55781a321b3561d542705128ec72bc4f21aa201",
+          "signals": {
+            "archiveSession": [
+              24,
+              37,
+              70,
+              213,
+              224
+            ],
+            "unarchiveSession": [
+              224
+            ]
+          }
+        },
+        {
+          "path": "lib/types/invariant.d.ts",
+          "sha256": "3ca3a79918542770ed410adb90545fa049a161daad73b8947a7804bd2d911238",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/paths.d.ts",
+          "sha256": "1dd77ef0c2d263826ab61fb1a7b749e4d60e7adf18b7b585b558a0490b6c60ca",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/spec.d.ts",
+          "sha256": "ee033503c25c0a66a4e35623ba780b32f5ac2b1c9edc558daddb0f01a635c2ef",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/types.d.ts",
+          "sha256": "20fc0338d8f44131c0b17b8308316fd27f82ec8133e6e8be876a036198a5f956",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-tools",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "3536b173ec22361dcda85c05281921fc850db49984813b138d05395c4fe4510f",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/invariant.d.ts",
+          "sha256": "a7dad47827ea944e475b09346fa09b3e23210c5f3528f963df90b1978cd34639",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/json-schema.d.ts",
+          "sha256": "2496af10d1d7deae9513749aa58ba19384a9623befe40e9ca9729ee30b81de7b",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/presentation.d.ts",
+          "sha256": "47d33a8f4456cef893ed047635cba3d2dc4ca83eb1226d775b4e365c88fc1429",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/ptc.d.ts",
+          "sha256": "c75557aaefdfb2cfde16fa0c002208758bc3ad924f5f683a2506779820520c61",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/py-types.d.ts",
+          "sha256": "c48a92c0a5406552f0c7a6cbaee609509f93e5d104ea7399bcb6c717d9071c22",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/schema.d.ts",
+          "sha256": "a6c5f7f616d33b5281a3b3daad8b8f2a0085808b1707f9f318716b87aa484318",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/testing.d.ts",
+          "sha256": "1da30cfb208ba84c8cca9eb843853dec6cb1619e14b6e65e42d84e8fd249acf0",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/ts-types.d.ts",
+          "sha256": "f4eb85e8deabf2fc718b8ac17bfe25f84e8882e6e98318c0785ce1be08b3a452",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/types.d.ts",
+          "sha256": "a86487c048054364103acaba94f29f437389f6107681d34d7ad9bc8f1ee58728",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-fs-sandbox",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/containment.d.ts",
+          "sha256": "3be81cd81b2b02f72e3726e31f05c16eea8be7a7f21e60ee17a939a6f133ae56",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "af579ceb6ff5b93ff0b449a66fa8aa941ba00f2a6d50b5632e60e1730803519c",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-llm",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/adapter-failure.d.ts",
+          "sha256": "805483d2fe272d6b43b6d89548748052b56942c678153110836a1ea5e325336f",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/api-key.d.ts",
+          "sha256": "8863fb95ed595a5a8891c38c0fee6cdcedf2929963f1285429a5a27856ef9caa",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/assembler.d.ts",
+          "sha256": "c5eb8c0da60d6410daa171134014bf77cde759d1a7a914fe0ec63d800cc8034d",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/assistant-stream.d.ts",
+          "sha256": "0bb9bdf2ae67cf51e1a08742238b6780d0dded4786b8ae9c970e1b452b29ddaa",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/attribution.d.ts",
+          "sha256": "79439e449466a5ae16e4875388a75f8bdc0525d4780445e9dcae7bca303d2cab",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/brand.d.ts",
+          "sha256": "ca26380812d76282ca09554f6ddcddda3442f6f2f7b3cedf453332638b08fa6e",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/call-config.d.ts",
+          "sha256": "48a4a04965d22c77f95833cdbf54dd9c0438a50af6abf1d1169b40869f4afd46",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/content.d.ts",
+          "sha256": "824a2495e5b81c38cf2dbf086dd9ea31a2747d603e71db5537ecf0d56d227a8d",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/error.d.ts",
+          "sha256": "a21bfb0e15730fce572e973103e3c51756fe1f59d1519f4e0c757e6152f0469b",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "c5e3c6d92c7c2cf1529ff34eeaf0af92ccee56f2e5ae0f06c36f8548736f9c55",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/invariant.d.ts",
+          "sha256": "f72eacc749766760623c080f216a8f9d858cd48e496f8de94556a28acc9adbaf",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/message.d.ts",
+          "sha256": "c1e9b9f05fc0eab9bb791d6cbfc42828e608539ba16cd0e441164aff005b9775",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/retry-policy.d.ts",
+          "sha256": "67b3a7b21f5224d849a008135bbd6102eda6a517d1362809a140e64085e8ae20",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/types.d.ts",
+          "sha256": "6b7f5b81f6b680b1bf33346950f43e1cb760182f14d54cb71f5f0c1f2ce20352",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-plan-mode",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/client.d.ts",
+          "sha256": "0c2e24f8f4a429a2bf5f618d4a4cbb1d317fa2a1ec7af692032346c40540370e",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "de00d8433830d64e29f9d317bf57776e6988670ac37f2a0b4cfcef4bd08b542d",
+          "signals": {
+            "PlanModeController": [
+              51,
+              97,
+              146
+            ]
+          }
+        },
+        {
+          "path": "lib/types/invariant.d.ts",
+          "sha256": "6784f113ba0afe52ceed7f59b42de1b7d5f04edeeec11023f213f0e0d73d1230",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/types.d.ts",
+          "sha256": "077134e2dde2db7e1521dc418df9abaec83fa4b742ffa23706556b53d3dbeb1f",
+          "signals": {}
+        }
+      ]
+    },
+    {
+      "name": "@deepseek-ai/dsh-permission-presets",
+      "version": "0.2.0-rc.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "lib/types/client.d.ts",
+          "sha256": "5c34f20b06dfb724ec7020d8b6f90f0222e4a7cbcaf7b64c2566bc2528263498",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/index.d.ts",
+          "sha256": "7087a24640967eca84438801af15ab600e79b4cfe580be5e2fa907eaba0707e8",
+          "signals": {
+            "PermissionCatalog": [
+              8,
+              138
+            ]
+          }
+        },
+        {
+          "path": "lib/types/invariant.d.ts",
+          "sha256": "f8e319859ccf27592a44a995e48e7d8737fa6bd1a83c51334057a725b9187e72",
+          "signals": {}
+        },
+        {
+          "path": "lib/types/types.d.ts",
+          "sha256": "e60490a41f510f52e66797695ea061b708dac9b489e4b50c651e36552a7e1b68",
+          "signals": {
+            "PermissionCatalog": [
+              24
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "botProducerExport": {
+    "export": "./bot-producer",
+    "types": "src/bot-producer.d.ts",
+    "runtime": "src/bot-producer.mjs",
+    "scope": "explicit-private-owner-only",
+    "typeCheck": "TS6.0.3 strict NodeNext ESNext, no skipLibCheck",
+    "packInstalledConsumer": "pending Task6 gate",
+    "declarations": {
+      "src/bot-producer.d.ts": "7956b869e808a63a23b79a6e3c40e452c0e5562489364bb56d6541cbd28cc463",
+      "src/contracts.d.ts": "3b9c8b1e7ed9165d6531b7f910581879e20fe96b85a9567ebfda5756288eb157",
+      "src/host.d.ts": "7a9805d60c3c518c280f7777b9c51633bb38acf049d55358fff39c0f2d5e32f4",
+      "src/adapter.d.ts": "da947366d951ee377535ffbb3853597f6faf5d29c89e314e6f11681a86655df3",
+      "src/session-creation.d.ts": "fe4531e34472884f194a5d5b3a114f2267d5a65ba8be4e1d9ab0b7d70aaa3069"
+    }
+  }
+}
