@@ -20,7 +20,25 @@ jobs:
           node-version: 22.23.2
       - name: Install locked public SDK without lifecycle scripts
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Guarded offline tests, including implicit subtests
+      - name: Fresh current-source package snapshots and guarded offline tests
         run: npm test
       - name: Static module and spec inventory checks
         run: npm run check
+  runtime-export:
+    # Independent necessary job: cold native-resume failures never skip this suite.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.19.0
+      - name: Install locked public dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Exact runtime-export module suite with offline guard
+        # Includes controlled CLI child processes; guard counters are not a zero-child claim.
+        run: node --import ./tools/runtime-export/offline-guard.mjs --test tools/runtime-export/export.test.mjs

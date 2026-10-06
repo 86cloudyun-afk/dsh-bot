@@ -71,3 +71,12 @@ scripts/install-bot-native-phase-profile.mjs只生成隔离验收profile，不�
 - stop accepted：只表示请求接受或产品fence，不能作为精确原生结算或释放槽位的证据。
 
 每个声称支持的OS/DSH/Node组合都需独立新VM、容器或机器，以及空profile/Home/cache。当前同云新目录、静态清单和合成RPC均不能替代该门。完整门包括实际GUI输入→主Bot自主委派→来源绑定结果、工作期间有意义主响应与续接、精确停止结算、非取消归档恢复、重启身份/映射/历史一致；当前完整门未通过。15槽/一级子工作仅离线覆盖。UNKNOWN先reconcile再考虑新建，不能通过重新打包使它变成成功。
+# CI 与发布验证的当前源码快照
+
+两种安装模式明确分开：本地开发默认 `packagePlacement: 'symlink'`；CI 与发布验证显式选择 `packagePlacement: 'snapshot'`，没有自动回退。
+
+`npm test` 每次调用都会先在新的临时目录中执行离线 `npm pack --ignore-scripts`，使用独立空 npm 配置及缓存，再进入原文件系统、网络及 addon 守卫。包内源码必须与当前 Git HEAD 的 tracked 文件一致；打包文件、当前源码和安装后文件逐项核对。每轮绑定 HEAD、tree、包 SHA-256、文件索引及新 buildId，安装目标排他创建。不得传入上一轮或缓存快照。完整工作区是否干净另行记录，不能把未提交的工作区说成对应提交。
+
+发布验证先运行 `scripts/prepare-package-snapshot.mjs`，提供源码检出根和全新临时根。将其返回的 `manifestPath`、`manifestSHA256`、`buildId` 原样作为 `packageSnapshot`，并明确设置 snapshot 模式。两个安装器的 CLI 对应参数为 `--package-placement snapshot`、`--snapshot-manifest`、`--snapshot-digest`、`--snapshot-build-id`。同一目录拒绝复用；源码、包或构建标识变化必须重新打包。
+
+快照只证明本包常规文件、导出和相对运行时引用的闭包，不包含外部 SDK 依赖，也不证明完整 Loader 或 native 恢复能力。冷恢复测试保留成功解析原 Agent 的要求；固定错误分类只描述阻塞，不能视为恢复成功。原固定 assembler、身份合同及安全权限保持不变。
