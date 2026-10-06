@@ -1,0 +1,143 @@
+{
+  "aAssemblerCommit": "cb4937036001f93b6efe5ed801fb9dfedee4e221",
+  "buildsRun": 0,
+  "coverageLimits": [
+    "Does not replace the full 75-overlay recipe or original 88-file and 15-file materials",
+    "Does not prove exact stop-generation settlement",
+    "Does not assert A historical stock CLI used the retained overlay",
+    "Source-to-build attribution remains an open comparison, not a repaired implementation"
+  ],
+  "createdUtc": "2026-10-06T14:16:23.666194+00:00",
+  "exactMaterialFileCount": 6,
+  "files": [
+    {
+      "bytes": 29938,
+      "commit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+      "file": "host-head/packages/core/agent-loop/src/agent.ts",
+      "gitBlob": "c2c006d5d56cbed0b7aa77b8bdfa0345bf66988a",
+      "matchesPrevious85Current": false,
+      "matchesPrevious85RecordedHead": true,
+      "origin": "Host original Git commit blob; not working-tree source",
+      "previous85CurrentSha256": "1b14ad31528782f02e6e187c0647436b2114e9bbf326bb25647d26e9f1675620",
+      "previous85HeadSha256": "140de13b14f3e685a62930eed2f1e0e1d698bd1ed8637233e91921c23bcc2d06",
+      "sha256": "140de13b14f3e685a62930eed2f1e0e1d698bd1ed8637233e91921c23bcc2d06",
+      "sourcePath": "packages/core/agent-loop/src/agent.ts"
+    },
+    {
+      "bytes": 29541,
+      "commit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+      "file": "host-head/packages/experimental/native-run/src/journal.ts",
+      "gitBlob": "07c4049b28dceda2493531e08884a349d545a46c",
+      "matchesPrevious85Current": false,
+      "matchesPrevious85RecordedHead": true,
+      "origin": "Host original Git commit blob; not working-tree source",
+      "previous85CurrentSha256": "ad2d720d61ee10b2cb63c9024360c39ad291b4be9849d8734330909618cece70",
+      "previous85HeadSha256": "a7bbc1fe9250661e62fbbb0f8b72f14dada6d0c17176b4a2b23c0fc7ec6cb39d",
+      "sha256": "a7bbc1fe9250661e62fbbb0f8b72f14dada6d0c17176b4a2b23c0fc7ec6cb39d",
+      "sourcePath": "packages/experimental/native-run/src/journal.ts"
+    },
+    {
+      "bytes": 22129,
+      "commit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+      "file": "host-head/packages/experimental/native-run/src/session-driver.ts",
+      "gitBlob": "9e09fcb540d064c2e95dd05166b5e08f6a29467c",
+      "matchesPrevious85Current": false,
+      "matchesPrevious85RecordedHead": true,
+      "origin": "Host original Git commit blob; not working-tree source",
+      "previous85CurrentSha256": "ae3e500fb1fbd46ceb2bad3bc3adfae3be28179fb5d42f1173cdd6306ebf57bb",
+      "previous85HeadSha256": "419d05f636799ade9aaa1aed7ab7f9043f8946c5c814e9ed803a5809a7103b80",
+      "sha256": "419d05f636799ade9aaa1aed7ab7f9043f8946c5c814e9ed803a5809a7103b80",
+      "sourcePath": "packages/experimental/native-run/src/session-driver.ts"
+    },
+    {
+      "bytes": 75286,
+      "file": "retained-builds/dsh-agent-loop/lib/index.js",
+      "origin": "A retained archive compiled entry; not a reconstruction from Host source",
+      "package": "@deepseek-ai/dsh-agent-loop",
+      "packageJsonSha256": "f7ffa7f0e765b94960fd1a2f6709bb86850ed26cfb648f6b1c200100282bcb0b",
+      "sha256": "1fe67b17c4776da1ec82fa29637ec5e680bb292853ff1b2f586fde830b91ce82",
+      "sourcePath": ".packages/@deepseek-ai__dsh-agent-loop/lib/index.js"
+    },
+    {
+      "bytes": 68097,
+      "file": "retained-builds/dsh-experimental-native-run/lib/index.js",
+      "origin": "A retained archive compiled entry; not a reconstruction from Host source",
+      "package": "@deepseek-ai/dsh-experimental-native-run",
+      "packageJsonSha256": "f16d65c45b0d210d17e90c25964e101eabda00d770231c69e7d68f5e784d42b4",
+      "sha256": "f92c86962836abfb4972fd2fc5b1c964da8e43cf5cf3287a1238ba24a0e60656",
+      "sourcePath": ".packages/@deepseek-ai__dsh-experimental-native-run/lib/index.js"
+    },
+    {
+      "bytes": 6013,
+      "commit": "cb4937036001f93b6efe5ed801fb9dfedee4e221",
+      "file": "a-assembler/scripts/assemble-owner-runtime.mjs",
+      "gitBlob": "16306e3c85ab265dee84b5fa697e076575d00701",
+      "origin": "A committed assembler Git blob; not active working tree",
+      "sha256": "8bd5a84631a6011d2c3b594c5427a7625b3c56a2129f06c7a8004ef624eca4a8",
+      "sourcePath": "scripts/assemble-owner-runtime.mjs"
+    }
+  ],
+  "gitProvenanceMetadata": [
+    {
+      "authorIdentitySha256": "a84e1c801e5591b07c661657f867129bcea8ebf932e738ca6cb05c9fee80c78c",
+      "authorUtc": "2026-10-04T19:04:34Z",
+      "commit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+      "committerUtc": "2026-10-04T19:04:34Z",
+      "parents": [
+        "d49ba1787045a30cd1dae0c8922530c3bb6981a3"
+      ],
+      "signatureStatus": "N",
+      "tree": "331ebd111dc19aa7cf09752983fe7a241f900245",
+      "verifiedRights": "UNKNOWN"
+    },
+    {
+      "authorIdentitySha256": "a84e1c801e5591b07c661657f867129bcea8ebf932e738ca6cb05c9fee80c78c",
+      "authorUtc": "2026-10-06T13:56:37Z",
+      "commit": "cb4937036001f93b6efe5ed801fb9dfedee4e221",
+      "committerUtc": "2026-10-06T13:56:37Z",
+      "parents": [
+        "f667b06b14a55fb88b14859c41265332aaa3a274"
+      ],
+      "signatureStatus": "N",
+      "tree": "3be699ec6eb96b0c73e3d398a109e9d7ffb837ca",
+      "verifiedRights": "UNKNOWN"
+    }
+  ],
+  "hostCurrentHeadObserved": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+  "hostOriginalCommit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+  "modelsRun": 0,
+  "parentReportedBStatus": {
+    "entryComparison": {
+      "LLMDeepSeek": "match",
+      "remainingDifferent": [
+        "AgentLoop",
+        "NativeRun"
+      ],
+      "same": 71,
+      "total": 73
+    },
+    "reviewerExecutedOrReverified": false,
+    "tests": 28,
+    "testsPassed": 28,
+    "typescriptPassed": true
+  },
+  "previous85ManifestSha256": "870b4c97065ba07b08a0712d4fe93cf0e2c928830a833f80edac6c0c65697e38",
+  "publicBase": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "purpose": "Private SOURCE_EVALUATION_ONLY attribution supplement; not an installation or runtime qualification",
+  "retainedArtifactManifestSha256": "115b44a8a1682ff2a033c12e48273076d4f86e9dde315125759ae26f6cd608d0",
+  "retainedArtifactSafeFacts": {
+    "candidateCommit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+    "corePackageCount": 74,
+    "externalDependenciesIncluded": false,
+    "sourceAliasesPresent": false
+  },
+  "rights": {
+    "localPatchAuthorshipRights": "UNKNOWN",
+    "retainedEntryRebuildEquivalence": "UNPROVED",
+    "retainedEntrySourceEquivalence": "UNPROVED",
+    "rootMITEquality": "Prior independent packet verified root LICENSE equals public base; not a blanket local-patch rights attestation"
+  },
+  "schema": 1,
+  "sourceModified": false,
+  "testsRun": 0
+}
