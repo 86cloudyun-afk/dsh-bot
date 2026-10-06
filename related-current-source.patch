@@ -1,0 +1,2917 @@
+diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/src/agent.ts
+index 2f68565..c8fac4f 100644
+--- a/packages/core/agent-loop/src/agent.ts
++++ b/packages/core/agent-loop/src/agent.ts
+@@ -16,13 +16,14 @@ import type {
+   RequestErrorAction,
+ } from '@deepseek-ai/dsh-agent'
+ import { agentEvents, assembleContextFor } from '@deepseek-ai/dsh-agent'
+-import type { GenerateOptions, LlmCallConfig, Message, PreparedLlmCall } from '@deepseek-ai/dsh-llm'
++import type { GenerateOptions, LlmCallConfig, Message, PreparedLlmCall, ProtectedModelCalls } from '@deepseek-ai/dsh-llm'
+ import {
+   LlmError,
+   createAssistantMessage,
+   createDeveloperMessage,
+   errorChain,
+   markAgentLoopRequest,
++  isProtectedModelCalls,
+ } from '@deepseek-ai/dsh-llm'
+ import { assertNever, deepFreeze } from '@deepseek-ai/dsh-util-values'
+ import type { Scope } from '@deepseek-ai/dsh-scope'
+@@ -49,6 +50,16 @@ type Phase =
+   }
+   | { kind: 'running'; abort: AbortController; turn: number; step: number; wakeRequested: boolean }
+ 
++const protectedRequestOwners = new WeakMap<GenerateOptions, Agent>()
++/** Check exact native request ownership without granting or manufacturing a permit.
++ * @param options Candidate frozen request.
++ * @param agent Exact owned native Agent.
++ * @returns Whether that Agent built this request through its permanent protected binding.
++ */
++export function isProtectedNativeRequest(options: GenerateOptions, agent: Agent): boolean {
++  return protectedRequestOwners.get(options) === agent
++}
++
+ type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
+ 
+ type PreparedStep =
+@@ -96,6 +107,7 @@ function abortedCancelCause(signal: AbortSignal): AgentCancelCause | undefined {
+ 
+ /** Drives one session through turn and step boundaries. */
+ export class ReactLoopAgent implements Agent {
++  private protectedCalls: ProtectedModelCalls | undefined
+   readonly inbox: ReactLoopInbox
+   private phase: Phase
+   private activityDone: Promise<void> = Promise.resolve()
+@@ -124,7 +136,9 @@ export class ReactLoopAgent implements Agent {
+     public readonly id: SessionId,
+     public readonly options: AgentOptions,
+     public readonly session: Session,
++    protectedCalls?: ProtectedModelCalls,
+   ) {
++    if (protectedCalls !== undefined) this.captureProtectedCalls(protectedCalls)
+     this.requestSurfaceGeneration = session.surface.contentGeneration
+     this.dispatch = agentEvents(loopCtx, this)
+     this.scope = createScope(loopCtx, this)
+@@ -141,6 +155,20 @@ export class ReactLoopAgent implements Agent {
+     return this.phase.kind === 'idle' || this.phase.kind === 'maintenance' ? 'idle' : 'running'
+   }
+ 
++  /** Bind through the owned handle before the first turn; disposal never restores ordinary calls.
++   * @param calls Exact provider-minted Session capability.
++   */
++  protectModelCalls(calls: ProtectedModelCalls): void {
++    if (this.protectedCalls !== undefined) throw new LlmError('model calls already protected', 'MODEL_CALLS_ALREADY_PROTECTED')
++    if (this.phase.kind !== 'idle' || this.session.snapshotEvents().some(event => event.type === 'turn/start')
++      || this.inbox.hasPending) throw new LlmError('Agent is no longer blank', 'MODEL_CALLS_BINDING_LOCKED')
++    this.captureProtectedCalls(calls)
++  }
++  private captureProtectedCalls(calls: ProtectedModelCalls): void {
++    if (!isProtectedModelCalls(calls) || calls.sessionId !== this.id) throw new LlmError('invalid protected capability', 'INVALID_PROTECTED_CALLS')
++    this.protectedCalls = Object.freeze({ sessionId: calls.sessionId, prepareCall: calls.prepareCall.bind(calls) })
++  }
++
+   /** Commit a phase and publish its externally visible status transition. */
+   private setPhase(next: Phase): void {
+     const previousStatus = this.status
+@@ -584,7 +612,7 @@ export class ReactLoopAgent implements Agent {
+     let config: LlmCallConfig
+     let preparedCall: PreparedLlmCall | undefined
+     try {
+-      preparedCall = await this.loopCtx.llm.prepareCall(proposedConfig, signal)
++      preparedCall = await (this.protectedCalls ?? this.loopCtx.llm).prepareCall(proposedConfig, signal)
+       config = preparedCall.config
+     } catch (error: unknown) {
+       // Middleware may serve an unregistered route; terminal dispatch still requires an adapter.
+@@ -683,6 +711,7 @@ export class ReactLoopAgent implements Agent {
+       sessionId: this.session.id,
+       signal,
+     }))
++    if (this.protectedCalls !== undefined) protectedRequestOwners.set(request, this)
+     return request
+   }
+ }
+diff --git a/packages/core/agent-loop/src/index.ts b/packages/core/agent-loop/src/index.ts
+index 7541a5c..862637d 100644
+--- a/packages/core/agent-loop/src/index.ts
++++ b/packages/core/agent-loop/src/index.ts
+@@ -23,6 +23,16 @@ import type {
+   TurnBoundaryProjection,
+ } from '@deepseek-ai/dsh-agent'
+ import { errorChain, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
++import type { ProtectedModelCalls } from '@deepseek-ai/dsh-llm'
++export { isProtectedNativeRequest } from './agent.ts'
++const nativeOwnedHandles = new WeakMap<object, Agent>()
++/** Verify an actual owned native handle; copied structures and bare Agents do not qualify.
++ * @param handle Candidate process-local lifecycle capability.
++ * @returns Whether the native loop returned this exact handle for its unchanged Agent.
++ */
++export function isNativeAgentHandle(handle: AgentHandle): boolean {
++  return nativeOwnedHandles.get(handle) === handle.agent
++}
+ import { interruptedTurnClosers, SessionLogOffset, SessionPreparation, SessionSeq } from '@deepseek-ai/dsh-session'
+ import type { Session, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
+ import type {} from '@deepseek-ai/dsh-system-prompt'
+@@ -484,6 +494,7 @@ export class AgentLoop extends Service implements AgentFactory {
+     callerSignal?: AbortSignal,
+     handle?: SessionHandle,
+     parentAgent?: Agent,
++    protectedCalls?: ProtectedModelCalls,
+   ): PreparedAgent {
+     assertAgentOptions(options)
+     ownerCtx.fiber.assertActive()
+@@ -573,7 +584,7 @@ export class AgentLoop extends Service implements AgentFactory {
+     let unfollowOwner: () => Promise<void> | void
+     try {
+       unfollowOwner = ownerCtx.effect(function* () {
+-        machine = new ReactLoopAgent(loopCtx, id, options, session)
++        machine = new ReactLoopAgent(loopCtx, id, options, session, protectedCalls)
+         machineReady.resolve()
+         yield machine.scope.rawDispose
+         yield () => {
+@@ -623,7 +634,10 @@ export class AgentLoop extends Service implements AgentFactory {
+             assertLive()
+             await loopCtx.agents.announce(agent, source, abort.signal)
+             assertLive()
+-            return { agent, dispose }
++            const handle = Object.freeze({ agent, dispose,
++              protectModelCalls: (calls: ProtectedModelCalls) => agent.protectModelCalls(calls) })
++            nativeOwnedHandles.set(handle, agent)
++            return handle
+           } finally {
+             publication.resolve()
+             publication = undefined
+@@ -744,6 +758,7 @@ export class AgentLoop extends Service implements AgentFactory {
+         'startup',
+         stored,
+         options.parentAgent,
++        options.protectedModelCalls,
+       )
+     })()
+     this.ownership.trackWrapper(published)
+@@ -761,12 +776,13 @@ export class AgentLoop extends Service implements AgentFactory {
+     source: SessionStartSource,
+     stored?: StoredSession,
+     parentAgent?: Agent,
++    protectedCalls?: ProtectedModelCalls,
+   ): Promise<AgentHandle> {
+     using ownedPreparation = preparation
+     const session = ownedPreparation.session
+     let prepared: PreparedAgent
+     try {
+-      prepared = this.prepare(ownerCtx, id, agentOptions, session, signal, stored?.handle, parentAgent)
++      prepared = this.prepare(ownerCtx, id, agentOptions, session, signal, stored?.handle, parentAgent, protectedCalls)
+     } catch (error: unknown) {
+       await stored?.handle.close().catch(() => {})
+       throw error
+@@ -879,6 +895,7 @@ export class AgentLoop extends Service implements AgentFactory {
+           'resume',
+           owned,
+           options.parentAgent,
++          options.protectedModelCalls,
+         )
+       } finally {
+         preparation?.[Symbol.dispose]()
+diff --git a/packages/core/agent/src/index.ts b/packages/core/agent/src/index.ts
+index 54dd8a8..f01b373 100644
+--- a/packages/core/agent/src/index.ts
++++ b/packages/core/agent/src/index.ts
+@@ -61,6 +61,8 @@ export type AgentSetup = (
+  * lineage); the factory creates the session and agent under that identity.
+  */
+ export interface CreateAgentOptions {
++  /** Trusted process-local protected model capability, attached before publication/wake. */
++  readonly protectedModelCalls?: import('@deepseek-ai/dsh-llm').ProtectedModelCalls
+   /** The live agent/session identity. */
+   readonly sessionId: SessionId
+   /** Live parent Agent for runtime ownership; omit for a root Agent. */
+@@ -123,6 +125,8 @@ export interface CreateAgentOptions {
+  * ({@link AgentRegistry.resume}).
+  */
+ export interface ResumeAgentOptions {
++  /** Trusted process-local protected model capability, attached before restored inbox wake. */
++  readonly protectedModelCalls?: import('@deepseek-ai/dsh-llm').ProtectedModelCalls
+   /** The persisted session id to load and use as the live agent/session identity. */
+   readonly resumeSessionId: SessionId
+   /** Live parent Agent for runtime ownership; omit for a root Agent. */
+@@ -160,6 +164,10 @@ export interface ResumeAgentOptions {
+ export interface AgentHandle {
+   agent: Agent
+   dispose(): Promise<void>
++  /** Permanently bind this exact blank Agent to a native protected call capability.
++   * @param calls Actual provider-minted capability for this Session.
++   */
++  protectModelCalls?(calls: import('@deepseek-ai/dsh-llm').ProtectedModelCalls): void
+ }
+ 
+ /**
+diff --git a/packages/experimental/native-run/package.json b/packages/experimental/native-run/package.json
+new file mode 100644
+index 0000000..64a8e90
+--- /dev/null
++++ b/packages/experimental/native-run/package.json
+@@ -0,0 +1,48 @@
++{
++  "name": "@deepseek-ai/dsh-experimental-native-run",
++  "version": "0.2.0-rc.2",
++  "description": "Private controlled text-operation acceptance slice",
++  "private": true,
++  "type": "module",
++  "main": "lib/index.js",
++  "types": "lib/types/index.d.ts",
++  "license": "MIT",
++  "exports": {
++    ".": {
++      "types": "./lib/types/index.d.ts",
++      "default": "./lib/index.js"
++    }
++  },
++  "files": [
++    "lib/index.js",
++    "lib/types/**/*.d.ts"
++  ],
++  "dependencies": {
++    "@deepseek-ai/dsh-brand": "workspace:*",
++    "@deepseek-ai/dsh-llm": "workspace:*",
++    "@deepseek-ai/dsh-llm-deepseek": "workspace:*",
++    "@deepseek-ai/dsh-util-values": "workspace:*",
++    "@deepseek-ai/node-addon-system": "workspace:~",
++    "@deepseek-ai/dsh-agent": "workspace:*",
++    "@deepseek-ai/dsh-agent-loop": "workspace:*",
++    "@deepseek-ai/dsh-scope": "workspace:*",
++    "@deepseek-ai/dsh-session": "workspace:*",
++    "@deepseek-ai/dsh-agent-preset-registry": "workspace:*",
++    "@deepseek-ai/dsh-session-persistence": "workspace:*",
++    "@deepseek-ai/dsh-session-projection": "workspace:*",
++    "@deepseek-ai/dsh-tools": "workspace:*"
++  },
++  "peerDependencies": {
++    "@deepseek-ai/cordis": "workspace:~"
++  },
++  "devDependencies": {
++    "@deepseek-ai/cordis": "workspace:~",
++    "@deepseek-ai/cordis-plugin-loader": "workspace:~",
++    "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:*",
++    "@deepseek-ai/dsh-agent-preset": "workspace:*",
++    "@deepseek-ai/dsh-llm-retry": "workspace:*",
++    "@deepseek-ai/dsh-system-prompt": "workspace:*",
++    "@deepseek-ai/dsh-llm-deepseek-api-key": "workspace:*",
++    "@deepseek-ai/dsh-sdk-client": "workspace:*"
++  }
++}
+diff --git a/packages/experimental/native-run/src/driver.ts b/packages/experimental/native-run/src/driver.ts
+new file mode 100644
+index 0000000..ea1f9ab
+--- /dev/null
++++ b/packages/experimental/native-run/src/driver.ts
+@@ -0,0 +1,142 @@
++/** Bounded text-only consumer: every input comes from the authoritative journal. */
++import { DeepSeekAdapter } from '@deepseek-ai/dsh-llm-deepseek'
++import type { DeepSeekAdapterOptions, DeepSeekDispatchInput } from '@deepseek-ai/dsh-llm-deepseek'
++import { BlockAssembler, createAssistantMessage, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
++import type { GenerateOptions, RequestMessage, TokenUsage } from '@deepseek-ai/dsh-llm'
++import { deepFreeze } from '@deepseek-ai/dsh-util-values'
++import type { NativeRunHost } from './journal.ts'
++import type { NativeControlId as ControlId, NativeOperation, NativeOperationId, NativeTargetId } from './types.ts'
++import { digest, reject, usage } from './values.ts'
++
++interface BoundRequest { caller: object; operationId: NativeOperationId; step: number; inputDigest: string }
++interface ActiveRun { operation: NativeOperation; abort: AbortController; done: Promise<NativeOperation> }
++
++/** Owns a controlled adapter instance; no foreign adapter, JSON actor or message queue can bypass it. */
++export class NativeRunDriver {
++  readonly #adapter: DeepSeekAdapter
++  readonly #bindings = new WeakMap<GenerateOptions, BoundRequest>()
++  readonly #active = new Map<NativeOperationId, ActiveRun>()
++  #closed = false
++
++  constructor(private readonly host: NativeRunHost, dependencies: Omit<DeepSeekAdapterOptions, 'dispatchControl'>) {
++    this.#adapter = new DeepSeekAdapter({ ...dependencies, dispatchControl: {
++      checkAdmission: options => { this.#bound(options) },
++      checkDispatch: (options, input) => { this.#dispatch(options, input) },
++    } })
++    host.registerDriver(this)
++  }
++  /** Consume journaled pending steps; unknown outcomes never redispatch.
++   * @param caller Actual calling scope checked by the test launcher policy.
++   * @param operationId Admitted journal-local identity.
++   * @returns The durable outcome after this local consumer returns.
++   */
++  async drive(caller: object, operationId: NativeOperationId): Promise<NativeOperation> {
++    if (this.#closed) reject('NATIVE_DRIVER_CLOSED')
++    const operation = this.host.inspect(caller, operationId)
++    this.host.authorize(caller, 'invoke', operation.targetId)
++    const active = this.#active.get(operationId)
++    if (active !== undefined) return active.done
++    if (operation.state !== 'admitted') return operation
++    this.host.claimDriver(caller, operationId, this)
++    const abort = new AbortController()
++    const done = this.#consume(caller, operation, abort.signal)
++    this.#active.set(operationId, { operation, abort, done })
++    try { return await done } finally { this.#active.delete(operationId); this.host.releaseDriver(operationId, this) }
++  }
++  /** Commit an exact-generation fence before aborting and draining all matching owners.
++   * @param caller Actual calling scope with current control authority.
++   * @param controlId Idempotent journal-local control receipt identity.
++   * @param operationId Operation identifying the generation to stop.
++   * @returns The durable outcome, retaining unknown remote effects.
++   */
++  async stop(caller: object, controlId: ControlId, operationId: NativeOperationId): Promise<NativeOperation> {
++    this.host.stop(caller, controlId, operationId)
++    await this.host.drainStoppedGeneration(caller, operationId)
++    return this.host.inspect(caller, operationId)
++  }
++  /** Drain only the exact generation after the host has committed its fence.
++   * @param targetId Journal-local target identity.
++   * @param generation Exact generation to abort.
++   * @returns Whether every matching local lifecycle returned before the deadline.
++   */
++  async drainGeneration(targetId: NativeTargetId, generation: number): Promise<boolean> {
++    const owned = [...this.#active.values()].filter(run => run.operation.targetId === targetId && run.operation.binding.runGeneration === generation)
++    for (const run of owned) run.abort.abort(new Error('GENERATION_STOPPED'))
++    return this.#drain(owned)
++  }
++  /** Abort requests after the native writer commits an authority change.
++   * @param targetId Target whose current authority was changed.
++   */
++  abortTarget(targetId: NativeTargetId): void {
++    for (const run of this.#active.values()) if (run.operation.targetId === targetId) run.abort.abort(new Error('AUTHORITY_REVOKED'))
++  }
++  /** Persist fences and drain owned local requests before disposal. */
++  async close(): Promise<void> {
++    this.#closed = true
++    const owned = [...this.#active.values()]
++    for (const run of owned) this.host.stopOwned(this, run.operation.id)
++    for (const run of owned) run.abort.abort(new Error('NATIVE_DRIVER_CLOSED'))
++    if (!await this.#drain(owned)) {
++      for (const run of owned) this.host.noteUnsettled(this, run.operation.id)
++      reject('LOCAL_SETTLEMENT_UNKNOWN')
++    }
++  }
++  async #consume(caller: object, initial: NativeOperation, signal: AbortSignal): Promise<NativeOperation> {
++    try {
++      for (let step = initial.nextStep; step < initial.steps.length; step++) {
++        signal.throwIfAborted()
++        const op = this.host.checkRequest(caller, initial.id, step)
++        const prepared = await this.#adapter.prepareCall(op.binding.provider, op.binding.model, signal)
++        const current = this.host.checkRequest(caller, initial.id, step)
++        const messages: RequestMessage[] = []
++        for (let previous = 0; previous < step; previous++) {
++          messages.push(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: current.steps[previous]! }] }))
++          messages.push(createAssistantMessage({ source: { provider: op.binding.provider, model: op.binding.model }, content: [{ type: 'text', text: current.answers[previous]! }] }))
++        }
++        messages.push(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: current.steps[step]! }] }))
++        const frozen = deepFreeze({ provider: current.binding.provider, model: current.binding.model, maxTokens: current.binding.maxTokens,
++          reasoningEffort: ReasoningEffortId('off'), messages })
++        const options: GenerateOptions = Object.freeze({ ...frozen, signal })
++        this.#bindings.set(options, { caller, operationId: current.id, step, inputDigest: digest(frozen) })
++        let observed: TokenUsage | undefined
++        const assembler = new BlockAssembler()
++        for await (const chunk of prepared.stream(options)) {
++          assembler.push(chunk)
++          if (chunk.type === 'usage') observed = chunk.usage
++        }
++        if (!['stop', 'max-tokens'].includes(assembler.finish.kind)) {
++          const finish = assembler.finish
++          if (finish.kind === 'error' || finish.kind === 'aborted') reject(finish.failure.status === 429 ? 'RATE_LIMIT' : finish.failure.code)
++          reject('UNSUPPORTED_RESPONSE')
++        }
++        const blocks = assembler.blocks()
++        if (blocks.some(block => block.type !== 'text') || observed === undefined || !usage(observed)) reject('SETTLEMENT_UNKNOWN')
++        const answer = blocks.map(block => block.type === 'text' ? block.text : '').join('')
++        this.host.completeStep(this, current.id, step, answer, observed)
++      }
++    } catch (error) {
++      const code = error !== null && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : signal.aborted ? 'ABORTED' : 'TRANSPORT'
++      this.host.failStep(this, initial.id, code)
++    }
++    return this.host.inspect(caller, initial.id)
++  }
++  #bound(options: GenerateOptions): BoundRequest {
++    const bound = this.#bindings.get(options)
++    if (bound === undefined) reject('CONTROLLED_PERMIT_REQUIRED')
++    const { signal: _liveSignal, ...input } = options
++    if (!Object.isFrozen(options) || digest(input) !== bound.inputDigest || options.tools !== undefined || options.messages.some(message => message.content.some(block => block.type !== 'text'))) reject('FINAL_INPUT_CONFLICT')
++    this.host.checkRequest(bound.caller, bound.operationId, bound.step)
++    return bound
++  }
++  #dispatch(options: GenerateOptions, wire: DeepSeekDispatchInput): void {
++    const bound = this.#bound(options)
++    this.host.beginAttempt(bound.caller, this, bound.operationId, bound.step, options, wire)
++  }
++  async #drain(owned: ActiveRun[]): Promise<boolean> {
++    if (owned.length === 0) return true
++    let timer: ReturnType<typeof setTimeout> | undefined
++    try {
++      return await Promise.race([Promise.allSettled(owned.map(run => run.done)).then(() => true), new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), this.host.settlementDeadlineMs) })])
++    } finally { if (timer !== undefined) clearTimeout(timer) }
++  }
++}
+diff --git a/packages/experimental/native-run/src/ids.ts b/packages/experimental/native-run/src/ids.ts
+new file mode 100644
+index 0000000..c7ab8d8
+--- /dev/null
++++ b/packages/experimental/native-run/src/ids.ts
+@@ -0,0 +1,26 @@
++/** Journal-local identifiers carry no caller authority. */
++import { brandString } from '@deepseek-ai/dsh-brand'
++import type { NativeOperationId as OperationId, NativeTargetId as TargetId, NativeControlId as ControlId } from './types.ts'
++
++/** Type namespace paired with the operation label constructor. */
++export type NativeOperationId = OperationId
++/** Type namespace paired with the target label constructor. */
++export type NativeTargetId = TargetId
++/** Type namespace paired with the control receipt constructor. */
++export type NativeControlId = ControlId
++
++/** Brand a journal-local operation label without granting authority.
++ * @param value Journal-local operation label.
++ * @returns The branded label, subject to admission validation.
++ */
++export const NativeOperationId = (value: string): OperationId => brandString<OperationId>(value)
++/** Brand a journal-local target label without granting authority.
++ * @param value Journal-local target label.
++ * @returns The branded target label.
++ */
++export const NativeTargetId = (value: string): TargetId => brandString<TargetId>(value)
++/** Brand a journal-local control receipt label without granting authority.
++ * @param value Journal-local control receipt label.
++ * @returns The branded receipt label.
++ */
++export const NativeControlId = (value: string): ControlId => brandString<ControlId>(value)
+diff --git a/packages/experimental/native-run/src/index.ts b/packages/experimental/native-run/src/index.ts
+new file mode 100644
+index 0000000..48b9632
+--- /dev/null
++++ b/packages/experimental/native-run/src/index.ts
+@@ -0,0 +1,6 @@
++/** Private journal owner and controlled text driver; no shipped profile mounts them. */
++export { NativeRunHost } from './journal.ts'
++export { NativeRunDriver } from './driver.ts'
++export { NativeSessionDriver } from './session-driver.ts'
++export { NativeOperationId, NativeTargetId, NativeControlId } from './ids.ts'
++export type * from './types.ts'
+diff --git a/packages/experimental/native-run/src/journal.ts b/packages/experimental/native-run/src/journal.ts
+new file mode 100644
+index 0000000..9f3b0a8
+--- /dev/null
++++ b/packages/experimental/native-run/src/journal.ts
+@@ -0,0 +1,470 @@
++/** Exclusive native writer: authority, queued inputs, reservations and provider intents share one SQLite journal. */
++import { existsSync, statSync } from 'node:fs'
++import { mkdir, open, stat } from 'node:fs/promises'
++import type { FileHandle } from 'node:fs/promises'
++import { join } from 'node:path'
++import { DatabaseSync } from 'node:sqlite'
++import { tryLockExclusive } from '@deepseek-ai/node-addon-system/flock'
++import { deepFreeze } from '@deepseek-ai/dsh-util-values'
++import type { DeepSeekAdapterOptions, DeepSeekDispatchInput } from '@deepseek-ai/dsh-llm-deepseek'
++import type { GenerateOptions, TokenUsage } from '@deepseek-ai/dsh-llm'
++import { NativeRunDriver } from './driver.ts'
++import { NativeSessionDriver } from './session-driver.ts'
++import type { NativeAdmission, NativeControlId as ControlId, NativeOperation, NativeOperationId, NativeRunConfig, NativeTarget, NativeTargetChange, NativeTargetId, NativeRunConsumer, NativeSessionReceipt } from './types.ts'
++import { admission, admissionDigest, canonical, digest, id, integer, knownUsage, operation, record, reject, target, textWire, usage } from './values.ts'
++
++interface JournalIdentity { dev: number; ino: number; lockDev: number; lockIno: number }
++interface CapacityView { executionSlotsAvailable: number; contactSlotsAvailable: number; executionTokensAvailable: number; contactTokensAvailable: number }
++const SCHEMA_VERSION = 3
++
++/** Native journal owner for one host; its launcher caller policy is process-local and test-only. */
++export class NativeRunHost {
++  readonly #db: DatabaseSync
++  readonly #lock: FileHandle
++  readonly #path: string
++  readonly #lockPath: string
++  readonly #identity: JournalIdentity
++  readonly #config: NativeRunConfig
++  readonly #drivers = new Set<NativeRunConsumer>()
++  readonly #operationOwners = new Map<NativeOperationId, NativeRunConsumer>()
++  #closed = false
++  #closing = false
++  #closePromise: Promise<void> | undefined
++
++  private constructor(config: NativeRunConfig, db: DatabaseSync, lock: FileHandle, identity: JournalIdentity) {
++    this.#config = { ...config, capacity: deepFreeze(structuredClone(config.capacity)) }
++    this.#db = db; this.#lock = lock
++    this.#path = join(config.directory, 'journal.sqlite'); this.#lockPath = join(config.directory, 'writer.lock')
++    this.#identity = identity
++  }
++
++  /** Acquire the native lock and open a fresh or strictly validated existing journal.
++   * @param config Explicit test launcher, target and capacity configuration.
++   * @returns The exclusive native journal owner.
++   */
++  static async open(config: NativeRunConfig): Promise<NativeRunHost> {
++    if (typeof config.authorize !== 'function' || !config.hostId || !config.directory) reject('INVALID_HOST_CONFIG')
++    for (const value of Object.values(config.capacity)) if (!integer(value) || value < 1) reject('INVALID_HOST_CONFIG')
++    for (const spec of config.targets) target(spec)
++    await mkdir(config.directory, { recursive: true, mode: 0o700 })
++    const lockPath = join(config.directory, 'writer.lock')
++    const lock = await open(lockPath, 'a+', 0o600)
++    let db: DatabaseSync | undefined
++    try {
++      try { await tryLockExclusive(lock.fd) }
++      catch (error) {
++        if (['EAGAIN', 'EWOULDBLOCK'].includes(String((error as NodeJS.ErrnoException).code))) reject('NATIVE_WRITER_CONFLICT')
++        throw error
++      }
++      const held = await lock.stat(); const current = await stat(lockPath)
++      if (held.dev !== current.dev || held.ino !== current.ino) reject('NATIVE_WRITER_CONFLICT')
++      const path = join(config.directory, 'journal.sqlite')
++      if (config.create && existsSync(path)) reject('JOURNAL_ALREADY_EXISTS')
++      if (!config.create && (!existsSync(path) || statSync(path).size === 0)) reject('JOURNAL_MISSING')
++      if (config.create) { const fresh = await open(path, 'wx', 0o600); await fresh.close() }
++      db = new DatabaseSync(path)
++      try {
++        db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;')
++        if (config.create) {
++          db.exec('BEGIN IMMEDIATE; CREATE TABLE meta(id INTEGER PRIMARY KEY CHECK(id=1), format INTEGER NOT NULL, data TEXT NOT NULL, revision INTEGER NOT NULL, stateDigest TEXT NOT NULL) STRICT; CREATE TABLE targets(id TEXT PRIMARY KEY, data TEXT NOT NULL) STRICT; CREATE TABLE operations(id TEXT PRIMARY KEY, data TEXT NOT NULL) STRICT; CREATE TABLE stops(id TEXT PRIMARY KEY, target TEXT NOT NULL, generation INTEGER NOT NULL, operation TEXT NOT NULL) STRICT;')
++          db.prepare('INSERT INTO meta VALUES(1,?,?,0,?)').run(SCHEMA_VERSION, canonical({ hostId: config.hostId, capacity: config.capacity }), '')
++          for (const spec of config.targets) db.prepare('INSERT INTO targets VALUES(?,?)').run(spec.id, canonical(spec))
++          db.prepare('UPDATE meta SET stateDigest=? WHERE id=1').run(digest({ targets: db.prepare('SELECT id,data FROM targets ORDER BY id').all(), operations: [], stops: [] }))
++          db.exec('COMMIT')
++        }
++        const meta = db.prepare('SELECT format,data FROM meta WHERE id=1').get()
++        if (meta?.format !== SCHEMA_VERSION || meta.data !== canonical({ hostId: config.hostId, capacity: config.capacity })) reject('JOURNAL_CORRUPT')
++      } catch (_invalidJournal) { reject('JOURNAL_CORRUPT') }
++      const journalStat = statSync(path)
++      const host = new NativeRunHost(config, db, lock, { dev: journalStat.dev, ino: journalStat.ino, lockDev: held.dev, lockIno: held.ino })
++      host.#validate()
++      host.#transaction(() => {
++        for (const op of host.#all()) {
++          if (!op.attempts.some(a => a.state === 'intent')) continue
++          host.#write({ ...op, state: 'unknown', remoteExecution: 'unknown', usage: null, reservationHeld: true,
++            localTransport: 'unknown', failureCode: 'INTENT_OUTCOME_UNKNOWN', attempts: op.attempts.map(a => a.state === 'intent' ? { ...a, state: 'unknown' } : a) })
++        }
++      })
++      return host
++    } catch (error) {
++      db?.close(); await lock.close(); throw error
++    }
++  }
++
++  /** Check current calling scope, including same-ID inspection.
++   * @param caller Actual calling scope object.
++   * @param action Requested invocation, inspection or control.
++   * @param targetId Target-specific scope when the operation identifies a target.
++   */
++  authorize(caller: object, action: 'invoke' | 'inspect' | 'control', targetId?: NativeTargetId): void {
++    if (this.#closed) reject('NATIVE_HOST_CLOSED')
++    if (action === 'invoke' && this.#closing) reject('NATIVE_HOST_CLOSING')
++    if (this.#config.authorize(caller, action, targetId) !== true) reject('CALLER_UNAUTHORIZED')
++  }
++  /** Read a detached current target without waking a driver.
++   * @param caller Actual calling scope with inspection authority.
++   * @param targetId Journal-local target identity.
++   * @returns The frozen current target binding.
++   */
++  target(caller: object, targetId: NativeTargetId): NativeTarget {
++    this.authorize(caller, 'inspect', targetId); this.#validate()
++    return deepFreeze(structuredClone(this.#target(targetId)))
++  }
++  /** Read a detached durable operation without a model request.
++   * @param caller Actual calling scope with current inspection authority.
++   * @param operationId Journal-local operation identity.
++   * @returns The frozen durable operation.
++   */
++  inspect(caller: object, operationId: NativeOperationId): NativeOperation {
++    this.authorize(caller, 'inspect'); this.#validate()
++    const op = this.#read(operationId); this.authorize(caller, 'inspect', op.targetId)
++    return deepFreeze(structuredClone(op))
++  }
++  /** Read journal authority for one Session without deriving operations from JSONL.
++   * @param caller Actual owner with inspection authority for every matching target.
++   * @param sessionId Exact persisted Session identity.
++   * @returns Detached operations belonging to that Session across generations.
++   */
++  sessionOperations(caller: object, sessionId: string): readonly NativeOperation[] {
++    this.authorize(caller, 'inspect'); this.#validate()
++    const operations = this.#all().filter(op => op.binding.sessionBinding?.sessionId === sessionId)
++    for (const op of operations) this.authorize(caller, 'inspect', op.targetId)
++    return deepFreeze(structuredClone(operations))
++  }
++  /** Commit input, complete binding, deduplication receipt and reservation atomically.
++   * @param caller Actual calling scope with invocation authority.
++   * @param requested Complete target binding and bounded pending text steps.
++   * @returns The committed operation or identical existing receipt.
++   */
++  async admit(caller: object, requested: NativeAdmission): Promise<NativeOperation> {
++    this.authorize(caller, 'invoke', requested.targetId)
++    const input = deepFreeze(structuredClone(admission(requested, this.#config.capacity.maxSteps)))
++    this.#validate()
++    const existing = this.#maybe(input.id)
++    if (existing !== undefined) {
++      if (existing.inputDigest !== admissionDigest(input)) reject('OPERATION_CONFLICT')
++      return this.inspect(caller, input.id)
++    }
++    if (this.#config.capacityReady !== undefined) {
++      const signal = AbortSignal.timeout(this.#config.capacity.admissionDeadlineMs)
++      await Promise.race([this.#config.capacityReady(signal), new Promise<never>((_resolve, fail) => signal.addEventListener('abort', () => fail(signal.reason), { once: true }))])
++    }
++    this.authorize(caller, 'invoke', input.targetId)
++    this.#transaction(() => {
++      const duplicate = this.#maybe(input.id)
++      if (duplicate !== undefined) { if (duplicate.inputDigest !== admissionDigest(input)) reject('OPERATION_CONFLICT'); return }
++      this.#binding(input.binding)
++      const available = this.#capacity()
++      const slots = input.kind === 'contact' ? available.contactSlotsAvailable : available.executionSlotsAvailable
++      const tokens = input.kind === 'contact' ? available.contactTokensAvailable : available.executionTokensAvailable
++      const reservedTokens = input.steps.length * this.#config.capacity.tokenReservationPerStep
++      if (slots < 1 || tokens < reservedTokens || input.binding.maxTokens > this.#config.capacity.tokenReservationPerStep) reject('HOST_CAPACITY_BLOCKED')
++      const op: NativeOperation = { ...input, inputDigest: admissionDigest(input), state: 'admitted', nextStep: 0, answers: [], attempts: [],
++        reservedSlots: 1, reservedTokens, reservationHeld: true, localTransport: 'not_started', remoteExecution: 'not_started', usage: null, failureCode: null }
++      this.#db.prepare('INSERT INTO operations VALUES(?,?)').run(op.id, canonical(op))
++    })
++    return this.inspect(caller, input.id)
++  }
++  /** Commit an authority change before cancellation or success receipt.
++   * @param caller Actual calling scope with current control authority.
++   * @param targetId Target whose authority changes.
++   * @param change Explicit revoke, archive, restart or model mutation.
++   * @returns The committed current target binding.
++   */
++  changeTarget(caller: object, targetId: NativeTargetId, change: NativeTargetChange): NativeTarget {
++    this.authorize(caller, 'control', targetId)
++    this.#transaction(() => {
++      const previous = this.#target(targetId)
++      const next: NativeTarget = { ...previous, authorityEpoch: previous.authorityEpoch + 1,
++        ...(change.kind === 'revoke' ? { state: 'revoked' as const } : {}),
++        ...(change.kind === 'archive' ? { state: 'archived' as const, botEpoch: previous.botEpoch + 1 } : {}),
++        ...(change.kind === 'restart' ? { state: 'active' as const, runGeneration: previous.runGeneration + 1,
++          ...change.sessionBinding === undefined ? {} : { sessionBinding: change.sessionBinding } } : {}),
++        ...(change.kind === 'model' ? { model: change.model, configVersion: previous.configVersion + 1 } : {}) }
++      target(next); this.#db.prepare('UPDATE targets SET data=? WHERE id=?').run(canonical(next), targetId)
++      for (const op of this.#all()) if (op.targetId === targetId && !['settled', 'fenced', 'unknown'].includes(op.state)) this.#fence(op, 'AUTHORITY_REVOKED')
++    })
++    for (const driver of this.#drivers) driver.abortTarget(targetId)
++    return this.target(caller, targetId)
++  }
++  /** Construct a controlled consumer; arbitrary adapters cannot be substituted.
++   * @param dependencies Existing provider dependencies without a dispatch guard override.
++   * @returns A consumer registered with this native owner.
++   */
++  driver(dependencies: Omit<DeepSeekAdapterOptions, 'dispatchControl'>): NativeRunDriver {
++    if (this.#closed || this.#closing) reject('NATIVE_HOST_CLOSING')
++    return new NativeRunDriver(this, dependencies)
++  }
++  /** Track consumers so direct construction cannot evade host disposal.
++   * @param driver Concrete consumer registered by its constructor.
++   */
++  registerDriver(driver: NativeRunConsumer): void {
++    if (this.#closed || this.#closing) reject('NATIVE_HOST_CLOSING')
++    if (!(driver instanceof NativeRunDriver) && !(driver instanceof NativeSessionDriver && driver.hasNativeOwner())) reject('CONTROLLED_PERMIT_REQUIRED')
++    this.#drivers.add(driver)
++  }
++  /** Claim one consumer before asynchronous preparation begins.
++   * @param caller Actual calling scope with invocation authority.
++   * @param operationId Admitted operation to consume.
++   * @param driver Registered concrete consumer claiming local ownership.
++   */
++  claimDriver(caller: object, operationId: NativeOperationId, driver: NativeRunConsumer): void {
++    this.authorize(caller, 'invoke'); this.#validate()
++    const op = this.#read(operationId); this.authorize(caller, 'invoke', op.targetId)
++    if (!this.#drivers.has(driver)) reject('CONTROLLED_PERMIT_REQUIRED')
++    this.#consumerBinding(driver, op)
++    if (this.#operationOwners.has(operationId)) reject('OPERATION_DRIVER_CONFLICT')
++    this.#operationOwners.set(operationId, driver)
++  }
++  /** Release only the consumer whose complete local lifecycle returned.
++   * @param operationId Operation whose local lifecycle returned.
++   * @param driver Exact current consumer owner.
++   */
++  releaseDriver(operationId: NativeOperationId, driver: NativeRunConsumer): void {
++    this.#owner(operationId, driver); this.#operationOwners.delete(operationId)
++  }
++  /** Abort and drain every consumer after the generation fence is durable.
++   * @param caller Actual calling scope with current control authority.
++   * @param operationId Operation identifying the already-fenced generation.
++   */
++  async drainStoppedGeneration(caller: object, operationId: NativeOperationId): Promise<void> {
++    const op = this.inspect(caller, operationId); this.authorize(caller, 'control', op.targetId)
++    if (this.#db.prepare('SELECT id FROM stops WHERE target=? AND generation=? LIMIT 1').get(op.targetId, op.binding.runGeneration) === undefined) reject('STOP_FENCE_REQUIRED')
++    const drained = await Promise.all([...this.#drivers].map(driver => driver.drainGeneration(op.targetId, op.binding.runGeneration)))
++    if (drained.every(Boolean)) return
++    this.#transaction(() => {
++      for (const owned of this.#all()) if (owned.targetId === op.targetId && owned.binding.runGeneration === op.binding.runGeneration && owned.localTransport === 'open') {
++        this.#write({ ...owned, localTransport: 'unknown' })
++      }
++    })
++  }
++  /** Deployment bound for local drain; expiry never claims remote settlement. */
++  get settlementDeadlineMs(): number { return this.#config.capacity.settlementDeadlineMs }
++  /** Read remaining local allocations while unknown work retains its reserves.
++   * @param caller Actual calling scope with inspection authority.
++   * @returns Remaining host-local slots and token allocations.
++   */
++  capacity(caller: object): CapacityView {
++    this.authorize(caller, 'inspect'); this.#validate(); return this.#capacity()
++  }
++  /** Verify a bound request against the authoritative pending step.
++   * @param caller Actual calling scope with current invocation authority.
++   * @param operationId Admitted operation identity.
++   * @param step Exact pending step index.
++   * @returns The frozen journaled operation for this step.
++   */
++  checkRequest(caller: object, operationId: NativeOperationId, step: number): NativeOperation {
++    this.authorize(caller, 'invoke'); this.#validate()
++    const op = this.#read(operationId); this.authorize(caller, 'invoke', op.targetId)
++    this.#binding(op.binding)
++    if (op.state !== 'admitted' || op.nextStep !== step) reject(op.state === 'unknown' ? 'OUTCOME_UNKNOWN_BLOCKED' : 'OPERATION_FENCED')
++    return op
++  }
++  /** Persist an attempt after final synchronous validation; no await is allowed here.
++   * @param caller Actual calling scope checked at final dispatch.
++   * @param driver Exact consumer owning the operation.
++   * @param operationId Journal-local operation identity.
++   * @param step Exact pending step index.
++   * @param options Frozen request input bound by the controlled consumer.
++   * @param wire Frozen endpoint and serialized payload immediately preceding fetch.
++   */
++  beginAttempt(caller: object, driver: NativeRunConsumer, operationId: NativeOperationId, step: number,
++    options: GenerateOptions, wire: DeepSeekDispatchInput): void {
++    this.#transaction(() => {
++      this.#owner(operationId, driver)
++      const op = this.checkRequest(caller, operationId, step)
++      this.#consumerBinding(driver, op)
++      if (driver instanceof NativeSessionDriver) driver.validateIntent(options, op, step)
++      const body: unknown = JSON.parse(wire.payload)
++      if (!record(body) || wire.endpoint !== op.binding.endpoint || body.model !== op.binding.model
++        || body.max_tokens !== op.binding.maxTokens || body.stream !== true
++        || Object.keys(body).some(k => !['model', 'max_tokens', 'stream', 'messages', 'thinking'].includes(k))
++        || canonical(body.thinking) !== canonical({ type: 'disabled' })
++        || canonical(body.messages) !== canonical(textWire(options.messages))) reject('FINAL_INPUT_CONFLICT')
++      this.#write({ ...op, state: 'consumed', localTransport: 'open', remoteExecution: 'unknown', usage: null,
++        attempts: [...op.attempts, { step, wireDigest: digest(wire), state: 'intent', usage: null }] })
++    })
++  }
++  /** Record a terminal response; release complete-operation capacity only with known usage.
++   * @param driver Exact consumer owning the operation.
++   * @param operationId Journal-local operation identity.
++   * @param step Exact consumed step index.
++   * @param answer Observed terminal text answer.
++   * @param observed Independently observed provider token counts.
++   * @param receipt Required private native persistence attestation for Session consumers.
++   */
++  completeStep(driver: NativeRunConsumer, operationId: NativeOperationId, step: number, answer: string,
++    observed: TokenUsage, receipt?: NativeSessionReceipt): void {
++    this.#transaction(() => {
++      this.#owner(operationId, driver)
++      const op = this.#read(operationId)
++      this.#consumerBinding(driver, op)
++      if (driver instanceof NativeSessionDriver) driver.validateReceipt(receipt, op, step, answer, observed)
++      else if (receipt !== undefined) reject('UNEXPECTED_SESSION_RECEIPT')
++      if (op.state !== 'consumed' || op.nextStep !== step || !usage(observed)) reject('SETTLEMENT_CONFLICT')
++      this.#binding(op.binding)
++      const attempts = op.attempts.map((a, i) => i === op.attempts.length - 1 ? { ...a, state: 'observed' as const, usage: observed,
++        ...receipt === undefined ? {} : { sessionReceipt: receipt } } : a)
++      const nextStep = step + 1
++      const next: NativeOperation = { ...op, attempts, nextStep, answers: [...op.answers, answer], localTransport: 'closed',
++        remoteExecution: 'response_observed', state: nextStep === op.steps.length ? 'settled' : 'admitted',
++        reservationHeld: nextStep !== op.steps.length, failureCode: null, usage: null }
++      this.#write({ ...next, usage: knownUsage(next) })
++    })
++  }
++  /** Preserve unknown allocations; retain a late local failure alongside known settlement.
++   * @param driver Exact consumer whose local lifecycle returned.
++   * @param operationId Journal-local operation identity.
++   * @param failureCode Non-secret machine-readable failure category.
++   */
++  failStep(driver: NativeRunConsumer, operationId: NativeOperationId, failureCode: string): void {
++    this.#transaction(() => {
++      this.#owner(operationId, driver)
++      const op = this.#read(operationId)
++      if (op.state === 'fenced') return
++      if (op.state === 'settled') {
++        this.#write({ ...op, failureCode: op.failureCode ?? failureCode })
++        return
++      }
++      if (op.attempts.some(a => a.state === 'intent' || a.state === 'unknown')) {
++        this.#write({ ...op, state: 'unknown', usage: null, reservationHeld: true, remoteExecution: 'unknown', localTransport: 'closed', failureCode,
++          attempts: op.attempts.map(a => a.state === 'intent' ? { ...a, state: 'unknown' } : a) })
++      } else this.#write({ ...op, failureCode })
++    })
++  }
++  /** Persist an exact-generation no-dispatch fence before local abort.
++   * @param caller Actual calling scope with current control authority.
++   * @param controlId Idempotent journal-local control receipt identity.
++   * @param operationId Operation identifying the generation to stop.
++   * @returns The durable operation after the stop fence commits.
++   */
++  stop(caller: object, controlId: ControlId, operationId: NativeOperationId): NativeOperation {
++    this.authorize(caller, 'control')
++    if (!id(controlId)) reject('INVALID_CONTROL')
++    this.#transaction(() => {
++      const op = this.#read(operationId); this.authorize(caller, 'control', op.targetId)
++      this.#stop(controlId, op)
++    })
++    return this.inspect(caller, operationId)
++  }
++  /** Fence only an exact native-owned operation, independently of caller revocation.
++   * @param driver Exact consumer owning this operation.
++   * @param operationId Owned operation to fence before disposal abort.
++   */
++  stopOwned(driver: NativeRunConsumer, operationId: NativeOperationId): void {
++    this.#transaction(() => {
++      this.#owner(operationId, driver)
++      const op = this.#read(operationId)
++      if (!['settled', 'fenced', 'unknown'].includes(op.state)) this.#fence(op, 'OWNER_DISPOSED')
++    })
++  }
++  /** Retain uncertainty when local transport misses its drain deadline.
++   * @param driver Exact consumer still owning the operation.
++   * @param operationId Owned operation whose closure is unproven.
++   */
++  noteUnsettled(driver: NativeRunConsumer, operationId: NativeOperationId): void {
++    this.#transaction(() => {
++      this.#owner(operationId, driver); const op = this.#read(operationId)
++      if (op.localTransport === 'open') this.#write({ ...op, localTransport: 'unknown' })
++    })
++  }
++  /** Drain local consumers before releasing the kernel-owned writer descriptor. */
++  close(): Promise<void> {
++    if (this.#closed) return Promise.resolve()
++    if (this.#closePromise !== undefined) return this.#closePromise
++    this.#closing = true
++    const pending = Promise.resolve().then(() => this.#dispose())
++    this.#closePromise = pending
++    const clear = () => { if (this.#closePromise === pending) this.#closePromise = undefined }
++    void pending.then(clear, clear)
++    return pending
++  }
++  async #dispose(): Promise<void> {
++    const outcomes = await Promise.allSettled([...this.#drivers].map(driver => driver.close()))
++    const failed = outcomes.find(outcome => outcome.status === 'rejected')
++    if (failed?.status === 'rejected') throw failed.reason
++    this.#db.close(); await this.#lock.close(); this.#closed = true
++  }
++  #stop(controlId: ControlId, op: NativeOperation): void {
++    const receipt = this.#db.prepare('SELECT target,generation,operation FROM stops WHERE id=?').get(controlId)
++    if (receipt !== undefined && (receipt.target !== op.targetId || receipt.generation !== op.binding.runGeneration || receipt.operation !== op.id)) reject('CONTROL_CONFLICT')
++    if (receipt === undefined) this.#db.prepare('INSERT INTO stops VALUES(?,?,?,?)').run(controlId, op.targetId, op.binding.runGeneration, op.id)
++    for (const owned of this.#all()) if (owned.targetId === op.targetId && owned.binding.runGeneration === op.binding.runGeneration && !['settled', 'fenced', 'unknown'].includes(owned.state)) this.#fence(owned, 'GENERATION_STOPPED')
++  }
++  #fence(op: NativeOperation, failureCode: string): void {
++    const uncertain = op.attempts.some(a => a.state === 'intent' || a.state === 'unknown')
++    this.#write({ ...op, state: uncertain ? 'unknown' : 'fenced', reservationHeld: uncertain,
++      remoteExecution: uncertain ? 'unknown' : op.remoteExecution, usage: uncertain ? null : op.attempts.length ? knownUsage(op) : null, failureCode })
++  }
++  #consumerBinding(driver: NativeRunConsumer, op: NativeOperation): void {
++    if (op.binding.sessionBinding === undefined) {
++      if (driver instanceof NativeSessionDriver) reject('SESSION_BINDING_REQUIRED')
++    } else if (!(driver instanceof NativeSessionDriver)) reject('SESSION_CONSUMER_REQUIRED')
++    else driver.validateSessionBinding(op.binding)
++  }
++  #owner(operationId: NativeOperationId, driver: NativeRunConsumer): void {
++    if (this.#operationOwners.get(operationId) !== driver) reject('CONTROLLED_PERMIT_REQUIRED')
++  }
++  #binding(binding: NativeTarget): void {
++    const current = this.#target(binding.id)
++    if (current.state !== 'active' || canonical(current) !== canonical(binding)) reject('AUTHORITY_REVOKED')
++    if (this.#db.prepare('SELECT id FROM stops WHERE target=? AND generation=? LIMIT 1').get(binding.id, binding.runGeneration) !== undefined) reject('GENERATION_STOPPED')
++  }
++  #target(targetId: NativeTargetId): NativeTarget {
++    const row = this.#db.prepare('SELECT data FROM targets WHERE id=?').get(targetId)
++    if (typeof row?.data !== 'string') reject('TARGET_MISSING')
++    return target(JSON.parse(row.data))
++  }
++  #maybe(operationId: NativeOperationId): NativeOperation | undefined {
++    const row = this.#db.prepare('SELECT data FROM operations WHERE id=?').get(operationId)
++    if (row === undefined) return undefined
++    if (typeof row.data !== 'string') reject('JOURNAL_CORRUPT')
++    return operation(JSON.parse(row.data), this.#config.capacity.maxSteps)
++  }
++  #read(operationId: NativeOperationId): NativeOperation { return this.#maybe(operationId) ?? reject('OPERATION_MISSING') }
++  #all(): NativeOperation[] {
++    return this.#db.prepare('SELECT data FROM operations ORDER BY rowid').all().map(row => {
++      if (typeof row.data !== 'string') return reject('JOURNAL_CORRUPT')
++      return operation(JSON.parse(row.data), this.#config.capacity.maxSteps)
++    })
++  }
++  #write(op: NativeOperation): void { operation(op, this.#config.capacity.maxSteps); this.#db.prepare('UPDATE operations SET data=? WHERE id=?').run(canonical(op), op.id) }
++  #capacity() {
++    const c = this.#config.capacity
++    let executionSlotsAvailable = c.executionSlots; let contactSlotsAvailable = c.contactSlots
++    let executionTokensAvailable = c.executionTokens; let contactTokensAvailable = c.contactTokens
++    for (const op of this.#all()) {
++      const tokens = (knownUsage(op).totalTokens ?? 0) + (op.reservationHeld ? (op.steps.length - op.nextStep) * c.tokenReservationPerStep : 0)
++      if (op.kind === 'contact') { contactSlotsAvailable -= op.reservationHeld ? 1 : 0; contactTokensAvailable -= tokens }
++      else { executionSlotsAvailable -= op.reservationHeld ? 1 : 0; executionTokensAvailable -= tokens }
++    }
++    return { executionSlotsAvailable, contactSlotsAvailable, executionTokensAvailable, contactTokensAvailable }
++  }
++  #validate(): void {
++    if (this.#closed) reject('NATIVE_HOST_CLOSED')
++    try {
++      const s = statSync(this.#path); const l = statSync(this.#lockPath)
++      if (s.dev !== this.#identity.dev || s.ino !== this.#identity.ino || l.dev !== this.#identity.lockDev || l.ino !== this.#identity.lockIno) reject('JOURNAL_CORRUPT')
++      const integrity = this.#db.prepare('PRAGMA quick_check').get()
++      if (integrity?.quick_check !== 'ok') reject('JOURNAL_CORRUPT')
++      const meta = this.#db.prepare('SELECT format,data,revision,stateDigest FROM meta WHERE id=1').get()
++      if (meta?.format !== SCHEMA_VERSION || meta.data !== canonical({ hostId: this.#config.hostId, capacity: this.#config.capacity })
++        || !integer(meta.revision) || meta.stateDigest !== this.#stateDigest()) reject('JOURNAL_CORRUPT')
++      const targets = this.#db.prepare('SELECT id,data FROM targets').all()
++      if (targets.length !== this.#config.targets.length) reject('JOURNAL_CORRUPT')
++      for (const row of targets) { if (typeof row.data !== 'string' || target(JSON.parse(row.data)).id !== row.id) reject('JOURNAL_CORRUPT') }
++      for (const row of this.#db.prepare('SELECT id,target,generation,operation FROM stops').all()) {
++        if (!id(row.id) || !id(row.target) || !id(row.operation) || !integer(row.generation) || row.generation < 1) reject('JOURNAL_CORRUPT')
++      }
++      this.#all()
++    } catch (_invalidDurableState) { reject('JOURNAL_CORRUPT') }
++  }
++  #transaction<T>(effect: () => T): T {
++    this.#validate(); this.#db.exec('BEGIN IMMEDIATE')
++    try { const result = effect(); this.#db.prepare('UPDATE meta SET revision=revision+1,stateDigest=? WHERE id=1').run(this.#stateDigest()); this.#db.exec('COMMIT'); return result }
++    catch (error) { this.#db.exec('ROLLBACK'); throw error }
++  }
++  #stateDigest(): string {
++    return digest({ targets: this.#db.prepare('SELECT id,data FROM targets ORDER BY id').all(), operations: this.#db.prepare('SELECT id,data FROM operations ORDER BY id').all(), stops: this.#db.prepare('SELECT id,target,generation,operation FROM stops ORDER BY id').all() })
++  }
++}
+diff --git a/packages/experimental/native-run/src/session-driver.ts b/packages/experimental/native-run/src/session-driver.ts
+new file mode 100644
+index 0000000..42b2da9
+--- /dev/null
++++ b/packages/experimental/native-run/src/session-driver.ts
+@@ -0,0 +1,362 @@
++/** Native Session consumer: real inbox/loop/receipts with provider-owned guarded calls. */
++import type { Context } from '@deepseek-ai/cordis'
++import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
++import { isNativeAgentHandle, isProtectedNativeRequest } from '@deepseek-ai/dsh-agent-loop'
++import { assembleAssistantStream, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
++import type { GenerateOptions, RequestMessage, TokenUsage } from '@deepseek-ai/dsh-llm'
++import type { DeepSeekProviderFactory, DeepSeekDispatchInput } from '@deepseek-ai/dsh-llm-deepseek'
++import { isDeepSeekProviderFactory } from '@deepseek-ai/dsh-llm-deepseek'
++import { SessionId, deriveEventMessage } from '@deepseek-ai/dsh-session'
++import { scopeOf } from '@deepseek-ai/dsh-scope'
++import type {} from '@deepseek-ai/dsh-agent-preset-registry'
++import type {} from '@deepseek-ai/dsh-session-persistence'
++import type {} from '@deepseek-ai/dsh-tools'
++import type { NativeRunHost } from './journal.ts'
++import type { NativeControlId, NativeOperation, NativeOperationId, NativeSessionReceipt, NativeTarget, NativeTargetId } from './types.ts'
++import { canonical, digest, reject, textWire, usage } from './values.ts'
++
++const withoutEmptySystem = (messages: readonly RequestMessage[]) => messages.filter(message =>
++  !(message.role === 'system' && message.content.every(block => block.type === 'text' && block.text.length === 0)))
++
++interface ActiveRun {
++  operation: NativeOperation
++  step: number
++  startSeq: number
++  inputId: string
++  done: Promise<NativeOperation>
++}
++interface BoundRequest { operationId: NativeOperationId; step: number; inputDigest: string; prefixDigest: string }
++interface ReceiptProof { operationId: NativeOperationId; step: number; answer: string; usageDigest: string }
++
++/** Private runtime-owner consumer; it does not establish public human authorization. */
++export class NativeSessionDriver {
++  #handle: AgentHandle | undefined
++  #active: ActiveRun | undefined
++  #closed = false
++  #closing = false
++  #history: readonly RequestMessage[] = []
++  #historyDigest = ''
++  readonly #requests = new WeakMap<GenerateOptions, BoundRequest>()
++  readonly #receipts = new WeakMap<NativeSessionReceipt, ReceiptProof>()
++
++  private constructor(private readonly ctx: Context, private readonly host: NativeRunHost,
++    private readonly binding: NativeTarget) {}
++
++  /** Create a native owned Session with its exact preset and protection before publication.
++   * @param ctx Actual trusted runtime owner context, not a JSON principal.
++   * @param host Open exclusive native journal owner.
++   * @param targetId Current Session-bound target.
++   * @param provider Actual provider-owned opaque factory.
++   * @returns Registered native consumer owning its lifecycle handle.
++   */
++  static createOwned(ctx: Context, host: NativeRunHost, targetId: NativeTargetId,
++    provider: DeepSeekProviderFactory): Promise<NativeSessionDriver> {
++    return this.#openOwned(ctx, host, targetId, provider, false)
++  }
++  /** Resume with protection already attached before any reconstructed inbox wake.
++   * Unknown journal work remains unexecutable; this method never drives it.
++   * @param ctx Actual trusted runtime owner context.
++   * @param host Already reopened authoritative journal; missing state cannot be synthesized.
++   * @param targetId Exact current Session-bound target.
++   * @param provider Actual provider-owned opaque factory.
++   * @returns Registered consumer after native persistence reconstruction.
++   */
++  static resumeOwned(ctx: Context, host: NativeRunHost, targetId: NativeTargetId,
++    provider: DeepSeekProviderFactory): Promise<NativeSessionDriver> {
++    return this.#openOwned(ctx, host, targetId, provider, true)
++  }
++  static async #openOwned(ctx: Context, host: NativeRunHost, targetId: NativeTargetId,
++    provider: DeepSeekProviderFactory, resume: boolean): Promise<NativeSessionDriver> {
++    if (!isDeepSeekProviderFactory(provider, ctx.get('llm'))) reject('NATIVE_PROVIDER_FACTORY_REQUIRED')
++    const binding = host.target(ctx.fiber, targetId)
++    const session = binding.sessionBinding ?? reject('SESSION_BINDING_REQUIRED')
++    if (ctx.get('sessionPersistence') === undefined) reject('NATIVE_PERSISTENCE_REQUIRED')
++    const driver = new NativeSessionDriver(ctx, host, binding)
++    const calls = provider.protectSession(SessionId(session.sessionId), {
++      checkAdmission: (options) => { driver.#bound(options) },
++      checkDispatch: (options, wire) => { driver.#dispatch(options, wire) },
++      beforeStream: async (options) => {
++        driver.#validateRequest(options)
++        if (!await ctx.sessions.flush(driver.#agent().session)) reject('NATIVE_PERSISTENCE_REQUIRED')
++        driver.#validateRequest(options)
++        const active = driver.#active ?? reject('CONTROLLED_PERMIT_REQUIRED')
++        driver.#requests.set(options, { operationId: active.operation.id, step: active.step,
++          inputDigest: driver.#inputDigest(options), prefixDigest: digest(driver.#agent().session.snapshotEvents()) })
++      },
++    })
++    const setup = async (agentCtx: Context) => { await ctx.agentPresets.mount(agentCtx, session.agentPreset) }
++    const options = { agentOptions: { provider: binding.provider, model: binding.model, maxTokens: binding.maxTokens, reasoningEffort: ReasoningEffortId('off') }, protectedModelCalls: calls, setup }
++    const handle = resume
++      ? await ctx.agents.resume({ ...options, resumeSessionId: SessionId(session.sessionId) })
++      : await ctx.agents.create({ ...options, sessionId: SessionId(session.sessionId),
++        meta: { cwd: session.cwd, agentPreset: session.agentPreset } })
++    driver.#handle = handle
++    try {
++      driver.validateSessionBinding(binding)
++      driver.#history = withoutEmptySystem(handle.agent.session.deriveMessages())
++      if (!resume && driver.#history.length !== 0) reject('NATIVE_HISTORY_CONFLICT')
++      if (resume) await driver.#restoreHistory()
++      driver.#historyDigest = digest(handle.agent.session.snapshotEvents())
++      host.registerDriver(driver)
++    } catch (error: unknown) { await handle.dispose(); throw error }
++    return driver
++  }
++
++  /** Prove concrete owned native handle identity, never structural JSON.
++   * @returns Whether the exact native factory-returned handle is retained.
++   */
++  hasNativeOwner(): boolean { return this.#handle !== undefined && isNativeAgentHandle(this.#handle) }
++
++  /** Revalidate the actual Session/preset/tool relationship at each host-owned boundary.
++   * @param current Complete operation binding, including native/control versions.
++   */
++  validateSessionBinding(current: NativeTarget): void {
++    const session = current.sessionBinding ?? reject('SESSION_BINDING_REQUIRED')
++    const agent = this.#agent()
++    if (canonical(session) !== canonical(this.binding.sessionBinding) || current.id !== this.binding.id
++      || agent.id !== session.sessionId || agent.session.id !== session.sessionId
++      || agent.session.header.cwd !== session.cwd || agent.session.header.agentPreset !== session.agentPreset
++      || this.ctx.agents.get(agent.id) !== agent || this.ctx.sessions.get(agent.id) !== agent.session
++      || this.ctx.sessionProjections.stateOf(agent.session, 'agentPreset') !== session.agentPreset) reject('NATIVE_SESSION_BINDING_CONFLICT')
++    const scope = scopeOf(agent.ctx) ?? reject('NATIVE_SCOPE_REQUIRED')
++    if (this.ctx.tools.schemas().length !== 0 || this.ctx.tools.schemas(scope).length !== 0) reject('NATIVE_MODEL_TOOLS_PRESENT')
++  }
++
++  /** Claim journal input, then drive actual native turns; unknown state never wakes the Agent.
++   * @param caller Exact trusted owner fiber capability accepted by the journal policy.
++   * @param operationId Admitted journal-local identity.
++   * @returns Durable native journal outcome after owned local activity returns.
++   */
++  async drive(caller: object, operationId: NativeOperationId): Promise<NativeOperation> {
++    this.host.authorize(caller, 'invoke')
++    if (caller !== this.ctx.fiber) reject('CALLER_UNAUTHORIZED')
++    if (this.#closed || this.#closing) reject('NATIVE_DRIVER_CLOSED')
++    const op = this.host.inspect(caller, operationId)
++    if (this.#active?.operation.id === operationId) return this.#active.done
++    if (op.state !== 'admitted') return op
++    this.#assertKnownSession()
++    if (this.#active !== undefined || this.#agent().status !== 'idle') reject('NATIVE_SESSION_BUSY')
++    this.#assertEmptyInbox()
++    if (digest(this.#agent().session.snapshotEvents()) !== this.#historyDigest) reject('NATIVE_HISTORY_CONFLICT')
++    this.validateSessionBinding(op.binding)
++    this.host.claimDriver(caller, operationId, this)
++    const done = Promise.withResolvers<NativeOperation>()
++    const active: ActiveRun = { operation: op, step: op.nextStep, startSeq: 0, inputId: '', done: done.promise }
++    this.#active = active
++    void this.#consume(caller, active).then(done.resolve, done.reject)
++    try { return await done.promise }
++    finally { if (this.#active === active) this.#active = undefined; this.host.releaseDriver(operationId, this) }
++  }
++
++  async #consume(caller: object, active: ActiveRun): Promise<NativeOperation> {
++    try {
++      for (; active.step < active.operation.steps.length; active.step++) {
++        const current = this.host.checkRequest(caller, active.operation.id, active.step)
++        this.validateSessionBinding(current.binding)
++        this.#assertEmptyInbox()
++        const agent = this.#agent()
++        const text = current.steps[active.step] ?? reject('NATIVE_HISTORY_CONFLICT')
++        const input = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] })
++        active.inputId = input.id
++        active.startSeq = agent.session.snapshotEvents().length
++        agent.followup(input) // Durable inbox receipt occurs only after authoritative admission/claim.
++        await agent.whenIdle() // Local drain; never used alone as output settlement.
++        if (!await this.ctx.sessions.flush(agent.session)) reject('NATIVE_PERSISTENCE_REQUIRED')
++        const persistence = this.ctx.get('sessionPersistence') ?? reject('NATIVE_PERSISTENCE_REQUIRED')
++        await using stored = await persistence.open(agent.id, 'read')
++        const read = await stored.read()
++        const live = agent.session.snapshotEvents()
++        if (canonical(read.events) !== canonical(live)) reject('NATIVE_RECEIPT_NOT_DURABLE')
++        const interval = read.events.slice(active.startSeq)
++        const starts = interval.filter(event => event.type === 'turn/start')
++        const ends = interval.filter(event => event.type === 'turn/end')
++        const messages = interval.filter(event => event.type === 'assistant/message')
++        const users = interval.filter(event => event.type === 'user/message')
++        const message = messages[0], end = ends[0]
++        if (starts.length !== 1 || ends.length !== 1 || messages.length !== 1 || users.length !== 1
++          || interval.some(event => event.type === 'assistant/attempt') || users[0]?.data.id !== active.inputId
++          || message === undefined || end === undefined || message.data.interrupted === true
++          || !['completed', 'max-tokens'].includes(end.data.reason.kind)
++          || end.data.turn !== message.data.turn || starts[0]?.data.turn !== end.data.turn
++          || message.data.step !== 1 || message.data.usage === undefined || !usage(message.data.usage)
++          || message.data.message.content.some(block => block.type !== 'text')) reject('NATIVE_SETTLEMENT_UNKNOWN')
++        const assembled = assembleAssistantStream(message.data.stream)
++        if (!['stop', 'max-tokens'].includes(assembled.finish.kind)) reject('NATIVE_SETTLEMENT_UNKNOWN')
++        const answer = message.data.message.content.map(block => block.type === 'text' ? block.text : '').join('')
++        const receipt: NativeSessionReceipt = Object.freeze({ sessionId: agent.id, turn: message.data.turn, step: message.data.step,
++          startSeq: active.startSeq, assistantSeq: message.seq, endSeq: end.seq,
++          assistantDigest: digest(message), endDigest: digest(end) })
++        this.#receipts.set(receipt, { operationId: current.id, step: active.step, answer, usageDigest: digest(message.data.usage) })
++        this.host.completeStep(this, current.id, active.step, answer, message.data.usage, receipt)
++        this.#history = withoutEmptySystem(agent.session.deriveMessages())
++        this.#historyDigest = digest(agent.session.snapshotEvents())
++      }
++    } catch (error: unknown) {
++      const code = error !== null && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
++        && /^[A-Za-z0-9_-]{1,128}$/.test(error.code) ? error.code : 'NATIVE_CONSUMER_FAILURE'
++      this.host.failStep(this, active.operation.id, code)
++    }
++    return this.host.inspect(caller, active.operation.id)
++  }
++
++  #assertKnownSession(): void {
++    if (this.host.sessionOperations(this.ctx.fiber, this.#agent().id).some(op => op.state === 'unknown'
++      || op.attempts.some(attempt => attempt.state === 'intent' || attempt.state === 'unknown'))) reject('SESSION_OUTCOME_UNKNOWN')
++  }
++
++  async #restoreHistory(): Promise<void> {
++    const agent = this.#agent()
++    const operations = this.host.sessionOperations(this.ctx.fiber, agent.id)
++    // Unknown history can be inspected and stopped, but never admits a new native turn.
++    if (operations.some(op => op.state === 'unknown' || op.attempts.some(attempt => attempt.state !== 'observed'))) return
++    this.#assertEmptyInbox()
++    if (!await this.ctx.sessions.flush(agent.session)) reject('NATIVE_PERSISTENCE_REQUIRED')
++    const persistence = this.ctx.get('sessionPersistence') ?? reject('NATIVE_PERSISTENCE_REQUIRED')
++    await using stored = await persistence.open(agent.id, 'read')
++    const events = (await stored.read()).events
++    if (canonical(events) !== canonical(agent.session.snapshotEvents())) reject('NATIVE_RECEIPT_NOT_DURABLE')
++    const receipts = operations.flatMap(op => op.attempts.map(attempt => ({ op, attempt,
++      receipt: attempt.sessionReceipt ?? reject('NATIVE_RECEIPT_REQUIRED') }))).sort((a, b) => a.receipt.startSeq - b.receipt.startSeq)
++    const expected: RequestMessage[] = []
++    let previousEnd = -1
++    for (const { op, attempt, receipt } of receipts) {
++      if (canonical(op.binding.sessionBinding) !== canonical(this.binding.sessionBinding)
++        || receipt.startSeq <= previousEnd) reject('NATIVE_HISTORY_CONFLICT')
++      const interval = events.slice(receipt.startSeq, receipt.endSeq + 1)
++      const users = interval.filter(event => event.type === 'user/message')
++      const user = users[0]
++      const assistants = interval.filter(event => event.type === 'assistant/message')
++      const message = events[receipt.assistantSeq], end = events[receipt.endSeq]
++      if (user === undefined || users.length !== 1 || assistants.length !== 1
++        || message?.type !== 'assistant/message' || end?.type !== 'turn/end'
++        || digest(message) !== receipt.assistantDigest || digest(end) !== receipt.endDigest
++        || message.data.turn !== receipt.turn || message.data.step !== receipt.step || end.data.turn !== receipt.turn
++        || canonical(user.data.content) !== canonical([{ type: 'text', text: op.steps[attempt.step] ?? reject('NATIVE_HISTORY_CONFLICT') }])
++        || canonical(message.data.usage) !== canonical(attempt.usage)
++        || message.data.message.content.map(block => block.type === 'text' ? block.text : '').join('') !== op.answers[attempt.step]) reject('NATIVE_HISTORY_CONFLICT')
++      expected.push(user.data)
++      const projected = deriveEventMessage(message)
++      if (projected !== null) expected.push(projected)
++      previousEnd = receipt.endSeq
++    }
++    textWire(this.#history)
++    if (canonical(this.#history) !== canonical(expected)) reject('NATIVE_HISTORY_CONFLICT')
++  }
++
++  #inputDigest(options: GenerateOptions): string {
++    const { signal: _signal, ...input } = options
++    return digest(input)
++  }
++  #validateRequest(options: GenerateOptions): void {
++    const active = this.#active ?? reject('CONTROLLED_PERMIT_REQUIRED')
++    const current = this.host.checkRequest(this.ctx.fiber, active.operation.id, active.step)
++    this.validateSessionBinding(current.binding)
++    const agent = this.#agent()
++    if (!isProtectedNativeRequest(options, agent)) reject('NATIVE_REQUEST_OWNER_REQUIRED')
++    if (!Object.isFrozen(options) || options.sessionId !== agent.id || options.provider !== current.binding.provider
++      || options.model !== current.binding.model
++      || options.maxTokens !== current.binding.maxTokens || options.reasoningEffort !== 'off' || options.tools !== undefined
++      || (options.toolHistory?.tools.length ?? 0) !== 0 || (options.toolHistory?.updates.length ?? 0) !== 0
++    ) reject('FINAL_INPUT_CONFLICT')
++    textWire(options.messages) // Reject nonempty system prompts and all non-text/tool content.
++    if (canonical(options.messages) !== canonical(agent.session.deriveMessages())) reject('NATIVE_REQUEST_LOG_CONFLICT')
++    const conversation = withoutEmptySystem(options.messages)
++    const last = conversation.at(-1)
++    if (conversation.length !== this.#history.length + 1 || canonical(conversation.slice(0, -1)) !== canonical(this.#history)
++      || last?.role !== 'user' || last.id !== active.inputId
++      || canonical(last.content) !== canonical([{ type: 'text', text: current.steps[active.step] ?? reject('NATIVE_HISTORY_CONFLICT') }])) reject('NATIVE_HISTORY_CONFLICT')
++    this.#assertEmptyInbox()
++  }
++  #bound(options: GenerateOptions): BoundRequest {
++    this.#validateRequest(options)
++    const bound = this.#requests.get(options) ?? reject('CONTROLLED_PERMIT_REQUIRED')
++    const active = this.#active ?? reject('CONTROLLED_PERMIT_REQUIRED')
++    if (bound.operationId !== active.operation.id || bound.step !== active.step || bound.inputDigest !== this.#inputDigest(options)
++      || bound.prefixDigest !== digest(this.#agent().session.snapshotEvents())) reject('FINAL_INPUT_CONFLICT')
++    return bound
++  }
++  #dispatch(options: GenerateOptions, wire: DeepSeekDispatchInput): void {
++    const bound = this.#bound(options)
++    this.host.beginAttempt(this.ctx.fiber, this, bound.operationId, bound.step, options, wire)
++  }
++  /** Host-only final native request ownership check; no caller-supplied authorization callback.
++   * @param options Actual request instance.
++   * @param op Exact journal operation.
++   * @param step Pending journal step.
++   */
++  validateIntent(options: GenerateOptions, op: NativeOperation, step: number): void {
++    const bound = this.#bound(options)
++    if (bound.operationId !== op.id || bound.step !== step) reject('CONTROLLED_PERMIT_REQUIRED')
++  }
++  /** Host verifies an exact private attestation created only after native durable readback.
++   * @param receipt Candidate Session receipt identity.
++   * @param op Exact journal operation.
++   * @param step Consumed journal step.
++   * @param answer Actual native terminal text.
++   * @param observed Actual native terminal usage.
++   */
++  validateReceipt(receipt: NativeSessionReceipt | undefined, op: NativeOperation, step: number,
++    answer: string, observed: TokenUsage): void {
++    const proof = receipt === undefined ? undefined : this.#receipts.get(receipt)
++    if (proof === undefined || proof.operationId !== op.id || proof.step !== step || proof.answer !== answer
++      || proof.usageDigest !== digest(observed)) reject('NATIVE_RECEIPT_REQUIRED')
++  }
++  #agent(): Agent {
++    if (this.#handle === undefined || !isNativeAgentHandle(this.#handle)) reject('NATIVE_OWNED_HANDLE_REQUIRED')
++    return this.#handle.agent
++  }
++  #assertEmptyInbox(): void {
++    const inbox = this.#agent().inbox
++    if (inbox.nextTurn.length !== 0 || inbox.nextStep.length !== 0) reject('NATIVE_INBOX_CONFLICT')
++  }
++
++  /** Fence the exact generation before native cancellation and bounded local drain.
++   * @param caller Exact owner fiber capability.
++   * @param controlId Idempotent stop receipt.
++   * @param operationId Operation specifying the generation.
++   * @returns Durable outcome retaining remote uncertainty.
++   */
++  async stop(caller: object, controlId: NativeControlId, operationId: NativeOperationId): Promise<NativeOperation> {
++    this.host.stop(caller, controlId, operationId)
++    await this.host.drainStoppedGeneration(caller, operationId)
++    return this.host.inspect(caller, operationId)
++  }
++  /** Abort/drain only locally active work with the exact fenced generation.
++   * @param targetId Target to stop.
++   * @param generation Exact generation, excluding restarted work.
++   * @returns Whether owned activity returned within the settlement bound.
++   */
++  async drainGeneration(targetId: NativeTargetId, generation: number): Promise<boolean> {
++    const active = this.#active
++    if (active === undefined || active.operation.targetId !== targetId || active.operation.binding.runGeneration !== generation) return true
++    this.#agent().cancel({ kind: 'hook', reason: 'GENERATION_STOPPED' })
++    return this.#drain(active)
++  }
++  /** Cancel active work only after its target mutation has committed.
++   * @param targetId Revoked/changed target.
++   */
++  abortTarget(targetId: NativeTargetId): void {
++    if (this.#active?.operation.targetId === targetId) this.#agent().cancel({ kind: 'hook', reason: 'AUTHORITY_REVOKED' })
++  }
++  /** Fence owned work and release the actual native handle only after bounded quiescence. */
++  async close(): Promise<void> {
++    if (this.#closed) return
++    this.#closing = true
++    const active = this.#active
++    if (active !== undefined) {
++      this.host.stopOwned(this, active.operation.id)
++      this.#agent().cancel({ kind: 'disposed' })
++      if (!await this.#drain(active)) { this.host.noteUnsettled(this, active.operation.id); reject('LOCAL_SETTLEMENT_UNKNOWN') }
++    }
++    await this.#handle?.dispose()
++    this.#closed = true
++  }
++  async #drain(active: ActiveRun): Promise<boolean> {
++    let timer: ReturnType<typeof setTimeout> | undefined
++    try { return await Promise.race([
++      active.done.then(() => true, () => true),
++      new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), this.host.settlementDeadlineMs) }),
++    ]) }
++    finally { if (timer !== undefined) clearTimeout(timer) }
++  }
++}
+diff --git a/packages/experimental/native-run/src/types.ts b/packages/experimental/native-run/src/types.ts
+new file mode 100644
+index 0000000..cacd078
+--- /dev/null
++++ b/packages/experimental/native-run/src/types.ts
+@@ -0,0 +1,124 @@
++/** Private controlled text-operation data; none of these values authorize a caller. */
++import type { Branded } from '@deepseek-ai/dsh-brand'
++import type { TokenUsage } from '@deepseek-ai/dsh-llm'
++
++/** Journal-local operation identity supplied by the controller. */
++export type NativeOperationId = Branded<'NativeOperationId'>
++/** Journal-local target identity; carries no authority. */
++export type NativeTargetId = Branded<'NativeTargetId'>
++/** Durable control receipt identity; carries no authority. */
++export type NativeControlId = Branded<'NativeControlId'>
++
++/** Complete authority generation and explicit text route. */
++export interface NativeTarget {
++  /** Native Session relationship, required by Session consumers and denied to direct drivers. */
++  readonly sessionBinding?: NativeSessionBinding
++  readonly id: NativeTargetId
++  readonly runGeneration: number
++  readonly botEpoch: number
++  readonly taskEpoch: number
++  readonly taskRevision: number
++  readonly authorityEpoch: number
++  readonly membershipGeneration: number
++  readonly configVersion: number
++  readonly scopeRef: 'text-only'
++  readonly provider: 'deepseek-official'
++  readonly model: string
++  readonly maxTokens: number
++  readonly reasoningEffort: 'off'
++  readonly endpoint: string
++  readonly state: 'active' | 'revoked' | 'archived'
++}
++
++/** Exact Session/preset relationship; numeric native and opaque control versions stay separate. */
++export interface NativeSessionBinding {
++  readonly sessionId: string
++  readonly agentPreset: string
++  readonly controlConfigId: string
++  /** Explicit absolute native creation directory; no implicit host default. */
++  readonly cwd: string
++}
++
++/** Actual flushed native receipt coordinates; text and credentials are not duplicated here. */
++export interface NativeSessionReceipt {
++  readonly sessionId: string
++  readonly turn: number
++  readonly step: number
++  readonly startSeq: number
++  readonly assistantSeq: number
++  readonly endSeq: number
++  readonly assistantDigest: string
++  readonly endDigest: string
++}
++
++/** Local consumer lifecycle tracked by the exclusive native writer. */
++export interface NativeRunConsumer {
++  drainGeneration(targetId: NativeTargetId, generation: number): Promise<boolean>
++  abortTarget(targetId: NativeTargetId): void
++  close(): Promise<void>
++}
++
++/** Separate local slot and token allocations; no account-global quota guarantee. */
++export interface NativeCapacity {
++  readonly executionSlots: number
++  readonly contactSlots: number
++  readonly executionTokens: number
++  readonly contactTokens: number
++  readonly tokenReservationPerStep: number
++  readonly maxSteps: number
++  readonly admissionDeadlineMs: number
++  readonly settlementDeadlineMs: number
++}
++
++/** Trusted in-process launcher configuration without tokens, principals or durable grants. */
++export interface NativeRunConfig {
++  readonly directory: string
++  readonly create: boolean
++  readonly hostId: string
++  readonly targets: readonly NativeTarget[]
++  readonly capacity: NativeCapacity
++  readonly authorize: (caller: object, action: 'invoke' | 'inspect' | 'control', targetId?: NativeTargetId) => boolean
++  /** Bounded readiness wait; native reservation and authority are rechecked afterward. */
++  readonly capacityReady?: (signal: AbortSignal) => Promise<void>
++}
++
++/** Pending text steps committed together with the complete reservation. */
++export interface NativeAdmission {
++  readonly id: NativeOperationId
++  readonly targetId: NativeTargetId
++  readonly kind: 'contact' | 'execution'
++  readonly binding: NativeTarget
++  readonly steps: readonly string[]
++}
++
++/** Native mutations commit on the exclusive writer used by dispatch. */
++export type NativeTargetChange =
++  | { readonly kind: 'revoke' | 'archive' }
++  | { readonly kind: 'restart'; readonly sessionBinding?: NativeSessionBinding }
++  | { readonly kind: 'model'; readonly model: string }
++
++/** Durable provider intent; wire contents and authentication are never stored. */
++export interface NativeAttempt {
++  /** Present only after actual Session persistence validation by its exact consumer. */
++  readonly sessionReceipt?: NativeSessionReceipt
++  readonly step: number
++  readonly wireDigest: string
++  readonly state: 'intent' | 'observed' | 'unknown'
++  readonly usage: TokenUsage | null
++}
++
++/** Journal record consumed by the driver, including pending input. */
++export interface NativeOperation extends NativeAdmission {
++  readonly inputDigest: string
++  readonly state: 'admitted' | 'consumed' | 'settled' | 'fenced' | 'unknown'
++  readonly nextStep: number
++  readonly answers: readonly string[]
++  readonly attempts: readonly NativeAttempt[]
++  readonly reservedSlots: number
++  readonly reservedTokens: number
++  readonly reservationHeld: boolean
++  readonly localTransport: 'not_started' | 'open' | 'closed' | 'unknown'
++  readonly remoteExecution: 'not_started' | 'response_observed' | 'unknown'
++  readonly usage: TokenUsage | null
++  readonly failureCode: string | null
++}
+diff --git a/packages/experimental/native-run/src/values.ts b/packages/experimental/native-run/src/values.ts
+new file mode 100644
+index 0000000..0f0c7bf
+--- /dev/null
++++ b/packages/experimental/native-run/src/values.ts
+@@ -0,0 +1,161 @@
++/** Strict durable-record parsing and deterministic, non-secret input hashing. */
++import { createHash } from 'node:crypto'
++import { LlmError } from '@deepseek-ai/dsh-llm'
++import type { RequestMessage, TokenUsage } from '@deepseek-ai/dsh-llm'
++import type { NativeAdmission, NativeOperation, NativeTarget, NativeSessionBinding, NativeSessionReceipt } from './types.ts'
++import { NativeOperationId, NativeTargetId } from './ids.ts'
++
++/** Reject a controlled operation with its exact machine-readable reason. */
++export function reject(code: string): never { throw new LlmError(code, code) }
++/** Encode JSON with sorted object keys; unsupported values reject. */
++export function canonical(value: unknown): string {
++  if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value)
++  if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value)
++  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']'
++  if (record(value)) return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonical(value[k])).join(',') + '}'
++  return reject('INVALID_JSON_INPUT')
++}
++/** Hash only the supplied non-secret input; authentication is never passed here. */
++export function digest(value: unknown): string { return createHash('sha256').update(canonical(value)).digest('hex') }
++/** Reproduce only the accepted zero-tool text Messages projection at final wire validation.
++ * Empty native system anchors carry no prompt and are omitted by the provider.
++ * @param input Frozen native or direct text history.
++ * @returns Canonical user/assistant wire turns, merging adjacent equal roles.
++ */
++export function textWire(input: readonly RequestMessage[]): Array<{ role: 'user' | 'assistant'; content: Array<{ type: 'text'; text: string }> }> {
++  const messages: Array<{ role: 'user' | 'assistant'; content: Array<{ type: 'text'; text: string }> }> = []
++  for (const message of input) {
++    if (message.content.some(block => block.type !== 'text')) reject('FINAL_INPUT_CONFLICT')
++    if (message.role === 'system' && message.content.every(block => block.type === 'text' && block.text.length === 0)) continue
++    if (message.role !== 'user' && message.role !== 'assistant') reject('FINAL_INPUT_CONFLICT')
++    const content = message.content.flatMap(block => block.type === 'text' && block.text.length > 0 ? [{ type: 'text' as const, text: block.text }] : [])
++    if (message.role === 'user' && content.length === 0) continue
++    const previous = messages.at(-1)
++    if (previous?.role === message.role) previous.content.push(...content)
++    else messages.push({ role: message.role, content })
++  }
++  return messages
++}
++/** Narrow a parsed JSON object. */
++export function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
++/** Recognize a nonnegative exact integer. */
++export function integer(value: unknown): value is number { return Number.isSafeInteger(value) && Number(value) >= 0 }
++/** Validate a journal-local identifier. */
++export function id(value: unknown): value is string { return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(value) }
++/** Parse the complete persisted native Session relationship.
++ * @param value Parsed candidate binding.
++ * @returns Validated detached binding.
++ */
++export function sessionBinding(value: unknown): NativeSessionBinding {
++  if (!record(value) || Object.keys(value).length !== 4 || !id(value.sessionId)
++    || typeof value.agentPreset !== 'string' || value.agentPreset.length === 0 || value.agentPreset.length > 200
++    || typeof value.controlConfigId !== 'string' || value.controlConfigId.length === 0 || value.controlConfigId.length > 200
++    || typeof value.cwd !== 'string' || !value.cwd.startsWith('/') || value.cwd.includes('\0')) reject('INVALID_SESSION_BINDING')
++  return { sessionId: value.sessionId, agentPreset: value.agentPreset, controlConfigId: value.controlConfigId, cwd: value.cwd }
++}
++/** Parse exact flushed native settlement coordinates and integrity digests.
++ * @param value Candidate receipt.
++ * @returns Validated detached receipt.
++ */
++export function sessionReceipt(value: unknown): NativeSessionReceipt {
++  if (!record(value) || Object.keys(value).length !== 8 || !id(value.sessionId)
++    || !integer(value.turn) || value.turn < 1 || !integer(value.step) || value.step < 1
++    || !integer(value.startSeq) || !integer(value.assistantSeq) || !integer(value.endSeq)
++    || value.startSeq > value.assistantSeq || value.assistantSeq >= value.endSeq
++    || typeof value.assistantDigest !== 'string' || !/^[a-f0-9]{64}$/.test(value.assistantDigest)
++    || typeof value.endDigest !== 'string' || !/^[a-f0-9]{64}$/.test(value.endDigest)) reject('INVALID_SESSION_RECEIPT')
++  return { sessionId: value.sessionId, turn: value.turn, step: value.step, startSeq: value.startSeq,
++    assistantSeq: value.assistantSeq, endSeq: value.endSeq, assistantDigest: value.assistantDigest, endDigest: value.endDigest }
++}
++/** Validate every required authority field read from disk or admission JSON. */
++export function target(value: unknown): NativeTarget {
++  if (!record(value) || !id(value.id) || value.scopeRef !== 'text-only' || value.provider !== 'deepseek-official'
++    || !id(value.model) || !integer(value.maxTokens) || value.maxTokens < 1 || value.reasoningEffort !== 'off'
++    || value.endpoint !== 'https://api.deepseek.com/anthropic/v1/messages'
++    || !['active', 'revoked', 'archived'].includes(String(value.state))) reject('INVALID_BINDING')
++  for (const key of ['runGeneration', 'botEpoch', 'taskEpoch', 'taskRevision', 'authorityEpoch', 'membershipGeneration', 'configVersion']) {
++    if (!integer(value[key]) || Number(value[key]) < 1) reject('INVALID_BINDING')
++  }
++  if (Object.keys(value).length !== (value.sessionBinding === undefined ? 15 : 16)) reject('INVALID_BINDING')
++  const state = value.state
++  if (state !== 'active' && state !== 'revoked' && state !== 'archived') reject('INVALID_BINDING')
++  return { id: NativeTargetId(value.id), runGeneration: Number(value.runGeneration), botEpoch: Number(value.botEpoch), taskEpoch: Number(value.taskEpoch),
++    taskRevision: Number(value.taskRevision), authorityEpoch: Number(value.authorityEpoch), membershipGeneration: Number(value.membershipGeneration),
++    configVersion: Number(value.configVersion), scopeRef: 'text-only', provider: 'deepseek-official', model: value.model, maxTokens: value.maxTokens,
++    reasoningEffort: 'off', endpoint: value.endpoint, state,
++    ...value.sessionBinding === undefined ? {} : { sessionBinding: sessionBinding(value.sessionBinding) } }
++}
++/** Validate one complete immutable queued input. */
++export function admission(value: unknown, maxSteps: number): NativeAdmission {
++  if (!record(value) || !id(value.id) || !id(value.targetId) || !['contact', 'execution'].includes(String(value.kind))
++    || !Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > maxSteps
++    || value.steps.some(step => typeof step !== 'string' || step.length < 1 || Buffer.byteLength(step) > 4096)) reject('INVALID_ADMISSION')
++  const binding = target(value.binding)
++  if (value.targetId !== binding.id || Object.keys(value).length !== 5) reject('INVALID_ADMISSION')
++  const kind = value.kind
++  if (kind !== 'contact' && kind !== 'execution') reject('INVALID_ADMISSION')
++  return { id: NativeOperationId(value.id), targetId: NativeTargetId(value.targetId), kind, binding,
++    steps: value.steps.map(step => typeof step === 'string' ? step : reject('INVALID_ADMISSION')) }
++}
++/** Hash the admitted text and generation together. */
++export function admissionDigest(value: NativeAdmission): string {
++  return digest({ id: value.id, targetId: value.targetId, kind: value.kind, binding: value.binding, steps: value.steps })
++}
++/** Accept usage only from an observed terminal response with exact counts. */
++export function usage(value: unknown): value is TokenUsage {
++  if (!record(value) || !integer(value.inputTokens) || !integer(value.outputTokens)) return false
++  for (const key of ['totalTokens', 'cacheReadTokens', 'cacheWriteTokens', 'reasoningTokens']) {
++    if (value[key] !== undefined && !integer(value[key])) return false
++  }
++  const total = Number(value.inputTokens) + Number(value.outputTokens) + Number(value.cacheReadTokens ?? 0) + Number(value.cacheWriteTokens ?? 0)
++  return value.totalTokens === undefined || value.totalTokens === total
++}
++/** Sum independently observed step usage; unknown attempts are never counted as zero. */
++export function knownUsage(op: NativeOperation): TokenUsage {
++  let inputTokens = 0; let outputTokens = 0; let cacheReadTokens = 0; let cacheWriteTokens = 0
++  for (const attempt of op.attempts) {
++    if (attempt.usage === null) continue
++    inputTokens += attempt.usage.inputTokens; outputTokens += attempt.usage.outputTokens
++    cacheReadTokens += attempt.usage.cacheReadTokens ?? 0; cacheWriteTokens += attempt.usage.cacheWriteTokens ?? 0
++  }
++  return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens }
++}
++/** Validate complete durable operation rows before any driver or inspection reads them. */
++export function operation(value: unknown, maxSteps: number): NativeOperation {
++  if (!record(value)) reject('JOURNAL_CORRUPT')
++  let input: NativeAdmission
++  try { input = admission({ id: value.id, targetId: value.targetId, kind: value.kind, binding: value.binding, steps: value.steps }, maxSteps) }
++  catch (_invalidDurableAdmission) { reject('JOURNAL_CORRUPT') }
++  if (!['admitted', 'consumed', 'settled', 'fenced', 'unknown'].includes(String(value.state))
++    || !integer(value.nextStep) || !Array.isArray(value.steps) || value.nextStep > value.steps.length
++    || !Array.isArray(value.answers) || value.answers.length !== value.nextStep || value.answers.some(v => typeof v !== 'string')
++    || !Array.isArray(value.attempts) || !integer(value.reservedTokens) || value.reservedTokens < 1 || value.reservedSlots !== 1
++    || typeof value.reservationHeld !== 'boolean' || !['not_started', 'open', 'closed', 'unknown'].includes(String(value.localTransport))
++    || !['not_started', 'response_observed', 'unknown'].includes(String(value.remoteExecution))
++    || !(value.usage === null || usage(value.usage)) || !(value.failureCode === null || typeof value.failureCode === 'string')) reject('JOURNAL_CORRUPT')
++  for (const attempt of value.attempts) {
++    if (!record(attempt) || !integer(attempt.step) || attempt.step >= value.steps.length
++      || typeof attempt.wireDigest !== 'string' || !/^[a-f0-9]{64}$/.test(attempt.wireDigest)
++      || !['intent', 'observed', 'unknown'].includes(String(attempt.state))
++      || !(attempt.usage === null || usage(attempt.usage))) reject('JOURNAL_CORRUPT')
++    if (attempt.sessionReceipt !== undefined) {
++      const receipt = sessionReceipt(attempt.sessionReceipt)
++      if (input.binding.sessionBinding === undefined || receipt.sessionId !== input.binding.sessionBinding.sessionId || attempt.state !== 'observed') reject('JOURNAL_CORRUPT')
++    }
++    if (input.binding.sessionBinding !== undefined && attempt.state === 'observed' && attempt.sessionReceipt === undefined) reject('JOURNAL_CORRUPT')
++  }
++  const op: NativeOperation = { ...input,
++    inputDigest: typeof value.inputDigest === 'string' ? value.inputDigest : reject('JOURNAL_CORRUPT'),
++    state: value.state as NativeOperation['state'], nextStep: value.nextStep,
++    answers: value.answers.map(answer => typeof answer === 'string' ? answer : reject('JOURNAL_CORRUPT')),
++    attempts: value.attempts.map(attempt => ({ step: Number(attempt.step), wireDigest: String(attempt.wireDigest),
++      state: attempt.state as NativeOperation['attempts'][number]['state'], usage: attempt.usage === null ? null : usage(attempt.usage) ? attempt.usage : reject('JOURNAL_CORRUPT'),
++      ...attempt.sessionReceipt === undefined ? {} : { sessionReceipt: sessionReceipt(attempt.sessionReceipt) } })),
++    reservedSlots: 1, reservedTokens: value.reservedTokens, reservationHeld: value.reservationHeld,
++    localTransport: value.localTransport as NativeOperation['localTransport'], remoteExecution: value.remoteExecution as NativeOperation['remoteExecution'],
++    usage: value.usage === null ? null : usage(value.usage) ? value.usage : reject('JOURNAL_CORRUPT'),
++    failureCode: value.failureCode === null ? null : typeof value.failureCode === 'string' ? value.failureCode : reject('JOURNAL_CORRUPT') }
++  if (op.inputDigest !== admissionDigest(op) || (op.state === 'unknown' && (!op.reservationHeld || op.usage !== null))
++    || (op.state === 'settled' && (op.reservationHeld || op.nextStep !== op.steps.length || op.usage === null))) reject('JOURNAL_CORRUPT')
++  return op
++}
+diff --git a/packages/experimental/native-run/tsconfig.json b/packages/experimental/native-run/tsconfig.json
+new file mode 100644
+index 0000000..ecfea14
+--- /dev/null
++++ b/packages/experimental/native-run/tsconfig.json
+@@ -0,0 +1,54 @@
++{
++  "extends": "../../../tsconfig.base.json",
++  "compilerOptions": {
++    "rootDir": "src",
++    "outDir": "lib/types"
++  },
++  "include": [
++    "src"
++  ],
++  "references": [
++    {
++      "path": "../../util/brand"
++    },
++    {
++      "path": "../../util/values"
++    },
++    {
++      "path": "../../llm/llm"
++    },
++    {
++      "path": "../../llm/llm-deepseek"
++    },
++    {
++      "path": "../../../native/system/packages/entry"
++    },
++    {
++      "path": "../../../vendor/cordis"
++    },
++    {
++      "path": "../../core/agent"
++    },
++    {
++      "path": "../../core/agent-loop"
++    },
++    {
++      "path": "../../core/scope"
++    },
++    {
++      "path": "../../core/session"
++    },
++    {
++      "path": "../../preset/agent-preset-registry"
++    },
++    {
++      "path": "../../session/session-persistence"
++    },
++    {
++      "path": "../../session/session-projection"
++    },
++    {
++      "path": "../../core/tools"
++    }
++  ]
++}
+diff --git a/packages/experimental/native-run/tsdown.config.ts b/packages/experimental/native-run/tsdown.config.ts
+new file mode 100644
+index 0000000..17a4264
+--- /dev/null
++++ b/packages/experimental/native-run/tsdown.config.ts
+@@ -0,0 +1,4 @@
++import { defineConfig } from 'tsdown'
++
++/** Build the private explicit acceptance entry without shipped-profile registration. */
++export default defineConfig({ entry: ['lib/types/index.js'], outDir: 'lib', format: ['esm'], platform: 'node', target: 'es2024', fixedExtension: false, dts: false, clean: false })
+diff --git a/packages/extensions/tool-cordis/src/api-catalog.ts b/packages/extensions/tool-cordis/src/api-catalog.ts
+index a7043c7..377cae5 100644
+--- a/packages/extensions/tool-cordis/src/api-catalog.ts
++++ b/packages/extensions/tool-cordis/src/api-catalog.ts
+@@ -946,6 +946,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
+       },
+     ],
+   },
++  {
++    key: 'deepseekProtectedProviders',
++    summary: 'Provider definition directory; it neither grants human authority nor exposes credentials.',
++    description: 'Provider definition directory; it neither grants human authority nor exposes credentials.',
++    methods: [
++      {
++        signature: 'register(provider: string, factory: DeepSeekProviderFactory): () => Promise<void>',
++        description: 'Publish a factory under the actual provider fiber lifetime.',
++        parameters: [{ name: 'provider', description: 'Exact provider-owned route.' }, { name: 'factory', description: 'Opaque factory created by that provider.' }],
++        returns: 'Fiber-owned idempotent withdrawal capability.',
++      },
++      {
++        signature: 'lookup(provider: string): DeepSeekProviderFactory | undefined',
++        description: 'Resolve an opaque provider factory without reading credentials or discovering models.',
++        parameters: [{ name: 'provider', description: 'Exact route requested by an owned native consumer.' }],
++        returns: 'Current provider-owned capability, or absence.',
++      },
++    ],
++  },
+   {
+     key: 'directoryPicker',
+     summary: 'Abstract directory-picking service.',
+@@ -1451,6 +1470,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
+         parameters: [{ name: 'config', description: 'provider/model route and optional request controls.' }, { name: 'signal', description: 'optional cancellation for adapter-owned capability lookup.' }],
+         returns: 'a prepared config and its registration-bound stream entry point.',
+       },
++      {
++        signature: 'createProtectedCalls(sessionId: NonNullable<GenerateOptions[\'sessionId\']>, provider: string, adapter: LlmAdapter, beforeStream: (options: GenerateOptions) => Promise<void>): ProtectedModelCalls',
++        description: 'Mint an opaque Session capability without registering an ordinary adapter route. Sealing requires ordinary-call quiescence and remains a denial tombstone.',
++        parameters: [{ name: 'sessionId', description: 'Exact Session identity.' }, { name: 'provider', description: 'Provider-owned route.' }, { name: 'adapter', description: 'Private guarded adapter, retained inside the returned closure.' }, { name: 'beforeStream', description: 'Required asynchronous owned persistence checkpoint.' }],
++        returns: 'Frozen full-metadata call factory; no adapter or resolver is exposed.',
++      },
+       {
+         signature: 'stream(options: GenerateOptions): AsyncIterable<StreamChunk>',
+         description: 'Stream one model call as raw chunks (token-level deltas). Replay state is retained only when the same adapter instance owns its historical provider and the target provider. Final adapter selection remains fixed through asynchronous exact-model resolution and dispatch. Adapter selection, dispatch, and iteration failures become terminal `error` or `aborted` finish chunks; middleware, nested-call, cleanup, and consumer failures remain thrown.',
+@@ -4475,7 +4500,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+   },
+   {
+     name: 'AgentHandle',
+-    declaration: 'export interface AgentHandle {\n    agent: Agent;\n    dispose(): Promise<void>;\n}',
++    declaration: 'export interface AgentHandle {\n    agent: Agent;\n    dispose(): Promise<void>;\n    protectModelCalls?(calls: import(\'@deepseek-ai/dsh-llm\').ProtectedModelCalls): void;\n}',
+   },
+   {
+     name: 'AgentOptions',
+@@ -4951,7 +4976,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+   },
+   {
+     name: 'CreateAgentOptions',
+-    declaration: 'export interface CreateAgentOptions {\n    readonly sessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly isSeeded?: boolean;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n    };\n    readonly inheritedEventCount?: SessionLogOffset;\n    readonly seed?: readonly SessionEvent[];\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
++    declaration: 'export interface CreateAgentOptions {\n    readonly protectedModelCalls?: import(\'@deepseek-ai/dsh-llm\').ProtectedModelCalls;\n    readonly sessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly isSeeded?: boolean;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n    };\n    readonly inheritedEventCount?: SessionLogOffset;\n    readonly seed?: readonly SessionEvent[];\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
+   },
+   {
+     name: 'CreateGoalRequest',
+@@ -5009,6 +5034,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     name: 'DailyScheduleRecord',
+     declaration: 'export interface DailyScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'daily\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly time: string;\n    readonly timeZone: string;\n    readonly scheduledAt: string;\n}',
+   },
++  {
++    name: 'DeepSeekDispatchControl',
++    declaration: 'export interface DeepSeekDispatchControl {\n    checkAdmission(options: GenerateOptions): void;\n    checkDispatch(options: GenerateOptions, input: DeepSeekDispatchInput): void;\n}',
++  },
++  {
++    name: 'DeepSeekDispatchInput',
++    declaration: 'export interface DeepSeekDispatchInput {\n    readonly endpoint: string;\n    readonly payload: string;\n}',
++  },
+   {
+     name: 'DeepSeekLlmApiExtensionMap',
+     declaration: 'export interface DeepSeekLlmApiExtensionMap {\n}',
+@@ -5025,6 +5058,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     name: 'DeepSeekLlmApiJson',
+     declaration: 'export type DeepSeekLlmApiJson = null | boolean | number | string | DeepSeekLlmApiJson[] | {\n    [key: string]: DeepSeekLlmApiJson;\n};',
+   },
++  {
++    name: 'DeepSeekProviderFactory',
++    declaration: 'export interface DeepSeekProviderFactory {\n    protectSession(sessionId: NonNullable<GenerateOptions[\'sessionId\']>, control: DeepSeekSessionControl): ProtectedModelCalls;\n}',
++  },
++  {
++    name: 'DeepSeekSessionControl',
++    declaration: 'export interface DeepSeekSessionControl extends DeepSeekDispatchControl {\n    beforeStream(options: GenerateOptions): Promise<void>;\n}',
++  },
+   {
+     name: 'DeliveryRetentionBounds',
+     declaration: 'export interface DeliveryRetentionBounds {\n    readonly days: number;\n    readonly records: number;\n}',
+@@ -5639,7 +5680,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+   },
+   {
+     name: 'LlmRuntime',
+-    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions) /* …truncated — full shape in source */',
++    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    createProtectedCalls(sessionId:  /* …truncated — full shape in source */',
+   },
+   {
+     name: 'LocalAtInput',
+@@ -6085,6 +6126,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+     name: 'PromptSectionOrderName',
+     declaration: 'export type PromptSectionOrderName = keyof typeof SECTION_ORDERS;',
+   },
++  {
++    name: 'ProtectedModelCalls',
++    declaration: 'export interface ProtectedModelCalls {\n    readonly sessionId: NonNullable<GenerateOptions[\'sessionId\']>;\n    prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n}',
++  },
+   {
+     name: 'ProviderRequestId',
+     declaration: 'export type ProviderRequestId = Branded<\'ProviderRequestId\'>;',
+@@ -6259,7 +6304,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
+   },
+   {
+     name: 'ResumeAgentOptions',
+-    declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
++    declaration: 'export interface ResumeAgentOptions {\n    readonly protectedModelCalls?: import(\'@deepseek-ai/dsh-llm\').ProtectedModelCalls;\n    readonly resumeSessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
+   },
+   {
+     name: 'RpcId',
+diff --git a/packages/llm/llm-deepseek/src/adapter.ts b/packages/llm/llm-deepseek/src/adapter.ts
+index 20e8997..607a3aa 100644
+--- a/packages/llm/llm-deepseek/src/adapter.ts
++++ b/packages/llm/llm-deepseek/src/adapter.ts
+@@ -5,7 +5,7 @@ import type { GenerateOptions, ImageAttachmentAccessResolver, PreparedAdapterCal
+ import type { DeepSeekLlmApiJson } from '@deepseek-ai/dsh-deepseek-llm-api-extensions'
+ import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
+ import { modelInfo } from './model-info.ts'
+-import type { DeepSeekAdapterOptions, DeepSeekConnectionOptions as Connection } from './types.ts'
++import type { DeepSeekAdapterOptions, DeepSeekConnectionOptions as Connection, DeepSeekDispatchControl } from './types.ts'
+ import { DeepSeekFileStore } from './file-store.ts'
+ import { MESSAGES_FILES_BETA, MESSAGES_TOOL_CHANGES_BETA, messagesApiRoot } from './messages-api.ts'
+ import { FileResolutionFailure, RequestFiles } from './request-files.ts'
+@@ -18,6 +18,7 @@ import { providerError, providerErrorDetail } from './transport.ts'
+ 
+ /** DeepSeek provider using Messages content and native thinking replay. */
+ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapter {
++  private readonly dispatchControl: DeepSeekDispatchControl | undefined
+   private readonly files: DeepSeekFileStore
+   private readonly imageAccess: ImageAttachmentAccessResolver = (ref) => {
+     const attachments = this.dependencies.resolveAttachments?.()
+@@ -26,6 +27,16 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
+ 
+   constructor(private readonly dependencies: DeepSeekAdapterOptions<C>) {
+     super()
++    const control = dependencies.dispatchControl
++    if (control !== undefined) {
++      if (typeof control.checkAdmission !== 'function' || typeof control.checkDispatch !== 'function') {
++        throw new LlmError('CONTROLLED_GUARD_REQUIRED', 'CONTROLLED_GUARD_REQUIRED')
++      }
++      this.dispatchControl = Object.freeze({
++        checkAdmission: control.checkAdmission.bind(control),
++        checkDispatch: control.checkDispatch.bind(control),
++      })
++    }
+     this.files = dependencies.resolveFiles?.() ?? new DeepSeekFileStore()
+   }
+ 
+@@ -49,6 +60,7 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
+   }
+ 
+   private async * generate(options: GenerateOptions, connection: C): AsyncGenerator<StreamChunk> {
++    this.checkSynchronousGuard(this.dispatchControl?.checkAdmission(options))
+     const consumer = new AbortController()
+     const signal = options.signal === undefined ? consumer.signal : AbortSignal.any([consumer.signal, options.signal])
+     using watchdog = idleWatchdog(signal, connection.streamIdleTimeoutMs, 'MESSAGES_IDLE')
+@@ -117,9 +129,10 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
+             ? [MESSAGES_TOOL_CHANGES_BETA]
+             : [],
+         ]
+-        const response = await fetch(`${messagesApiRoot(connection.baseURL)}/messages`, {
++        const input = Object.freeze({ endpoint: `${messagesApiRoot(connection.baseURL)}/messages`, payload: extensions.payload })
++        const init = Object.freeze({
+           method: 'POST', signal, body: extensions.payload, redirect: 'error',
+-          headers: {
++          headers: Object.freeze({
+             ...attributionHeaders(),
+             'content-type': 'application/json', 'accept': 'text/event-stream',
+             ...auth.headers,
+@@ -128,8 +141,10 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
+             'x-deepseek-harness-user-id': this.dependencies.resolveUserId(),
+             ...options.sessionId === undefined ? {} : { 'x-deepseek-harness-session-id': String(options.sessionId) },
+             ...options.purpose === 'compaction' ? { 'x-deepseek-harness-compact': '1' } : {},
+-          },
++          }),
+         })
++        this.checkSynchronousGuard(this.dispatchControl?.checkDispatch(options, input))
++        const response = await fetch(input.endpoint, init)
+         if (!response.ok) {
+           const text = await response.text()
+           let raw: unknown
+@@ -144,7 +159,7 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
+         }
+         await extensions.accept()
+         if (response.body === null) throw new LlmError('DeepSeek Messages returned no response body', 'EMPTY_RESPONSE')
+-        yield* translate(parseSse(response.body, activity), options.model)
++        yield* translate(parseSse(response.body, activity), options.model, this.dispatchControl !== undefined)
+         return
+       }
+     } catch (error) {
+@@ -157,4 +172,12 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
+       throw error
+     }
+   }
++
++  private checkSynchronousGuard(result: unknown): void {
++    if (result === undefined) return
++    void Promise.resolve(result).catch((_invalidAsyncGuard) => {
++      // The invalid guard already rejects the request synchronously; contain its later failure.
++    })
++    throw new LlmError('CONTROLLED_GUARD_INVALID', 'CONTROLLED_GUARD_INVALID')
++  }
+ }
+diff --git a/packages/llm/llm-deepseek/src/host.ts b/packages/llm/llm-deepseek/src/host.ts
+index cbe340c..fd2f1a4 100644
+--- a/packages/llm/llm-deepseek/src/host.ts
++++ b/packages/llm/llm-deepseek/src/host.ts
+@@ -1,26 +1,63 @@
+ /** Shared Host wiring for the DeepSeek protocol adapter. */
+ import type { Context } from '@deepseek-ai/cordis'
++import { symbols } from '@deepseek-ai/cordis'
+ import type {} from '@deepseek-ai/dsh-settings'
+ import type {} from '@deepseek-ai/cordis-plugin-loader'
+ import type {} from '@deepseek-ai/dsh-fs'
+ import { resolveImageAttachmentAccess } from '@deepseek-ai/dsh-llm'
++import type { GenerateOptions, ProtectedModelCalls } from '@deepseek-ai/dsh-llm'
+ import { getOrCreateAnonymousUserId, type AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
+ import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
+ import { DeepSeekAdapter } from './adapter.ts'
+-import type { DeepSeekAdapterOptions, DeepSeekConnectionOptions } from './types.ts'
++import type { DeepSeekAdapterOptions, DeepSeekConnectionOptions, DeepSeekDispatchControl } from './types.ts'
++import type {} from './protected-providers.ts'
++
++const providerFactories = new WeakMap<object, object>()
++function actualRuntime(runtime: Context['llm']): object {
++  const original: unknown = Reflect.get(runtime, symbols.original)
++  return original !== null && typeof original === 'object' ? original : runtime
++}
++
++/** Recognize a provider-created capability owned by this actual LLM runtime.
++ * @param value Candidate factory identity, never serialized data.
++ * @param runtime Exact owner runtime where the native Session will run.
++ * @returns Whether the provider privately created this factory in that runtime.
++ */
++export function isDeepSeekProviderFactory(value: unknown, runtime: Context['llm'] | undefined): value is DeepSeekProviderFactory {
++  return runtime !== undefined && value !== null && typeof value === 'object'
++    && providerFactories.get(value) === actualRuntime(runtime)
++}
++
++/** Owned control and persistence checkpoint; credentials never cross this interface. */
++export interface DeepSeekSessionControl extends DeepSeekDispatchControl {
++  /** Flush the exact owned native Session before entering guarded transport.
++   * @param options Actual native request to checkpoint and revalidate.
++   */
++  beforeStream(options: GenerateOptions): Promise<void>
++}
++/** Provider-owned opaque factory available only to trusted same-process consumers. */
++export interface DeepSeekProviderFactory {
++  /** Permanently seal ordinary calls and mint a private guarded adapter factory.
++   * @param sessionId Exact native Session identity.
++   * @param control Mandatory admission, final dispatch and checkpoint controls.
++   * @returns An opaque native call capability without credential callbacks.
++   */
++  protectSession(sessionId: NonNullable<GenerateOptions['sessionId']>, control: DeepSeekSessionControl): ProtectedModelCalls
++}
+ 
+ /**
+  * Register one provider with request-local transport services and live retry policy.
+  * @param ctx - provider plugin lifetime with the LLM registry injected.
+  * @param provider - exact route owned by this plugin.
+  * @param dependencies - provider-owned discovery, credential, and configuration callbacks.
++ * @returns Provider-owned protected Session call factory.
+  */
+ export function registerDeepSeekProvider<C extends DeepSeekConnectionOptions>(
+   ctx: Context, provider: string, dependencies: Pick<DeepSeekAdapterOptions<C>,
+-  'options' | 'resolveAuth' | 'providerName' | 'discoverModels'>): void {
++  'options' | 'resolveAuth' | 'providerName' | 'discoverModels'>): DeepSeekProviderFactory {
+   ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
+   let userId: AnonymousUserId | undefined
+-  const adapter = new DeepSeekAdapter({
++  const ownedDependencies = Object.freeze<DeepSeekAdapterOptions<C>>({
+     ...dependencies,
+     resolveUserId: () => userId ??= getOrCreateAnonymousUserId(),
+     onReplayDegrade: ({ provider, model, reason }) => {
+@@ -36,6 +73,7 @@ export function registerDeepSeekProvider<C extends DeepSeekConnectionOptions>(
+     prepareExtensions: request => ctx.get('deepseekLlmApiExtensions')?.prepare(request)
+       ?? Promise.resolve({ fields: {}, accept: () => Promise.resolve() }),
+   })
++  const adapter = new DeepSeekAdapter(ownedDependencies)
+   const registration = ctx.llm.registerAdapter([provider], adapter)
+   let registeredPolicy = dependencies.options().retryPolicy
+   ctx.on('loader/volatile-update', () => {
+@@ -46,4 +84,28 @@ export function registerDeepSeekProvider<C extends DeepSeekConnectionOptions>(
+     registration.replace([provider])
+     registeredPolicy = policy
+   })
++  const factory = Object.freeze<DeepSeekProviderFactory>({ protectSession: (sessionId, control) => {
++    ctx.fiber.assertActive()
++    if (typeof control?.beforeStream !== 'function' || typeof control.checkAdmission !== 'function'
++      || typeof control.checkDispatch !== 'function') throw new Error('INVALID_SESSION_CONTROL')
++    const checkpoint = control.beforeStream.bind(control)
++    const admission = control.checkAdmission.bind(control)
++    const dispatch = control.checkDispatch.bind(control)
++    const controlled = new DeepSeekAdapter({ ...ownedDependencies, dispatchControl: {
++      checkAdmission: (options) => { ctx.fiber.assertActive(); admission(options) },
++      checkDispatch: (options, input) => { ctx.fiber.assertActive(); dispatch(options, input) },
++    } })
++    return ctx.llm.createProtectedCalls(sessionId, provider, controlled, async (options) => {
++      ctx.fiber.assertActive()
++      await checkpoint(options)
++      ctx.fiber.assertActive()
++    })
++  } })
++  providerFactories.set(factory, actualRuntime(ctx.llm))
++  // The directory is an explicit host opt-in. Actual API-key providers publish
++  // the factory made above through this path; auth callbacks remain closed over.
++  ctx.inject(['deepseekProtectedProviders'], (child) => {
++    child.deepseekProtectedProviders.register(provider, factory)
++  })
++  return factory
+ }
+diff --git a/packages/llm/llm-deepseek/src/index.ts b/packages/llm/llm-deepseek/src/index.ts
+index 623dbea..c6d3f04 100644
+--- a/packages/llm/llm-deepseek/src/index.ts
++++ b/packages/llm/llm-deepseek/src/index.ts
+@@ -15,7 +15,7 @@ export {
+   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+ } from './defaults.ts'
+ export { DeepSeekAdapter } from './adapter.ts'
+-export type { DeepSeekRequestAuth, DeepSeekAdapterOptions, DeepSeekCatalogModel, DeepSeekConnectionOptions } from './types.ts'
++export type { DeepSeekRequestAuth, DeepSeekAdapterOptions, DeepSeekCatalogModel, DeepSeekConnectionOptions, DeepSeekDispatchControl, DeepSeekDispatchInput } from './types.ts'
+ export {
+   DEFAULT_LOW_DETAIL_IMAGE_PIXEL_BUDGET,
+   DEFAULT_MAX_IMAGES_PER_REQUEST,
+@@ -38,4 +38,6 @@ export type { DeepSeekUploadRecord } from './upload-index.ts'
+ export type { RequestDefaults } from './types.ts'
+ 
+ export { catalogModelInfo } from './model-info.ts'
+-export { registerDeepSeekProvider } from './host.ts'
++export { registerDeepSeekProvider, isDeepSeekProviderFactory } from './host.ts'
++export type { DeepSeekProviderFactory, DeepSeekSessionControl } from './host.ts'
++export { DeepSeekProtectedProviders } from './protected-providers.ts'
+diff --git a/packages/llm/llm-deepseek/src/protected-providers.ts b/packages/llm/llm-deepseek/src/protected-providers.ts
+new file mode 100644
+index 0000000..5e0a508
+--- /dev/null
++++ b/packages/llm/llm-deepseek/src/protected-providers.ts
+@@ -0,0 +1,36 @@
++/** Explicit non-RPC host opt-in for opaque factories; absent from shipped profiles. */
++import { Service } from '@deepseek-ai/cordis'
++import type { Context } from '@deepseek-ai/cordis'
++import type { DeepSeekProviderFactory } from './host.ts'
++
++declare module '@deepseek-ai/cordis' {
++  interface Context {
++    /** Trusted same-process provider capability directory, without auth callbacks. */
++    deepseekProtectedProviders: DeepSeekProtectedProviders
++  }
++}
++
++/** Provider definition directory; it neither grants human authority nor exposes credentials. */
++export class DeepSeekProtectedProviders extends Service {
++  private factories = new Map<string, DeepSeekProviderFactory>()
++  constructor(ctx: Context) { super(ctx, 'deepseekProtectedProviders') }
++
++  /** Publish a factory under the actual provider fiber lifetime.
++   * @param provider Exact provider-owned route.
++   * @param factory Opaque factory created by that provider.
++   * @returns Fiber-owned idempotent withdrawal capability.
++   */
++  register(provider: string, factory: DeepSeekProviderFactory): () => Promise<void> {
++    return this.ctx.effect(() => {
++      if (this.factories.has(provider)) throw new Error('PROTECTED_PROVIDER_CONFLICT')
++      this.factories.set(provider, factory)
++      return () => { if (this.factories.get(provider) === factory) this.factories.delete(provider) }
++    }, 'deepseekProtectedProviders.register()')
++  }
++
++  /** Resolve an opaque provider factory without reading credentials or discovering models.
++   * @param provider Exact route requested by an owned native consumer.
++   * @returns Current provider-owned capability, or absence.
++   */
++  lookup(provider: string): DeepSeekProviderFactory | undefined { return this.factories.get(provider) }
++}
+diff --git a/packages/llm/llm-deepseek/src/translate.ts b/packages/llm/llm-deepseek/src/translate.ts
+index deb9011..f3c6a04 100644
+--- a/packages/llm/llm-deepseek/src/translate.ts
++++ b/packages/llm/llm-deepseek/src/translate.ts
+@@ -99,17 +99,22 @@ function stopReason(raw: unknown): FinishReason {
+ /** Translate decoded SSE data into the Harness stream protocol.
+  * @param events - framed, decoded provider events in arrival order.
+  * @param model - requested model id stored in durable replay state.
++ * @param requireCompleteUsage - Require an observed input count and terminal output count for controlled settlement.
+  * @returns blocks, one final usage value, and exactly one terminal finish.
+  */
+-export async function* translate(events: AsyncIterable<Record<string, unknown>>, model: string): AsyncGenerator<StreamChunk> {
++export async function* translate(events: AsyncIterable<Record<string, unknown>>, model: string, requireCompleteUsage = false): AsyncGenerator<StreamChunk> {
+   const blocks = new Map<number, Block>()
+   const usage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
+   let started = false
++  let inputObserved = false
++  let terminalOutputObserved = false
+   let reason: FinishReason | undefined
+   for await (const event of events) {
+     if (event.type === 'message_start') {
+       if (started) return malformed('duplicate message_start')
+-      updateUsage(usage, object(event.message).usage)
++      const rawUsage = object(object(event.message).usage)
++      updateUsage(usage, rawUsage)
++      inputObserved = rawUsage.input_tokens !== undefined
+       started = true
+       continue
+     }
+@@ -143,7 +148,12 @@ export async function* translate(events: AsyncIterable<Record<string, unknown>>,
+     } else if (event.type === 'message_delta') {
+       const delta = object(event.delta)
+       if (delta.stop_reason != null) reason = stopReason(delta.stop_reason)
+-      if (event.usage !== undefined) updateUsage(usage, event.usage)
++      if (event.usage !== undefined) {
++        const rawUsage = object(event.usage)
++        updateUsage(usage, rawUsage)
++        inputObserved ||= rawUsage.input_tokens !== undefined
++        if (delta.stop_reason != null) terminalOutputObserved = rawUsage.output_tokens !== undefined
++      }
+     } else {
+       if (reason === undefined || [...blocks.values()].some(block => !block.closed)) return malformed('message_stop without settled blocks and stop reason')
+       if (blocks.size === 0 && reason.kind === 'stop') throw new LlmError('DeepSeek Messages returned no content', 'EMPTY_RESPONSE')
+@@ -156,6 +166,7 @@ export async function* translate(events: AsyncIterable<Record<string, unknown>>,
+           object(parsed)
+         }
+       }
++      if (requireCompleteUsage && (!inputObserved || !terminalOutputObserved)) throw new LlmError('Controlled response omitted terminal usage', 'SETTLEMENT_UNKNOWN')
+       usage.totalTokens = usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+       yield { type: 'usage', usage }
+       yield { type: 'finish', reason, replayState: replayState(model, [...blocks.values()].map(block => block.replay)) }
+diff --git a/packages/llm/llm-deepseek/src/types.ts b/packages/llm/llm-deepseek/src/types.ts
+index f8ecb1b..0ab605f 100644
+--- a/packages/llm/llm-deepseek/src/types.ts
++++ b/packages/llm/llm-deepseek/src/types.ts
+@@ -4,6 +4,21 @@ import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attac
+ import type { AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
+ import type { DeepSeekLlmApiExtensionRequest, PreparedDeepSeekLlmApiExtensions } from '@deepseek-ai/dsh-deepseek-llm-api-extensions'
+ import type { DeepSeekFileStore, DeepSeekFilePolicy } from './file-store.ts'
++import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
++
++/** Non-secret immutable request fields passed to the synchronous dispatch owner. */
++export interface DeepSeekDispatchInput {
++  readonly endpoint: string
++  readonly payload: string
++}
++
++/** A constructor-bound controller required for every call on a controlled adapter. */
++export interface DeepSeekDispatchControl {
++  /** Reject missing admission before async auth or preparation; never perform I/O. */
++  checkAdmission(options: GenerateOptions): void
++  /** Commit the final intent and enforce authority synchronously, immediately before fetch. */
++  checkDispatch(options: GenerateOptions, input: DeepSeekDispatchInput): void
++}
+ 
+ /** One optional model entry advertised by the direct-fetch adapter. */
+ export interface DeepSeekCatalogModel {
+@@ -91,6 +106,8 @@ export interface DeepSeekRequestAuth {
+ 
+ /** Constructor options for {@link DeepSeekAdapter}: the operation-local resolution hooks the plugin owns. */
+ export interface DeepSeekAdapterOptions<Connection extends DeepSeekConnectionOptions = DeepSeekConnectionOptions> {
++  /** Opt in the whole adapter instance; missing callbacks and unbound calls reject, including internal retries. */
++  dispatchControl?: DeepSeekDispatchControl
+   /** Report unusable native Messages replay metadata without exposing content or signatures. */
+   onReplayDegrade?: (detail: { provider: string; model: string; reason: string }) => void
+   /** Report extension fields omitted from one request because the merged request failed to serialize. */
+diff --git a/packages/llm/llm/src/index.ts b/packages/llm/llm/src/index.ts
+index d67245d..a825af0 100644
+--- a/packages/llm/llm/src/index.ts
++++ b/packages/llm/llm/src/index.ts
+@@ -191,6 +191,26 @@ export interface PreparedLlmCall {
+   stream(options: GenerateOptions): AsyncIterable<StreamChunk>
+ }
+ 
++/** Process-local Session call capability minted by a provider-owned adapter. */
++export interface ProtectedModelCalls {
++  /** Exact Session whose native driver may hold this capability. */
++  readonly sessionId: NonNullable<GenerateOptions['sessionId']>
++  /** Prepare full native call metadata while retaining the protected adapter.
++   * @param config Proposed route and controls.
++   * @param signal Optional preparation cancellation.
++   * @returns One-shot protected prepared call.
++   */
++  prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>
++}
++const protectedCallCapabilities = new WeakSet<object>()
++/** Verify an actual process-local capability, rather than JSON or a structural imitation.
++ * @param calls Candidate value received at an owned native handle boundary.
++ * @returns Whether LlmRuntime minted this exact object.
++ */
++export function isProtectedModelCalls(calls: unknown): calls is ProtectedModelCalls {
++  return calls !== null && typeof calls === 'object' && protectedCallCapabilities.has(calls)
++}
++
+ /** One adapter-owned model-resolution generation bound to its eventual stream call. */
+ export interface PreparedAdapterCall {
+   /** Exact model metadata from the same adapter generation as {@link stream}. */
+@@ -341,6 +361,8 @@ export interface DirectoryRegistrationHandle {
+  */
+ export class LlmRuntime extends TypertRemoteService {
+   private adapters = new Map<string, AdapterRegistration>()
++  private protectedSessions = new Set<NonNullable<GenerateOptions['sessionId']>>()
++  private ordinarySessionCalls = new Map<NonNullable<GenerateOptions['sessionId']>, number>()
+   private directory = new Map<string, LlmConfigurableProvider>()
+   private discoveries = new Map<
+     string,
+@@ -935,6 +957,41 @@ export class LlmRuntime extends TypertRemoteService {
+    */
+   async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall> {
+     const registration = this.registration(config.provider)
++    return this.prepareRegisteredCall(registration, config, signal)
++  }
++
++  /** Mint an opaque Session capability without registering an ordinary adapter route.
++   * Sealing requires ordinary-call quiescence and remains a denial tombstone.
++   * @param sessionId Exact Session identity.
++   * @param provider Provider-owned route.
++   * @param adapter Private guarded adapter, retained inside the returned closure.
++   * @param beforeStream Required asynchronous owned persistence checkpoint.
++   * @returns Frozen full-metadata call factory; no adapter or resolver is exposed.
++   */
++  createProtectedCalls(sessionId: NonNullable<GenerateOptions['sessionId']>, provider: string,
++    adapter: LlmAdapter, beforeStream: (options: GenerateOptions) => Promise<void>): ProtectedModelCalls {
++    if (typeof sessionId !== 'string' || sessionId.length === 0 || typeof beforeStream !== 'function') {
++      throw new LlmError('invalid protected call capability', 'INVALID_PROTECTED_CALLS')
++    }
++    if ((this.ordinarySessionCalls.get(sessionId) ?? 0) !== 0) {
++      throw new LlmError('ordinary Session calls are active', 'SESSION_MODEL_CALLS_ACTIVE')
++    }
++    const registration = this.prepareRoutes([provider], adapter, new Set([provider]))[0]
++    if (registration === undefined) throw new LlmError('protected provider registration missing', 'INVALID_PROTECTED_CALLS')
++    const checkpoint = beforeStream.bind(undefined)
++    this.protectedSessions.add(sessionId)
++    const calls = Object.freeze({ sessionId,
++      prepareCall: (config: LlmCallConfig, signal?: AbortSignal) => {
++        if (config.provider !== provider) throw new LlmError('protected provider changed', 'FINAL_INPUT_CONFLICT')
++        return this.prepareRegisteredCall(registration, config, signal, { sessionId, checkpoint })
++      },
++    })
++    protectedCallCapabilities.add(calls)
++    return calls
++  }
++
++  private async prepareRegisteredCall(registration: AdapterRegistration, config: LlmCallConfig,
++    signal?: AbortSignal, protectedCall?: ProtectedDispatch): Promise<PreparedLlmCall> {
+     const adapterCall = await registration.adapter.prepareCall(config.provider, config.model, signal)
+     const modelInfo = this.normalizeModelInfo(registration, config.model, adapterCall.model)
+     const resolved = this.resolveCallWithInfo(config, modelInfo)
+@@ -972,12 +1029,15 @@ export class LlmRuntime extends TypertRemoteService {
+           )
+         }
+         dispatched = true
+-        return this.streamWithRegistration(options, {
++        const prepared = {
+           registration,
+           config: resolvedConfig,
+           modelInfo,
+-          dispatch: options => adapterCall.stream(options),
+-        })
++          dispatch: (options: GenerateOptions) => adapterCall.stream(options),
++          ...protectedCall === undefined ? {} : { protectedInput: true as const },
++        }
++        return protectedCall === undefined ? this.streamWithRegistration(options, prepared)
++          : this.protectedStream(options, prepared, protectedCall)
+       },
+     })
+   }
+@@ -1062,30 +1122,37 @@ export class LlmRuntime extends TypertRemoteService {
+         : Object.isFrozen(options)
+           ? deepFreeze({ ...options, ...resolvedConfig })
+           : { ...options, ...resolvedConfig }
+-      // Files are never dispatched natively: every route receives handle text.
+-      let projectedMessages: readonly RequestMessage[] = resolvedOptions.messages
+-      if (projectedMessages.some(message => contentHasFile(message.content))) {
+-        projectedMessages = projectFilesToText(projectedMessages, ref => this.fileReadPath(ref))
+-      }
+-      if (modelInfo.inputModalities !== undefined
+-        && !modelInfo.inputModalities.includes('image')
+-        && projectedMessages.some(message => contentHasImage(message.content))) {
+-        projectedMessages = projectImagesForTextModel(projectedMessages)
+-      }
+-      // Tool changes are logged on every route; the route's declared mode selects what it receives.
+-      const projectedTools = projectToolUpdates(projectedMessages, resolvedOptions.tools, modelInfo.toolUpdate, resolvedOptions.toolHistory)
+-      projectedMessages = projectedTools.messages
+-      let projectedOptions = resolvedOptions
+-      if (projectedMessages !== resolvedOptions.messages || projectedTools.tools !== resolvedOptions.tools) {
+-        projectedOptions = {
+-          ...resolvedOptions,
+-          messages: projectedMessages as RequestMessage[],
+-          ...projectedTools.tools === undefined ? {} : { tools: projectedTools.tools as ToolSchema[] },
++      if (prepared?.protectedInput === true) {
++        // The owner guards the exact frozen native input. Ordinary projections
++        // must not manufacture a different request identity or tool declaration.
++        iterator = dispatch(resolvedOptions)[Symbol.asyncIterator]()
++      } else {
++        // Files are never dispatched natively: every route receives handle text.
++        let projectedMessages: readonly RequestMessage[] = resolvedOptions.messages
++        if (projectedMessages.some(message => contentHasFile(message.content))) {
++          projectedMessages = projectFilesToText(projectedMessages, ref => this.fileReadPath(ref))
++        }
++        if (modelInfo.inputModalities !== undefined
++          && !modelInfo.inputModalities.includes('image')
++          && projectedMessages.some(message => contentHasImage(message.content))) {
++          projectedMessages = projectImagesForTextModel(projectedMessages)
+         }
+-        if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
++        // Tool changes are logged on every route; the route's declared mode selects what it receives.
++        const projectedTools = projectToolUpdates(
++          projectedMessages, resolvedOptions.tools, modelInfo.toolUpdate, resolvedOptions.toolHistory)
++        projectedMessages = projectedTools.messages
++        let projectedOptions = resolvedOptions
++        if (projectedMessages !== resolvedOptions.messages || projectedTools.tools !== resolvedOptions.tools) {
++          projectedOptions = {
++            ...resolvedOptions,
++            messages: projectedMessages as RequestMessage[],
++            ...projectedTools.tools === undefined ? {} : { tools: projectedTools.tools as ToolSchema[] },
++          }
++          if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
++        }
++        const stream = dispatch(this.forAdapter(projectedOptions, adapter))
++        iterator = stream[Symbol.asyncIterator]()
+       }
+-      const stream = dispatch(this.forAdapter(projectedOptions, adapter))
+-      iterator = stream[Symbol.asyncIterator]()
+     } catch (error: unknown) {
+       yield adapterFailureChunk(error, options.signal)
+       return
+@@ -1140,12 +1207,51 @@ export class LlmRuntime extends TypertRemoteService {
+     options: GenerateOptions,
+     prepared?: PreparedDispatch,
+   ): AsyncIterable<StreamChunk> {
+-    return this.ctx.waterfall(
+-      this,
+-      'llm/stream',
+-      options,
+-      () => this.adapterStream(options, prepared),
+-    )
++    return (async function* (this: LlmRuntime) {
++      const sessionId = options.sessionId
++      if (sessionId !== undefined && this.protectedSessions.has(sessionId)) {
++        throw new LlmError('Session model calls are protected', 'SESSION_MODEL_CALLS_PROTECTED')
++      }
++      if (sessionId !== undefined) this.ordinarySessionCalls.set(sessionId, (this.ordinarySessionCalls.get(sessionId) ?? 0) + 1)
++      try {
++        // Routing may change provider/model on hand-built calls, but cannot
++        // reassign the Session covered by this lease after entry.
++        const input = Object.isFrozen(options) ? options : { ...options }
++        if (!Object.isFrozen(input)) Object.defineProperty(input, 'sessionId', { value: sessionId, writable: false, configurable: false })
++        // The lease precedes waterfall construction, including eager listeners.
++        yield* this.ctx.waterfall(this, 'llm/stream', input, () => this.ordinaryAdapterStream(input, prepared, sessionId))
++      } finally {
++        if (sessionId !== undefined) {
++          const remaining = (this.ordinarySessionCalls.get(sessionId) ?? 1) - 1
++          if (remaining === 0) this.ordinarySessionCalls.delete(sessionId)
++          else this.ordinarySessionCalls.set(sessionId, remaining)
++        }
++      }
++    }).call(this)
++  }
++
++  private async * ordinaryAdapterStream(options: GenerateOptions, prepared: PreparedDispatch | undefined,
++    sessionId: GenerateOptions['sessionId']): AsyncGenerator<StreamChunk> {
++    if (sessionId !== undefined && this.protectedSessions.has(sessionId)) {
++      throw new LlmError('Session model calls are protected', 'SESSION_MODEL_CALLS_PROTECTED')
++    }
++    if (sessionId !== undefined) this.ordinarySessionCalls.set(sessionId, (this.ordinarySessionCalls.get(sessionId) ?? 0) + 1)
++    try { yield* this.adapterStream(options, prepared) }
++    finally {
++      if (sessionId !== undefined) {
++        const remaining = (this.ordinarySessionCalls.get(sessionId) ?? 1) - 1
++        if (remaining === 0) this.ordinarySessionCalls.delete(sessionId)
++        else this.ordinarySessionCalls.set(sessionId, remaining)
++      }
++    }
++  }
++
++  private async * protectedStream(options: GenerateOptions, prepared: PreparedDispatch,
++    owner: ProtectedDispatch): AsyncGenerator<StreamChunk> {
++    if (options.sessionId !== owner.sessionId) throw new LlmError('protected Session changed', 'FINAL_INPUT_CONFLICT')
++    try { await owner.checkpoint(options) }
++    catch (error: unknown) { yield adapterFailureChunk(error, options.signal); return }
++    yield* this.adapterStream(options, prepared)
+   }
+ }
+ 
+@@ -1171,6 +1277,12 @@ interface PreparedDispatch {
+   readonly config: LlmCallConfig
+   readonly modelInfo: LlmResolvedModelInfo
+   readonly dispatch: (options: GenerateOptions) => AsyncIterable<StreamChunk>
++  readonly protectedInput?: true
++}
++
++interface ProtectedDispatch {
++  readonly sessionId: NonNullable<GenerateOptions['sessionId']>
++  readonly checkpoint: (options: GenerateOptions) => Promise<void>
+ }
+ 
+ export default LlmRuntime
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 6c7ce04..b4110fc 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -7911,6 +7911,73 @@ importers:
+         specifier: ^4.19.2
+         version: 4.22.4
+ 
++  packages/experimental/native-run:
++    dependencies:
++      '@deepseek-ai/dsh-agent':
++        specifier: workspace:*
++        version: link:../../core/agent
++      '@deepseek-ai/dsh-agent-loop':
++        specifier: workspace:*
++        version: link:../../core/agent-loop
++      '@deepseek-ai/dsh-agent-preset-registry':
++        specifier: workspace:*
++        version: link:../../preset/agent-preset-registry
++      '@deepseek-ai/dsh-brand':
++        specifier: workspace:*
++        version: link:../../util/brand
++      '@deepseek-ai/dsh-llm':
++        specifier: workspace:*
++        version: link:../../llm/llm
++      '@deepseek-ai/dsh-llm-deepseek':
++        specifier: workspace:*
++        version: link:../../llm/llm-deepseek
++      '@deepseek-ai/dsh-scope':
++        specifier: workspace:*
++        version: link:../../core/scope
++      '@deepseek-ai/dsh-session':
++        specifier: workspace:*
++        version: link:../../core/session
++      '@deepseek-ai/dsh-session-persistence':
++        specifier: workspace:*
++        version: link:../../session/session-persistence
++      '@deepseek-ai/dsh-session-projection':
++        specifier: workspace:*
++        version: link:../../session/session-projection
++      '@deepseek-ai/dsh-tools':
++        specifier: workspace:*
++        version: link:../../core/tools
++      '@deepseek-ai/dsh-util-values':
++        specifier: workspace:*
++        version: link:../../util/values
++      '@deepseek-ai/node-addon-system':
++        specifier: workspace:~
++        version: link:../../../native/system/packages/entry
++    devDependencies:
++      '@deepseek-ai/cordis':
++        specifier: workspace:~
++        version: link:../../../vendor/cordis
++      '@deepseek-ai/cordis-plugin-loader':
++        specifier: workspace:~
++        version: link:../../../vendor/loader
++      '@deepseek-ai/dsh-agent-preset':
++        specifier: workspace:*
++        version: link:../../preset/agent-preset
++      '@deepseek-ai/dsh-llm-deepseek-api-key':
++        specifier: workspace:*
++        version: link:../../llm/llm-deepseek-api-key
++      '@deepseek-ai/dsh-llm-retry':
++        specifier: workspace:*
++        version: link:../../llm/llm-retry
++      '@deepseek-ai/dsh-sdk-client':
++        specifier: workspace:*
++        version: link:../../sdk/client
++      '@deepseek-ai/dsh-session-persistence-jsonl':
++        specifier: workspace:*
++        version: link:../../session/session-persistence-jsonl
++      '@deepseek-ai/dsh-system-prompt':
++        specifier: workspace:*
++        version: link:../../core/system-prompt
++
+   packages/experimental/ptc-runtime-python:
+     dependencies:
+       '@deepseek-ai/schemastery':
+diff --git a/tsconfig.base.json b/tsconfig.base.json
+index b2f42ee..0a209bb 100644
+--- a/tsconfig.base.json
++++ b/tsconfig.base.json
+@@ -241,6 +241,8 @@
+       "@deepseek-ai/dsh-client-ui-session": ["./packages/client/ui-session/src"],
+       "@deepseek-ai/dsh-client-ui-session/client": ["./packages/client/ui-session/src/client"],
+       "@deepseek-ai/dsh-client-connection": ["./packages/client/connection/src"],
++      "@deepseek-ai/dsh-client-connection/src/browser-auth.ts": ["./packages/client/connection/src/browser-auth.ts"],
++      "@deepseek-ai/dsh-client-connection/src/rpc-host.ts": ["./packages/client/connection/src/rpc-host.ts"],
+       "@deepseek-ai/dsh-client-file-upload": ["./packages/client/file-upload/src"],
+       "@deepseek-ai/dsh-client-file-upload/client": ["./packages/client/file-upload/src/client/index.ts"],
+       "@deepseek-ai/dsh-api-remotes": ["./packages/api/remotes/src"],
+@@ -317,6 +319,7 @@
+       "@deepseek-ai/dsh-sdk-protocol": ["./packages/sdk/protocol/src"],
+       "@deepseek-ai/dsh-sdk-jsonrpc-server": ["./packages/sdk/server/src"],
+       "@deepseek-ai/dsh-experimental-agent-team": ["./packages/experimental/agent-team/src"],
++      "@deepseek-ai/dsh-experimental-native-run": ["./packages/experimental/native-run/src"],
+       "@deepseek-ai/dsh-experimental-auto-review": ["./packages/experimental/auto-review/src"],
+       "@deepseek-ai/dsh-experimental-agent-team-profile": ["./packages/experimental/agent-team-profile/src"],
+       "@deepseek-ai/dsh-experimental-tool-agent-team": ["./packages/experimental/tool-agent-team/src"],
+@@ -338,6 +341,8 @@
+       "@deepseek-ai/dsh-compaction-image-offload/projection": ["./packages/compaction/compaction-image-offload/src/projection.ts"],
+       "@deepseek-ai/dsh-session-format-catalog/message-projections": ["./packages/session/session-format-catalog/src/message-projections.ts"],
+       "@deepseek-ai/dsh-native-command/types": ["./packages/util/native-command/src/types.ts"],
++      "@deepseek-ai/dsh-terminal-bash/src/sanitize.ts": ["./packages/terminal/terminal-bash/src/sanitize.ts"],
++
+       // BEGIN generated package aliases — pnpm run gen-tsconfig-paths
+       "@deepseek-ai/dsh-acp": ["./packages/acp/acp/src"],
+       "@deepseek-ai/dsh-acp-app": ["./packages/bundle/acp-app/src"],
+diff --git a/tsconfig.host.json b/tsconfig.host.json
+index 5c5c81b..6fd9a7d 100644
+--- a/tsconfig.host.json
++++ b/tsconfig.host.json
+@@ -365,6 +365,7 @@
+     { "path": "./packages/experimental/ptc-runtime-python" },
+     { "path": "./packages/experimental/schedule-bundle" },
+     { "path": "./packages/ptc-runtime/ptc-runtime-node" },
++    { "path": "./packages/experimental/native-run" },
+     { "path": "./packages/llm/llm-deepseek" },
+     { "path": "./packages/llm/llm-deepseek-api-key" },
+     { "path": "./packages/llm/llm-deepseek-account" },
+diff --git a/tsconfig.protected-tests.json b/tsconfig.protected-tests.json
+new file mode 100644
+index 0000000..44aa155
+--- /dev/null
++++ b/tsconfig.protected-tests.json
+@@ -0,0 +1,425 @@
++{
++  "extends": "./tsconfig.base.json",
++  "compilerOptions": {
++    "composite": false,
++    "incremental": false,
++    "noEmit": true,
++    "paths": {
++      "@deepseek-ai/cordis-plugin-timer": [
++        "./vendor/timer/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/cosmokit": [
++        "./vendor/cosmokit/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/cordis-plugin-group": [
++        "./vendor/group/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/schemastery": [
++        "./vendor/schemastery/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/cordis-plugin-loader": [
++        "./vendor/loader/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/cordis": [
++        "./vendor/cordis/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/cordis-plugin-include": [
++        "./vendor/include/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-settings": [
++        "./packages/settings/settings/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-settings/types": [
++        "./packages/settings/settings/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-storage": [
++        "./packages/storage/storage/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-storage-json": [
++        "./packages/storage/storage-json/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-storage-domain": [
++        "./packages/storage/storage-domain/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-storage-domain/invariant": [
++        "./packages/storage/storage-domain/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-app-boot": [
++        "./packages/boot/app-boot/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-app-boot/worker/profile-resolution-bootstrap": [
++        "./packages/boot/app-boot/lib/types/profile-resolution/worker-bootstrap.d.ts"
++      ],
++      "@deepseek-ai/dsh-hmr": [
++        "./packages/boot/hmr/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-cmdline": [
++        "./packages/boot/cmdline/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-config-editor": [
++        "./packages/boot/config-editor/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-title": [
++        "./packages/session/session-title/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-title/invariant": [
++        "./packages/session/session-title/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-title/types": [
++        "./packages/session/session-title/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-title/client": [
++        "./packages/session/session-title/lib/types/client.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-format-v1-to-v2": [
++        "./packages/session/session-format-v1-to-v2/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-projection": [
++        "./packages/session/session-projection/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-projection/types": [
++        "./packages/session/session-projection/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-format-v3-to-v4": [
++        "./packages/session/session-format-v3-to-v4/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-persistence": [
++        "./packages/session/session-persistence/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-format": [
++        "./packages/session/session-format/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-projection-cache": [
++        "./packages/session/session-projection-cache/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-format-v0-to-v1": [
++        "./packages/session/session-format-v0-to-v1/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-format-v2-to-v3": [
++        "./packages/session/session-format-v2-to-v3/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-format-catalog": [
++        "./packages/session/session-format-catalog/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-format-catalog/message-projections": [
++        "./packages/session/session-format-catalog/lib/types/message-projections.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-persistence-jsonl": [
++        "./packages/session/session-persistence-jsonl/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-subprocess": [
++        "./packages/subprocess/subprocess/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-subprocess/control": [
++        "./packages/subprocess/subprocess/lib/types/control.d.ts"
++      ],
++      "@deepseek-ai/dsh-session-query": [
++        "./packages/session-query/session-query/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm": [
++        "./packages/llm/llm/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm/invariant": [
++        "./packages/llm/llm/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm/types": [
++        "./packages/llm/llm/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm/brand": [
++        "./packages/llm/llm/lib/types/brand.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm/message": [
++        "./packages/llm/llm/lib/types/message.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm/assistant-stream": [
++        "./packages/llm/llm/lib/types/assistant-stream.d.ts"
++      ],
++      "@deepseek-ai/dsh-deepseek-llm-api-extensions": [
++        "./packages/llm/deepseek-llm-api-extensions/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-deepseek-llm-api-extensions/types": [
++        "./packages/llm/deepseek-llm-api-extensions/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm-deepseek": [
++        "./packages/llm/llm-deepseek/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm-retry": [
++        "./packages/llm/llm-retry/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm-retry/invariant": [
++        "./packages/llm/llm-retry/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm-retry/types": [
++        "./packages/llm/llm-retry/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-llm-deepseek-api-key": [
++        "./packages/llm/llm-deepseek-api-key/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-typert-protocol": [
++        "./packages/typert/protocol/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-typert-protocol/types": [
++        "./packages/typert/protocol/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-workspace": [
++        "./packages/workspace/workspace/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-workspace/invariant": [
++        "./packages/workspace/workspace/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-workspace/types": [
++        "./packages/workspace/workspace/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-compaction": [
++        "./packages/compaction/compaction/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-compaction/invariant": [
++        "./packages/compaction/compaction/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-compaction/types": [
++        "./packages/compaction/compaction/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-compaction/checkpoint": [
++        "./packages/compaction/compaction/lib/types/checkpoint.d.ts"
++      ],
++      "@deepseek-ai/dsh-compaction-image-offload": [
++        "./packages/compaction/compaction-image-offload/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-compaction-image-offload/projection": [
++        "./packages/compaction/compaction-image-offload/lib/types/projection.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent-preset-registry": [
++        "./packages/preset/agent-preset-registry/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent-preset-registry/invariant": [
++        "./packages/preset/agent-preset-registry/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent-preset-registry/types": [
++        "./packages/preset/agent-preset-registry/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent-preset-registry/display": [
++        "./packages/preset/agent-preset-registry/lib/types/display.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent-preset": [
++        "./packages/preset/agent-preset/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-anonymous-user-id": [
++        "./packages/identity/anonymous-user-id/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-sdk-protocol": [
++        "./packages/sdk/protocol/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-sdk-client": [
++        "./packages/sdk/client/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-tool-todo": [
++        "./packages/todo/tool-todo/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-tool-todo/invariant": [
++        "./packages/todo/tool-todo/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-tool-todo/client": [
++        "./packages/todo/tool-todo/lib/types/client.d.ts"
++      ],
++      "@deepseek-ai/dsh-fs": [
++        "./packages/fs/fs/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-fs/invariant": [
++        "./packages/fs/fs/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-subagent": [
++        "./packages/subagent/subagent/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-subagent/internal": [
++        "./packages/subagent/subagent/lib/types/internal.d.ts"
++      ],
++      "@deepseek-ai/dsh-subagent/invariant": [
++        "./packages/subagent/subagent/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-subagent/client": [
++        "./packages/subagent/subagent/lib/types/client.d.ts"
++      ],
++      "@deepseek-ai/dsh-sandbox": [
++        "./packages/sandbox/sandbox/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-sandbox-policy": [
++        "./packages/sandbox/sandbox-policy/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-sandbox-policy/invariant": [
++        "./packages/sandbox/sandbox-policy/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-ptc-runtime": [
++        "./packages/ptc-runtime/ptc-runtime/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-jobs": [
++        "./packages/jobs/jobs/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-jobs/invariant": [
++        "./packages/jobs/jobs/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-jobs/brand": [
++        "./packages/jobs/jobs/lib/types/brand.d.ts"
++      ],
++      "@deepseek-ai/dsh-jobs/view": [
++        "./packages/jobs/jobs/lib/types/view.d.ts"
++      ],
++      "@deepseek-ai/dsh-http-proxy": [
++        "./packages/util/http-proxy/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-atomic-write": [
++        "./packages/util/atomic-write/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-brand": [
++        "./packages/util/brand/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-util-values": [
++        "./packages/util/values/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-timeout": [
++        "./packages/util/timeout/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-package-manifest": [
++        "./packages/util/package-manifest/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-util-time": [
++        "./packages/util/time/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-util-crypto": [
++        "./packages/util/crypto/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-home-paths": [
++        "./packages/util/home-paths/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-chunked-list": [
++        "./packages/util/chunked-list/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-launch-environment": [
++        "./packages/util/launch-environment/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-shell": [
++        "./packages/shell/shell/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-attachment": [
++        "./packages/attachment/attachment/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-attachment/types": [
++        "./packages/attachment/attachment/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-permission-presets": [
++        "./packages/interaction/permission-presets/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-permission-presets/invariant": [
++        "./packages/interaction/permission-presets/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-permission-presets/types": [
++        "./packages/interaction/permission-presets/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-permission-presets/client": [
++        "./packages/interaction/permission-presets/lib/types/client.d.ts"
++      ],
++      "@deepseek-ai/dsh-user-approval": [
++        "./packages/interaction/user-approval/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-user-approval/invariant": [
++        "./packages/interaction/user-approval/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-user-approval/types": [
++        "./packages/interaction/user-approval/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-commands": [
++        "./packages/interaction/commands/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-commands/invariant": [
++        "./packages/interaction/commands/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-commands/types": [
++        "./packages/interaction/commands/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-commands/brand": [
++        "./packages/interaction/commands/lib/types/brand.d.ts"
++      ],
++      "@deepseek-ai/dsh-invariants": [
++        "./packages/runtime-diagnostics/invariants/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-system-prompt": [
++        "./packages/core/system-prompt/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-system-prompt/invariant": [
++        "./packages/core/system-prompt/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-scope": [
++        "./packages/core/scope/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-scope/invariant": [
++        "./packages/core/scope/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-session": [
++        "./packages/core/session/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-session/invariant": [
++        "./packages/core/session/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-session/types": [
++        "./packages/core/session/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-session/fork": [
++        "./packages/core/session/lib/types/fork.d.ts"
++      ],
++      "@deepseek-ai/dsh-session/surface": [
++        "./packages/core/session/lib/types/surface.d.ts"
++      ],
++      "@deepseek-ai/dsh-tools": [
++        "./packages/core/tools/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-tools/invariant": [
++        "./packages/core/tools/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-tools/types": [
++        "./packages/core/tools/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-tools/presentation": [
++        "./packages/core/tools/lib/types/presentation.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent": [
++        "./packages/core/agent/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent/invariant": [
++        "./packages/core/agent/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent/types": [
++        "./packages/core/agent/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent-loop": [
++        "./packages/core/agent-loop/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-agent-loop/invariant": [
++        "./packages/core/agent-loop/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-credentials": [
++        "./packages/credentials/credentials/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/dsh-credentials/invariant": [
++        "./packages/credentials/credentials/lib/types/invariant.d.ts"
++      ],
++      "@deepseek-ai/dsh-credentials/types": [
++        "./packages/credentials/credentials/lib/types/types.d.ts"
++      ],
++      "@deepseek-ai/dsh-experimental-native-run": [
++        "./packages/experimental/native-run/lib/types/index.d.ts"
++      ],
++      "@deepseek-ai/node-addon-system/landlock-run": [
++        "./native/system/packages/entry/lib/index.d.ts"
++      ],
++      "@deepseek-ai/node-addon-system/flock": [
++        "./native/system/packages/entry/lib/flock.d.ts"
++      ]
++    }
++  },
++  "include": [
++    "packages/experimental/native-run/tests/protected-fixture.ts",
++    "packages/experimental/native-run/tests/protected-factory.spec.ts",
++    "packages/experimental/native-run/tests/native-session.spec.ts",
++    "packages/experimental/native-run/tests/no-io.ts",
++    "packages/experimental/native-run/tests/loopback-only.ts"
++  ]
++}

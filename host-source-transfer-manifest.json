@@ -1,0 +1,844 @@
+{
+  "classification": "SOURCE_EVALUATION_ONLY_PRIVATE_NOT_RELEASE_INSTALLER",
+  "publicBaseRepository": "https://github.com/deepseek-ai/deepseek-harness.git",
+  "publicBaseCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "evaluatedLocalHEAD": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+  "localCommitParents": [
+    {
+      "commit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+      "parents": [
+        "d49ba1787045a30cd1dae0c8922530c3bb6981a3"
+      ]
+    },
+    {
+      "commit": "d49ba1787045a30cd1dae0c8922530c3bb6981a3",
+      "parents": [
+        "fba93b59a4980172407d5ab46ccbdbf09f94e7bd"
+      ]
+    },
+    {
+      "commit": "fba93b59a4980172407d5ab46ccbdbf09f94e7bd",
+      "parents": [
+        "639ed015397290b3745d163aafe02ffee4aa3f84"
+      ]
+    }
+  ],
+  "suppliedFileCount": 85,
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+      "bytes": 1065,
+      "publicBaseSha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+      "headSha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "package.json",
+      "sha256": "a303ffb8994be8e7a874bc887db1abd47a77a6e08872e65f1d65281f43eab91b",
+      "bytes": 17200,
+      "publicBaseSha256": "a303ffb8994be8e7a874bc887db1abd47a77a6e08872e65f1d65281f43eab91b",
+      "headSha256": "a303ffb8994be8e7a874bc887db1abd47a77a6e08872e65f1d65281f43eab91b",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/package.json",
+      "sha256": "f7ffa7f0e765b94960fd1a2f6709bb86850ed26cfb648f6b1c200100282bcb0b",
+      "bytes": 2195,
+      "publicBaseSha256": "f7ffa7f0e765b94960fd1a2f6709bb86850ed26cfb648f6b1c200100282bcb0b",
+      "headSha256": "f7ffa7f0e765b94960fd1a2f6709bb86850ed26cfb648f6b1c200100282bcb0b",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/src/agent.ts",
+      "sha256": "1b14ad31528782f02e6e187c0647436b2114e9bbf326bb25647d26e9f1675620",
+      "bytes": 29944,
+      "publicBaseSha256": "9c985dd5ce3612b0a6f1833cb592930e4e390d4249821accea53064d8e42015c",
+      "headSha256": "140de13b14f3e685a62930eed2f1e0e1d698bd1ed8637233e91921c23bcc2d06",
+      "dirtyFromHEAD": true,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/core/agent-loop/src/assistant-stream.ts",
+      "sha256": "120d2bec5efeec2aa54bf0e4261a45282936272d610dbbab21eee36b902629de",
+      "bytes": 4263,
+      "publicBaseSha256": "120d2bec5efeec2aa54bf0e4261a45282936272d610dbbab21eee36b902629de",
+      "headSha256": "120d2bec5efeec2aa54bf0e4261a45282936272d610dbbab21eee36b902629de",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/src/constants.ts",
+      "sha256": "435d31d3c8740f5ebaefa5c12f22d7cda8ea8c6d018e6fcda459161174ecc971",
+      "bytes": 202,
+      "publicBaseSha256": "435d31d3c8740f5ebaefa5c12f22d7cda8ea8c6d018e6fcda459161174ecc971",
+      "headSha256": "435d31d3c8740f5ebaefa5c12f22d7cda8ea8c6d018e6fcda459161174ecc971",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/src/inbox.ts",
+      "sha256": "70c07ea75ebcf18df353bbccf7c2aa3ecf6cb0d687b96e3520b675680c29f662",
+      "bytes": 9327,
+      "publicBaseSha256": "70c07ea75ebcf18df353bbccf7c2aa3ecf6cb0d687b96e3520b675680c29f662",
+      "headSha256": "70c07ea75ebcf18df353bbccf7c2aa3ecf6cb0d687b96e3520b675680c29f662",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/src/index.ts",
+      "sha256": "5c3345e741b8bb0b06b5802397add3eed9eb75ae2c0c899b0084981f1d9bf6c5",
+      "bytes": 38882,
+      "publicBaseSha256": "853e76aef2eecafe5526a5267c3d386780b5c59e3c79c2448532fada7285a605",
+      "headSha256": "5c3345e741b8bb0b06b5802397add3eed9eb75ae2c0c899b0084981f1d9bf6c5",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/core/agent-loop/src/invariant.ts",
+      "sha256": "109c89b44b3449b92c10a7116b00af0e49a8a80ff2be3d79a22c7d48992a08b5",
+      "bytes": 3251,
+      "publicBaseSha256": "109c89b44b3449b92c10a7116b00af0e49a8a80ff2be3d79a22c7d48992a08b5",
+      "headSha256": "109c89b44b3449b92c10a7116b00af0e49a8a80ff2be3d79a22c7d48992a08b5",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/src/runtime-context.ts",
+      "sha256": "4944ee5cbbc24f21c27f1f0be54af7601da280b7fd2354e48fcc0ef6beeea839",
+      "bytes": 7184,
+      "publicBaseSha256": "4944ee5cbbc24f21c27f1f0be54af7601da280b7fd2354e48fcc0ef6beeea839",
+      "headSha256": "4944ee5cbbc24f21c27f1f0be54af7601da280b7fd2354e48fcc0ef6beeea839",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/src/tool-calls.ts",
+      "sha256": "5c7e8d8ff0028b436efdd13e5dffa4801d2311c211c3af039e7dab705f87b303",
+      "bytes": 11591,
+      "publicBaseSha256": "5c7e8d8ff0028b436efdd13e5dffa4801d2311c211c3af039e7dab705f87b303",
+      "headSha256": "5c7e8d8ff0028b436efdd13e5dffa4801d2311c211c3af039e7dab705f87b303",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/tsconfig.json",
+      "sha256": "cc79023734032635686d44736222ede837b360e8c8a490df664dfbc397e7253e",
+      "bytes": 812,
+      "publicBaseSha256": "cc79023734032635686d44736222ede837b360e8c8a490df664dfbc397e7253e",
+      "headSha256": "cc79023734032635686d44736222ede837b360e8c8a490df664dfbc397e7253e",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent-loop/tsdown.config.ts",
+      "sha256": "6d284c7f7e842f0eb93b0bbef7eb1f558e30a59e2f9f347a8655137f6ec04ebb",
+      "bytes": 541,
+      "publicBaseSha256": "6d284c7f7e842f0eb93b0bbef7eb1f558e30a59e2f9f347a8655137f6ec04ebb",
+      "headSha256": "6d284c7f7e842f0eb93b0bbef7eb1f558e30a59e2f9f347a8655137f6ec04ebb",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent/package.json",
+      "sha256": "5a1933ae764443b0f725af0a069d810e55cb83857f0a99eaf78fe70b0ee1d01b",
+      "bytes": 2178,
+      "publicBaseSha256": "5a1933ae764443b0f725af0a069d810e55cb83857f0a99eaf78fe70b0ee1d01b",
+      "headSha256": "5a1933ae764443b0f725af0a069d810e55cb83857f0a99eaf78fe70b0ee1d01b",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent/src/index.ts",
+      "sha256": "d8bdc597f58072874f8c44a9e081859d74d4edd669e5f0e3ebf12e9d35a55591",
+      "bytes": 31944,
+      "publicBaseSha256": "9979fdae64fd0a342067981c39de9cde2da7066d28f8506a501fd51e8f9068b9",
+      "headSha256": "d8bdc597f58072874f8c44a9e081859d74d4edd669e5f0e3ebf12e9d35a55591",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/core/agent/tsconfig.json",
+      "sha256": "e678cc902d616e77180181ad571e5b81dce72bd1454c6b19357a82b0e2cf0dbf",
+      "bytes": 706,
+      "publicBaseSha256": "e678cc902d616e77180181ad571e5b81dce72bd1454c6b19357a82b0e2cf0dbf",
+      "headSha256": "e678cc902d616e77180181ad571e5b81dce72bd1454c6b19357a82b0e2cf0dbf",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/core/agent/tsdown.config.ts",
+      "sha256": "19be8a9312b07efd853b6b7b0baaaaf743b2d4dcf1a7cdfccd74c0829c96e8b3",
+      "bytes": 523,
+      "publicBaseSha256": "19be8a9312b07efd853b6b7b0baaaaf743b2d4dcf1a7cdfccd74c0829c96e8b3",
+      "headSha256": "19be8a9312b07efd853b6b7b0baaaaf743b2d4dcf1a7cdfccd74c0829c96e8b3",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/experimental/native-run/package.json",
+      "sha256": "f16d65c45b0d210d17e90c25964e101eabda00d770231c69e7d68f5e784d42b4",
+      "bytes": 1653,
+      "publicBaseSha256": null,
+      "headSha256": "f16d65c45b0d210d17e90c25964e101eabda00d770231c69e7d68f5e784d42b4",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/src/driver.ts",
+      "sha256": "570c21fe28aa1e7166521d5b93c39343bfb7c8d01f7b55aa3531e11bf3a32f96",
+      "bytes": 8622,
+      "publicBaseSha256": null,
+      "headSha256": "570c21fe28aa1e7166521d5b93c39343bfb7c8d01f7b55aa3531e11bf3a32f96",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/src/ids.ts",
+      "sha256": "0de5c41d63a10fcfde943d2955d7f54a6675191cb5ca4635317cf9c61979387f",
+      "bytes": 1346,
+      "publicBaseSha256": null,
+      "headSha256": "0de5c41d63a10fcfde943d2955d7f54a6675191cb5ca4635317cf9c61979387f",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/src/index.ts",
+      "sha256": "8fc97398d3d9e91ecd09c1eeda0061ce4105b3086304774d9b4cbc2fa88dd0a3",
+      "bytes": 348,
+      "publicBaseSha256": null,
+      "headSha256": "8fc97398d3d9e91ecd09c1eeda0061ce4105b3086304774d9b4cbc2fa88dd0a3",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/src/journal.ts",
+      "sha256": "ad2d720d61ee10b2cb63c9024360c39ad291b4be9849d8734330909618cece70",
+      "bytes": 29663,
+      "publicBaseSha256": null,
+      "headSha256": "a7bbc1fe9250661e62fbbb0f8b72f14dada6d0c17176b4a2b23c0fc7ec6cb39d",
+      "dirtyFromHEAD": true,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/src/session-driver.ts",
+      "sha256": "ae3e500fb1fbd46ceb2bad3bc3adfae3be28179fb5d42f1173cdd6306ebf57bb",
+      "bytes": 22182,
+      "publicBaseSha256": null,
+      "headSha256": "419d05f636799ade9aaa1aed7ab7f9043f8946c5c814e9ed803a5809a7103b80",
+      "dirtyFromHEAD": true,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/src/types.ts",
+      "sha256": "192bad062feec50339d49a6e86a14d849f8c517a060113e5558a10c245d4db0a",
+      "bytes": 4914,
+      "publicBaseSha256": null,
+      "headSha256": "192bad062feec50339d49a6e86a14d849f8c517a060113e5558a10c245d4db0a",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/src/values.ts",
+      "sha256": "30a0bbdcac80dbc8425c6666bd7e76bbc520582ab911cbf3e84dd3ba1e1af833",
+      "bytes": 12811,
+      "publicBaseSha256": null,
+      "headSha256": "30a0bbdcac80dbc8425c6666bd7e76bbc520582ab911cbf3e84dd3ba1e1af833",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/tsconfig.json",
+      "sha256": "88c503725f86788f599d3faa5017f4ed17753d6c66d7444be739135f4d002203",
+      "bytes": 908,
+      "publicBaseSha256": null,
+      "headSha256": "88c503725f86788f599d3faa5017f4ed17753d6c66d7444be739135f4d002203",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/experimental/native-run/tsdown.config.ts",
+      "sha256": "a93ca56f519b8bdee26bfb7a2e6e43538a01d870fece0893ee29677ff65cfb0d",
+      "bytes": 308,
+      "publicBaseSha256": null,
+      "headSha256": "a93ca56f519b8bdee26bfb7a2e6e43538a01d870fece0893ee29677ff65cfb0d",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/extensions/tool-cordis/package.json",
+      "sha256": "f5fbb0ce6ca8136db2c6812b7b219dd19ff54a743ddd2b7853a558e0865b004d",
+      "bytes": 1636,
+      "publicBaseSha256": "f5fbb0ce6ca8136db2c6812b7b219dd19ff54a743ddd2b7853a558e0865b004d",
+      "headSha256": "f5fbb0ce6ca8136db2c6812b7b219dd19ff54a743ddd2b7853a558e0865b004d",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
+      "sha256": "50083de8b9aa863b02344b9c35cacd4bd09ad17f797918a04d91fc4c277ee7ed",
+      "bytes": 576635,
+      "publicBaseSha256": "4a5098979f529cd2c9f09f961837dee68bb10b7d884d3b115d3008c15d64e7bd",
+      "headSha256": "50083de8b9aa863b02344b9c35cacd4bd09ad17f797918a04d91fc4c277ee7ed",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/extensions/tool-cordis/tsconfig.json",
+      "sha256": "620e9b1d55d134ceff7b89a4b1b13482bd6612325b0a156e1d8aa2ed5cb91dec",
+      "bytes": 731,
+      "publicBaseSha256": "620e9b1d55d134ceff7b89a4b1b13482bd6612325b0a156e1d8aa2ed5cb91dec",
+      "headSha256": "620e9b1d55d134ceff7b89a4b1b13482bd6612325b0a156e1d8aa2ed5cb91dec",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/package.json",
+      "sha256": "8032971c0ff8015e8f0175df5f2f7c7d1972e423b5116e6527d8b0c84495da7c",
+      "bytes": 3129,
+      "publicBaseSha256": "8032971c0ff8015e8f0175df5f2f7c7d1972e423b5116e6527d8b0c84495da7c",
+      "headSha256": "8032971c0ff8015e8f0175df5f2f7c7d1972e423b5116e6527d8b0c84495da7c",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/adapter.ts",
+      "sha256": "ce8ddb6ff5d511bb5c4bebc312cbfcc5fc78c7942c5d95c16c30ea6e74e5a692",
+      "bytes": 9600,
+      "publicBaseSha256": "68d03fbaa3dd5f04a55ff48d7cd0f2ef125077f8144977459c15432e1464cf8f",
+      "headSha256": "ce8ddb6ff5d511bb5c4bebc312cbfcc5fc78c7942c5d95c16c30ea6e74e5a692",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/config.ts",
+      "sha256": "73f802bf72663ace689782db8a4031791864e9a97c995de620ac4c9ce683a30b",
+      "bytes": 18370,
+      "publicBaseSha256": "73f802bf72663ace689782db8a4031791864e9a97c995de620ac4c9ce683a30b",
+      "headSha256": "73f802bf72663ace689782db8a4031791864e9a97c995de620ac4c9ce683a30b",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/defaults.ts",
+      "sha256": "f0c753f0d4188f615182d7d25eabed7bc24021ece255524ac5cb8089718b0520",
+      "bytes": 1398,
+      "publicBaseSha256": "f0c753f0d4188f615182d7d25eabed7bc24021ece255524ac5cb8089718b0520",
+      "headSha256": "f0c753f0d4188f615182d7d25eabed7bc24021ece255524ac5cb8089718b0520",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/file-id.ts",
+      "sha256": "27aff248186c4e7230a6ddbd803bdee4eadb655607a859c350e77bb29cb9c269",
+      "bytes": 976,
+      "publicBaseSha256": "27aff248186c4e7230a6ddbd803bdee4eadb655607a859c350e77bb29cb9c269",
+      "headSha256": "27aff248186c4e7230a6ddbd803bdee4eadb655607a859c350e77bb29cb9c269",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/file-store.ts",
+      "sha256": "3a361dcc47ab661a89f8a44e65e607f8d4e56a073cfce9cde8e4121e43bd109e",
+      "bytes": 12092,
+      "publicBaseSha256": "3a361dcc47ab661a89f8a44e65e607f8d4e56a073cfce9cde8e4121e43bd109e",
+      "headSha256": "3a361dcc47ab661a89f8a44e65e607f8d4e56a073cfce9cde8e4121e43bd109e",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/files-api.ts",
+      "sha256": "0f38622c30c85266bf17db38e0171a130bbee5ce0404327a1de949b1393eca26",
+      "bytes": 10880,
+      "publicBaseSha256": "0f38622c30c85266bf17db38e0171a130bbee5ce0404327a1de949b1393eca26",
+      "headSha256": "0f38622c30c85266bf17db38e0171a130bbee5ce0404327a1de949b1393eca26",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/host.ts",
+      "sha256": "7b2c11a02ea96e70cf2f5439f4e3939595bfcdfd7cf49f95b00e0d16bb8ed601",
+      "bytes": 6260,
+      "publicBaseSha256": "41661b74ab93198ad37945ef7933de92f0d7738ec33fe67f4d733eb80f745fcc",
+      "headSha256": "7b2c11a02ea96e70cf2f5439f4e3939595bfcdfd7cf49f95b00e0d16bb8ed601",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/image-tokens.ts",
+      "sha256": "9a7e16b2fd451f99a99b36a39eda33aa1d26f0d3243545f0152ec7f802ec064a",
+      "bytes": 7065,
+      "publicBaseSha256": "9a7e16b2fd451f99a99b36a39eda33aa1d26f0d3243545f0152ec7f802ec064a",
+      "headSha256": "9a7e16b2fd451f99a99b36a39eda33aa1d26f0d3243545f0152ec7f802ec064a",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/images.ts",
+      "sha256": "bf72a07169a9db4ad9944d76f5f0788ad83ef627d4911e92e9273f565dfd0e1f",
+      "bytes": 5872,
+      "publicBaseSha256": "bf72a07169a9db4ad9944d76f5f0788ad83ef627d4911e92e9273f565dfd0e1f",
+      "headSha256": "bf72a07169a9db4ad9944d76f5f0788ad83ef627d4911e92e9273f565dfd0e1f",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/index.ts",
+      "sha256": "fd440fe02373ed4f05b5afec488ad946d4ae7072f88cbbaf39b62ee4930082fe",
+      "bytes": 2306,
+      "publicBaseSha256": "fbaef7f24ef9d2816490f92982bbf7f02362b96425c6d3bf35ec5885b10c6ad5",
+      "headSha256": "fd440fe02373ed4f05b5afec488ad946d4ae7072f88cbbaf39b62ee4930082fe",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/messages-api.ts",
+      "sha256": "c4f2036fc3b561690f05426f308bbee525a4a5ae121e47ebf61b7bc3a7b8656c",
+      "bytes": 808,
+      "publicBaseSha256": "c4f2036fc3b561690f05426f308bbee525a4a5ae121e47ebf61b7bc3a7b8656c",
+      "headSha256": "c4f2036fc3b561690f05426f308bbee525a4a5ae121e47ebf61b7bc3a7b8656c",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/model-info.ts",
+      "sha256": "b173d9dd4aa63405f7c30e3fe5844fc59b5117d3e1ed58476a09b72eb2fbff70",
+      "bytes": 3552,
+      "publicBaseSha256": "b173d9dd4aa63405f7c30e3fe5844fc59b5117d3e1ed58476a09b72eb2fbff70",
+      "headSha256": "b173d9dd4aa63405f7c30e3fe5844fc59b5117d3e1ed58476a09b72eb2fbff70",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/models.ts",
+      "sha256": "fbd13439754e6eb9f81463b31cff26fded69d249ae8a768054a3236c5ff0c108",
+      "bytes": 755,
+      "publicBaseSha256": "fbd13439754e6eb9f81463b31cff26fded69d249ae8a768054a3236c5ff0c108",
+      "headSha256": "fbd13439754e6eb9f81463b31cff26fded69d249ae8a768054a3236c5ff0c108",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/protected-providers.ts",
+      "sha256": "81a5b6f0b5a402f83e4f733429ab55eed45c66fa1c0469337d831314c78b6e95",
+      "bytes": 1736,
+      "publicBaseSha256": null,
+      "headSha256": "81a5b6f0b5a402f83e4f733429ab55eed45c66fa1c0469337d831314c78b6e95",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/replay.ts",
+      "sha256": "3edd01ffaedc422a148e1a66e8e93203ac07cb5aa558e35485501e564216f148",
+      "bytes": 3587,
+      "publicBaseSha256": "3edd01ffaedc422a148e1a66e8e93203ac07cb5aa558e35485501e564216f148",
+      "headSha256": "3edd01ffaedc422a148e1a66e8e93203ac07cb5aa558e35485501e564216f148",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/request-extensions.ts",
+      "sha256": "03607973027a1126869e43bbdb67653482a5196536ffa70d73ada9c123baa28d",
+      "bytes": 2468,
+      "publicBaseSha256": "03607973027a1126869e43bbdb67653482a5196536ffa70d73ada9c123baa28d",
+      "headSha256": "03607973027a1126869e43bbdb67653482a5196536ffa70d73ada9c123baa28d",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/request-files.ts",
+      "sha256": "ff78a42d27cefd8cb7f2f30fe95802d87d817af05df476ea0c4236c3c0678a22",
+      "bytes": 6631,
+      "publicBaseSha256": "ff78a42d27cefd8cb7f2f30fe95802d87d817af05df476ea0c4236c3c0678a22",
+      "headSha256": "ff78a42d27cefd8cb7f2f30fe95802d87d817af05df476ea0c4236c3c0678a22",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/request-pricing.ts",
+      "sha256": "8dcbb62ffcdb7f45eecc176c5219bc1dd424e36c4c9b469d5cb6223b1a503d8d",
+      "bytes": 5559,
+      "publicBaseSha256": "8dcbb62ffcdb7f45eecc176c5219bc1dd424e36c4c9b469d5cb6223b1a503d8d",
+      "headSha256": "8dcbb62ffcdb7f45eecc176c5219bc1dd424e36c4c9b469d5cb6223b1a503d8d",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/serialize.ts",
+      "sha256": "5468bea545731cf5e8057296559aa0b648174900ca86821d022ffe3b468cf29c",
+      "bytes": 9656,
+      "publicBaseSha256": "5468bea545731cf5e8057296559aa0b648174900ca86821d022ffe3b468cf29c",
+      "headSha256": "5468bea545731cf5e8057296559aa0b648174900ca86821d022ffe3b468cf29c",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/sse.ts",
+      "sha256": "7ffcba377583018aa1a7f86c6d757b7dd6c1955ad8252103e2f33a4ceb90a741",
+      "bytes": 1403,
+      "publicBaseSha256": "7ffcba377583018aa1a7f86c6d757b7dd6c1955ad8252103e2f33a4ceb90a741",
+      "headSha256": "7ffcba377583018aa1a7f86c6d757b7dd6c1955ad8252103e2f33a4ceb90a741",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/translate.ts",
+      "sha256": "303bdb48a1900b6e3585edd6be817984ec42230894bcdf9c3cc2423c23a3f563",
+      "bytes": 8730,
+      "publicBaseSha256": "254f4b8fe292dadc5c24df3375b01920f5e5b345be09eae4290e91e9e810c1ba",
+      "headSha256": "303bdb48a1900b6e3585edd6be817984ec42230894bcdf9c3cc2423c23a3f563",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/transport.ts",
+      "sha256": "7d1f6ed8fe861ee71ba2d0c6a2a9e8512ddc1b6dc17d43a8795ab520a38746b6",
+      "bytes": 2924,
+      "publicBaseSha256": "7d1f6ed8fe861ee71ba2d0c6a2a9e8512ddc1b6dc17d43a8795ab520a38746b6",
+      "headSha256": "7d1f6ed8fe861ee71ba2d0c6a2a9e8512ddc1b6dc17d43a8795ab520a38746b6",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/types.ts",
+      "sha256": "13b1fa40657c0315eaafa86161896b812e6b7e6699f5ca7d73b5003c9bfabada",
+      "bytes": 7609,
+      "publicBaseSha256": "40928b7866ad5b7f4b79ce5f190319c079b8ea3445fd4f3ea84e039d4c6d1e02",
+      "headSha256": "13b1fa40657c0315eaafa86161896b812e6b7e6699f5ca7d73b5003c9bfabada",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/upload-index.ts",
+      "sha256": "d14e35054f7a034cabf3fbd87ac9f336f4af39585e30b45322d195b38bba1791",
+      "bytes": 9092,
+      "publicBaseSha256": "d14e35054f7a034cabf3fbd87ac9f336f4af39585e30b45322d195b38bba1791",
+      "headSha256": "d14e35054f7a034cabf3fbd87ac9f336f4af39585e30b45322d195b38bba1791",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/wire-types.ts",
+      "sha256": "38ea37c292c8ba4be2cf0f24f08e2cd62f70c3d437485293fa48909a5bea341d",
+      "bytes": 1613,
+      "publicBaseSha256": "38ea37c292c8ba4be2cf0f24f08e2cd62f70c3d437485293fa48909a5bea341d",
+      "headSha256": "38ea37c292c8ba4be2cf0f24f08e2cd62f70c3d437485293fa48909a5bea341d",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm-deepseek/tsconfig.json",
+      "sha256": "fe136bb48d0c71e7b0219b8b5fa9ac8ef8284479365e0e8300f07506e662d1ce",
+      "bytes": 1014,
+      "publicBaseSha256": "fe136bb48d0c71e7b0219b8b5fa9ac8ef8284479365e0e8300f07506e662d1ce",
+      "headSha256": "fe136bb48d0c71e7b0219b8b5fa9ac8ef8284479365e0e8300f07506e662d1ce",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/package.json",
+      "sha256": "ed579a752bc9db66aaef70d647e1dae6d7e7dfbda8efd34d1650b69e8c3c88ee",
+      "bytes": 2243,
+      "publicBaseSha256": "ed579a752bc9db66aaef70d647e1dae6d7e7dfbda8efd34d1650b69e8c3c88ee",
+      "headSha256": "ed579a752bc9db66aaef70d647e1dae6d7e7dfbda8efd34d1650b69e8c3c88ee",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/adapter-failure.ts",
+      "sha256": "533507191d814fc7b3df5ae65076b2ebc4134bbb47a2bbd9bb7309d7e7f9241b",
+      "bytes": 4183,
+      "publicBaseSha256": "533507191d814fc7b3df5ae65076b2ebc4134bbb47a2bbd9bb7309d7e7f9241b",
+      "headSha256": "533507191d814fc7b3df5ae65076b2ebc4134bbb47a2bbd9bb7309d7e7f9241b",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/api-key.ts",
+      "sha256": "16bf926a82b0c0c1d4adbee78e2a1eebe260f100285795edb8330f3fe46141a4",
+      "bytes": 1766,
+      "publicBaseSha256": "16bf926a82b0c0c1d4adbee78e2a1eebe260f100285795edb8330f3fe46141a4",
+      "headSha256": "16bf926a82b0c0c1d4adbee78e2a1eebe260f100285795edb8330f3fe46141a4",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/assembler.ts",
+      "sha256": "a2d065645058a70195a504b101e9eed23df3eaced3def868d602f3a863b03887",
+      "bytes": 7998,
+      "publicBaseSha256": "a2d065645058a70195a504b101e9eed23df3eaced3def868d602f3a863b03887",
+      "headSha256": "a2d065645058a70195a504b101e9eed23df3eaced3def868d602f3a863b03887",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/assistant-stream.ts",
+      "sha256": "9ff074108132ef0ffeefffd8e7967d05db4c6bef1689242807ef7a1d2105dfeb",
+      "bytes": 21368,
+      "publicBaseSha256": "9ff074108132ef0ffeefffd8e7967d05db4c6bef1689242807ef7a1d2105dfeb",
+      "headSha256": "9ff074108132ef0ffeefffd8e7967d05db4c6bef1689242807ef7a1d2105dfeb",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/attribution.ts",
+      "sha256": "031f0a29b75498b9208ab2ede0a32b755c925f1a992562dd23970cff7caea075",
+      "bytes": 2717,
+      "publicBaseSha256": "031f0a29b75498b9208ab2ede0a32b755c925f1a992562dd23970cff7caea075",
+      "headSha256": "031f0a29b75498b9208ab2ede0a32b755c925f1a992562dd23970cff7caea075",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/brand.ts",
+      "sha256": "a3a3f22174353af8aea34a9a439986530bffcc6df6339e55612fd5a1fa4fb14c",
+      "bytes": 2574,
+      "publicBaseSha256": "a3a3f22174353af8aea34a9a439986530bffcc6df6339e55612fd5a1fa4fb14c",
+      "headSha256": "a3a3f22174353af8aea34a9a439986530bffcc6df6339e55612fd5a1fa4fb14c",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/call-config.ts",
+      "sha256": "c2ead88240db88af3199235389585d2ddc566312d8976d9648a5f5190d32e6c6",
+      "bytes": 2873,
+      "publicBaseSha256": "c2ead88240db88af3199235389585d2ddc566312d8976d9648a5f5190d32e6c6",
+      "headSha256": "c2ead88240db88af3199235389585d2ddc566312d8976d9648a5f5190d32e6c6",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/content.ts",
+      "sha256": "e679f0972cef3f6301c4a9f321ee288ef0a63223ec51c093349c186cdc81ff35",
+      "bytes": 21501,
+      "publicBaseSha256": "e679f0972cef3f6301c4a9f321ee288ef0a63223ec51c093349c186cdc81ff35",
+      "headSha256": "e679f0972cef3f6301c4a9f321ee288ef0a63223ec51c093349c186cdc81ff35",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/error.ts",
+      "sha256": "63df8344d49df8f90054852c1de81bc6e56c11de11179e37dcad882be5758035",
+      "bytes": 8267,
+      "publicBaseSha256": "63df8344d49df8f90054852c1de81bc6e56c11de11179e37dcad882be5758035",
+      "headSha256": "63df8344d49df8f90054852c1de81bc6e56c11de11179e37dcad882be5758035",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/index.ts",
+      "sha256": "543612ab20d6a041f4ec916b7dfa801a5fdf8d03a7822f9f7f72c20cb8ceb422",
+      "bytes": 58540,
+      "publicBaseSha256": "95364943b5c48dba3cb2239981a6ebe89393b55927b4d646ee72a581f23e6914",
+      "headSha256": "543612ab20d6a041f4ec916b7dfa801a5fdf8d03a7822f9f7f72c20cb8ceb422",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "packages/llm/llm/src/invariant.ts",
+      "sha256": "ba2fd65ba8a0d886b5f21810f5f5d008984ac64387b024de0237ff71a7e483bd",
+      "bytes": 4331,
+      "publicBaseSha256": "ba2fd65ba8a0d886b5f21810f5f5d008984ac64387b024de0237ff71a7e483bd",
+      "headSha256": "ba2fd65ba8a0d886b5f21810f5f5d008984ac64387b024de0237ff71a7e483bd",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/message.ts",
+      "sha256": "5826fb32bc3d6e2221a7a39cc8b4fecc57282540a332417bb9f2ac3522b5c7da",
+      "bytes": 11275,
+      "publicBaseSha256": "5826fb32bc3d6e2221a7a39cc8b4fecc57282540a332417bb9f2ac3522b5c7da",
+      "headSha256": "5826fb32bc3d6e2221a7a39cc8b4fecc57282540a332417bb9f2ac3522b5c7da",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/retry-policy.ts",
+      "sha256": "eee2423a0152096026446dd651f29678e0c504f0349a91758720f01f74efa871",
+      "bytes": 7612,
+      "publicBaseSha256": "eee2423a0152096026446dd651f29678e0c504f0349a91758720f01f74efa871",
+      "headSha256": "eee2423a0152096026446dd651f29678e0c504f0349a91758720f01f74efa871",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/src/types.ts",
+      "sha256": "f5206fd5daf18d3899202c96ca0edb6e7c1a10ddc535edead062ed28f2261b2d",
+      "bytes": 22007,
+      "publicBaseSha256": "f5206fd5daf18d3899202c96ca0edb6e7c1a10ddc535edead062ed28f2261b2d",
+      "headSha256": "f5206fd5daf18d3899202c96ca0edb6e7c1a10ddc535edead062ed28f2261b2d",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "packages/llm/llm/tsconfig.json",
+      "sha256": "cd29b00935268e1d9ee2521bb1d1e2b4ab352a2d10dc190610546d8fdd07a865",
+      "bytes": 643,
+      "publicBaseSha256": "cd29b00935268e1d9ee2521bb1d1e2b4ab352a2d10dc190610546d8fdd07a865",
+      "headSha256": "cd29b00935268e1d9ee2521bb1d1e2b4ab352a2d10dc190610546d8fdd07a865",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "67e847e73f1f0a16d38d9c414babacae6817bd74622c7ff534e07cb0b1336455",
+      "bytes": 1023280,
+      "publicBaseSha256": "80fe05eae33582ae26839afd05f1965f9b0e4be11034ddf9797af6085d5ba9b1",
+      "headSha256": "67e847e73f1f0a16d38d9c414babacae6817bd74622c7ff534e07cb0b1336455",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "sha256": "8486cab8bfbba2b0f740eac3d5109132b18a3bd53d3b07aebf441e4f1462eb4e",
+      "bytes": 5411,
+      "publicBaseSha256": "8486cab8bfbba2b0f740eac3d5109132b18a3bd53d3b07aebf441e4f1462eb4e",
+      "headSha256": "8486cab8bfbba2b0f740eac3d5109132b18a3bd53d3b07aebf441e4f1462eb4e",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "scripts/build.ts",
+      "sha256": "6afb64c9045c90549ff8201a890d572f8f87dae3eebf9c14e5b6ebfc448b6056",
+      "bytes": 2198,
+      "publicBaseSha256": "6afb64c9045c90549ff8201a890d572f8f87dae3eebf9c14e5b6ebfc448b6056",
+      "headSha256": "6afb64c9045c90549ff8201a890d572f8f87dae3eebf9c14e5b6ebfc448b6056",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "scripts/client-build-environment.ts",
+      "sha256": "064ee73384745e7b327c8465fb31b0b99cce5b3824363cdac9eb455ff17b4bb8",
+      "bytes": 16577,
+      "publicBaseSha256": "064ee73384745e7b327c8465fb31b0b99cce5b3824363cdac9eb455ff17b4bb8",
+      "headSha256": "064ee73384745e7b327c8465fb31b0b99cce5b3824363cdac9eb455ff17b4bb8",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "scripts/pnpm-invocation.ts",
+      "sha256": "5b920229966f29c156847e00904d82ef03039f3dc88398592a755f113f22813d",
+      "bytes": 925,
+      "publicBaseSha256": "5b920229966f29c156847e00904d82ef03039f3dc88398592a755f113f22813d",
+      "headSha256": "5b920229966f29c156847e00904d82ef03039f3dc88398592a755f113f22813d",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "tsconfig.base.client.json",
+      "sha256": "117086f80fc5558dd6d01d24cd7dfe7b495df8757dff402021218fa64605961e",
+      "bytes": 472,
+      "publicBaseSha256": "117086f80fc5558dd6d01d24cd7dfe7b495df8757dff402021218fa64605961e",
+      "headSha256": "117086f80fc5558dd6d01d24cd7dfe7b495df8757dff402021218fa64605961e",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "tsconfig.base.json",
+      "sha256": "eb47be0de852184d2e9aec29228736dda45f8455e8744073c6b46c963abca93c",
+      "bytes": 49365,
+      "publicBaseSha256": "4fc5b3db05aab29ec95258d045900f95b6123c1f951c86c342a04dfd32e220c5",
+      "headSha256": "69a13cd1244e70269b99d5c9f3104ba74d598742c1ee5af2c03eef053fc13c79",
+      "dirtyFromHEAD": true,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "tsconfig.client.json",
+      "sha256": "eff33581ce82353dd0178ca0926605faf72141277804f8b3d0771dfae12d2d57",
+      "bytes": 7800,
+      "publicBaseSha256": "eff33581ce82353dd0178ca0926605faf72141277804f8b3d0771dfae12d2d57",
+      "headSha256": "eff33581ce82353dd0178ca0926605faf72141277804f8b3d0771dfae12d2d57",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "tsconfig.host.json",
+      "sha256": "f808187f394992f7653d29c5dfd1400a741777c7b89705fa6d71c4a3b4016839",
+      "bytes": 23898,
+      "publicBaseSha256": "845dfc943f9f0435fb70c8823d1ed204accf7638edf9e0cb544d5f672f6905ab",
+      "headSha256": "f808187f394992f7653d29c5dfd1400a741777c7b89705fa6d71c4a3b4016839",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "9eb420010dfd10daaa1a5374ce018fd691b1ba56a4bea60f2ebd8d548ffdffa4",
+      "bytes": 670,
+      "publicBaseSha256": "9eb420010dfd10daaa1a5374ce018fd691b1ba56a4bea60f2ebd8d548ffdffa4",
+      "headSha256": "9eb420010dfd10daaa1a5374ce018fd691b1ba56a4bea60f2ebd8d548ffdffa4",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    },
+    {
+      "path": "tsconfig.protected-tests.json",
+      "sha256": "37de27cc99e24428b51ab0ea2132fa59ba15e6031fb425dd346b9f358c1fec3c",
+      "bytes": 16212,
+      "publicBaseSha256": null,
+      "headSha256": "37de27cc99e24428b51ab0ea2132fa59ba15e6031fb425dd346b9f358c1fec3c",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": true
+    },
+    {
+      "path": "tsdown.config.ts",
+      "sha256": "af5cf6832716fce53f1443b9daa1f4434a8dd5ac90d9f8bf59aaae937b1904a4",
+      "bytes": 1449,
+      "publicBaseSha256": "af5cf6832716fce53f1443b9daa1f4434a8dd5ac90d9f8bf59aaae937b1904a4",
+      "headSha256": "af5cf6832716fce53f1443b9daa1f4434a8dd5ac90d9f8bf59aaae937b1904a4",
+      "dirtyFromHEAD": false,
+      "differentFromPublicBase": false
+    }
+  ],
+  "relatedCurrentPatchSha256": "5b05935224731cf6e2dbc03b94619119664185b21d5de001db0b1b7f786592fd",
+  "runtimeSourceDeltaPaths": [
+    "packages/core/agent-loop/src/agent.ts",
+    "packages/core/agent-loop/src/index.ts",
+    "packages/core/agent/src/index.ts",
+    "packages/experimental/native-run/package.json",
+    "packages/experimental/native-run/src/driver.ts",
+    "packages/experimental/native-run/src/ids.ts",
+    "packages/experimental/native-run/src/index.ts",
+    "packages/experimental/native-run/src/journal.ts",
+    "packages/experimental/native-run/src/session-driver.ts",
+    "packages/experimental/native-run/src/types.ts",
+    "packages/experimental/native-run/src/values.ts",
+    "packages/experimental/native-run/tsconfig.json",
+    "packages/experimental/native-run/tsdown.config.ts",
+    "packages/extensions/tool-cordis/src/api-catalog.ts",
+    "packages/llm/llm-deepseek/src/adapter.ts",
+    "packages/llm/llm-deepseek/src/host.ts",
+    "packages/llm/llm-deepseek/src/index.ts",
+    "packages/llm/llm-deepseek/src/protected-providers.ts",
+    "packages/llm/llm-deepseek/src/translate.ts",
+    "packages/llm/llm-deepseek/src/types.ts",
+    "packages/llm/llm/src/index.ts",
+    "pnpm-lock.yaml",
+    "tsconfig.base.json",
+    "tsconfig.host.json",
+    "tsconfig.protected-tests.json"
+  ],
+  "currentRootMetadataIncluded": true,
+  "pathClassificationCorrection": "Earlier substring detector reported relative module-directory names as private absolute paths. Boundary-corrected detector found no such absolute references; earlier baseline-only packet is superseded and must not be uploaded.",
+  "sourceDirtyCounts": {
+    "total": 22,
+    "runtimeSource": 3,
+    "tests": 3,
+    "documentation": 14,
+    "buildMetadata": 2
+  },
+  "omitted": "All docs/tests/data/logs/.agents/.codex/private Home/config/cache/credentials/generated runtime/Git auth configuration. Public-base clone supplies unchanged transitive source.",
+  "sdkClientOptional": "8source/build files exact publicbase; not included.",
+  "rootLicenseSha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+  "localPatchAuthorshipAndLicenseCoverage": "UNKNOWN",
+  "sourceRebuildsRetainedRuntime": "UNPROVED",
+  "buildInstallTestModelAttempts": 0,
+  "exactGenerationStopSettlement": "UNSUPPORTED",
+  "newRemoteCommit": "NOT_CREATED_BY_AUDITOR",
+  "destinationProposal": {
+    "privateBranch": "host/source-evaluation-3fbedc25-20261006",
+    "materialPath": "materials/host-source-evaluation-20261006/",
+    "rootAndSoleWriterMustVerifyPrivateDestinationAndPublish": true
+  }
+}
