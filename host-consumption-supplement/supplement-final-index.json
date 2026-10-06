@@ -1,0 +1,88 @@
+{
+  "classification": "APPENDED_SUPPLEMENTAL_EVIDENCE_INDEX_PRESERVING_ORIGINAL9FILE_MANIFEST",
+  "createdUTC": "2026-10-06T13:40:31.840807+00:00",
+  "original9FileManifestSha256": "28fe01491789ef9fab69bb8ecc3d30e32401a2819345030582c3062ffc52ef07",
+  "addedEvidence": [
+    {
+      "path": "runtime-build-input-comparison.json",
+      "sha256": "88f55fce9705246eebef8ffb0bb379d1ef3f339a1d853adc31d153a393a19755"
+    },
+    {
+      "path": "source-history-license-facts.json",
+      "sha256": "2e5b31a504a1541771866286ac40801da172061becd97c463a5f010ed5348865"
+    }
+  ],
+  "payloadFiles": [
+    {
+      "path": "CONSUMPTION-PLAN.md",
+      "sha256": "c0c4004bc95aa1199561869e104a68c4584b795ad6f2c64d32cbaa501d663b5b",
+      "bytes": 3233
+    },
+    {
+      "path": "no-key-consumption-contract.json",
+      "sha256": "2465a7aaad4fe86b275b4180857c65f8c433d70172b5d63a198ef5dd0034754c",
+      "bytes": 803
+    },
+    {
+      "path": "runtime-build-input-comparison.json",
+      "sha256": "88f55fce9705246eebef8ffb0bb379d1ef3f339a1d853adc31d153a393a19755",
+      "bytes": 64732
+    },
+    {
+      "path": "source/packages/experimental/native-run/tests/expected/native-session.json",
+      "sha256": "06eb3ed9d7367b40814817b73b1741b248d58dd88fbf11c96db58ce41ddea144",
+      "bytes": 320
+    },
+    {
+      "path": "source/packages/experimental/native-run/tests/loopback-only.ts",
+      "sha256": "9a5aad989de4a200f56a3da5b291f0ca5e99d9920699e003a469a70a1480082e",
+      "bytes": 2261
+    },
+    {
+      "path": "source/packages/experimental/native-run/tests/native-session.spec.ts",
+      "sha256": "51d0ad8c3be6d62de02387e7d86758612d3eadda8299a1362d32d6efc19687b3",
+      "bytes": 20113
+    },
+    {
+      "path": "source/packages/experimental/native-run/tests/no-io.ts",
+      "sha256": "c5053c61d61958841178393a723e066a989a733952916dbe2eedd3f0a228914e",
+      "bytes": 1595
+    },
+    {
+      "path": "source/packages/experimental/native-run/tests/protected-factory.spec.ts",
+      "sha256": "d57c5264fe7f8c56c3655a9b479debec785eb775bcefc69d8edc48da4d5c36f9",
+      "bytes": 9331
+    },
+    {
+      "path": "source/packages/experimental/native-run/tests/protected-fixture.ts",
+      "sha256": "66396578036b08613f9bae887ef50a0e093cc0f9c828045dfcd1bb3c4fb7567f",
+      "bytes": 5226
+    },
+    {
+      "path": "source/vitest.protected-loopback.config.ts",
+      "sha256": "ac8a60b61b9d7ffc7e10ab24850ffca56d26416718c8c37305a416d3f9b2bf48",
+      "bytes": 391
+    },
+    {
+      "path": "source/vitest.protected.config.ts",
+      "sha256": "629337cd9c278179a59bd6278fa4c7a475d92ce14af296e4d466b7f223ae153f",
+      "bytes": 564
+    },
+    {
+      "path": "source/vitest.shared.ts",
+      "sha256": "3e8900b7471bffab582974b3a0a6413140d8143d41f62f19a348c41ad3a316a0",
+      "bytes": 1482
+    },
+    {
+      "path": "source-history-license-facts.json",
+      "sha256": "2e5b31a504a1541771866286ac40801da172061becd97c463a5f010ed5348865",
+      "bytes": 2493
+    },
+    {
+      "path": "supplement-manifest.json",
+      "sha256": "28fe01491789ef9fab69bb8ecc3d30e32401a2819345030582c3062ffc52ef07",
+      "bytes": 6479
+    }
+  ],
+  "runtimeLanes": "Official A stock consumer and retained overlay compared separately; no retained source rebuild/equivalence claim."
+}

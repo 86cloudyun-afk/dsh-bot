@@ -1,0 +1,1309 @@
+{
+  "capturedUTC": "2026-10-06T13:38:10.702473+00:00",
+  "classification": "NONSECRET_RUNTIME_FILE_HASH_COMPARISON_NOT_SOURCE_REBUILD_PROOF",
+  "retainedArtifactManifestSha256": "115b44a8a1682ff2a033c12e48273076d4f86e9dde315125759ae26f6cd608d0",
+  "retainedArtifactDeclaredMetadata": {
+    "candidateCommit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+    "corePackageCount": 74,
+    "sourceAliases": false,
+    "externalDependenciesIncluded": false
+  },
+  "externalDependencyDeclaredNamesAndVersions": {},
+  "retainedActualNamedPackageCount": 75,
+  "retainedDeclaredCountMatchesActual": false,
+  "officialAndRetainedIndexCompared": 71,
+  "sameRuntimeIndexCount": 68,
+  "differentRuntimeIndexPackages": [
+    "@deepseek-ai/dsh-agent-loop",
+    "@deepseek-ai/dsh-llm",
+    "@deepseek-ai/dsh-llm-deepseek"
+  ],
+  "absentOfficialPackageNames": [
+    "@deepseek-ai/dsh-experimental-native-run",
+    "@deepseek-ai/dsh-sdk-client"
+  ],
+  "packageHashes": [
+    {
+      "packageName": "@deepseek-ai/cordis",
+      "retainedVersion": "4.0.4",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "bd5b142ae927e4f954ceaee7cdc0e43fe921dde311edc8ec4f797f85f1981f83",
+      "retainedIndexJsSha256": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e",
+      "officialPackagePresent": true,
+      "officialVersion": "4.0.4",
+      "officialPackageJsonSha256": "41c9dee4715a89ef94f227384460c8445857c8faf33493eb545604a948828649",
+      "officialIndexJsSha256": "6a9394c0877ff45218818c6e815edd038f8057e1a1deb390a8d43ec81c57691e",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/cordis-plugin-group",
+      "retainedVersion": "1.0.4",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "d4a863778c64048b8e9e905ccdb30155b98fad798c1fbf679e1ce6484a433284",
+      "retainedIndexJsSha256": "68f178f2836fafb52b3959aa71ae90aecd321c3f9a189d9f686233fcb000e419",
+      "officialPackagePresent": true,
+      "officialVersion": "1.0.4",
+      "officialPackageJsonSha256": "aa7eebf0024f721cfd7f3e282fd5640432b3162383abd082d26f411c792ec16f",
+      "officialIndexJsSha256": "68f178f2836fafb52b3959aa71ae90aecd321c3f9a189d9f686233fcb000e419",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/cordis-plugin-include",
+      "retainedVersion": "1.0.9",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "21d0971b87c78816b474a454e96d302a6d3bfc07a16906a965535f6d47b1a749",
+      "retainedIndexJsSha256": "ad5eaf3b80a8fd9945466486493a0d1a8e9590895bcde01e5673f3d07b4fd306",
+      "officialPackagePresent": true,
+      "officialVersion": "1.0.9",
+      "officialPackageJsonSha256": "d4040e962a18e7e6ee8fe3cf63082320224a1390e3491c6ad98eb24fd6423aba",
+      "officialIndexJsSha256": "ad5eaf3b80a8fd9945466486493a0d1a8e9590895bcde01e5673f3d07b4fd306",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/cordis-plugin-loader",
+      "retainedVersion": "1.0.5",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "964db46c6c911187b79e13d778b434e6f2eebb501d1a5ea285270a8ac19c2ddb",
+      "retainedIndexJsSha256": "b57c5075e881b4ceb3a15382f506ce549bcbdcd2a0f5bae292f67e6a83a45b1f",
+      "officialPackagePresent": true,
+      "officialVersion": "1.0.5",
+      "officialPackageJsonSha256": "c2afb78d0ae8968184dc1d1377b60726339337e24ea8193bebb27f2ce3e4073a",
+      "officialIndexJsSha256": "b57c5075e881b4ceb3a15382f506ce549bcbdcd2a0f5bae292f67e6a83a45b1f",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/cordis-plugin-timer",
+      "retainedVersion": "1.1.6",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "ea8b2580283686548b3d03849ecb786d0d9fd43f5879b1b0c5ae7c777b137113",
+      "retainedIndexJsSha256": "aab5832ebcefccd223b16ff3e8f09ca611841f53352c8439ea3acf7cc11ad002",
+      "officialPackagePresent": true,
+      "officialVersion": "1.1.6",
+      "officialPackageJsonSha256": "4c28b96ee68bd092e6ed7c9f139476fd1c5d4c8bcf10b750fafe95c8748512c3",
+      "officialIndexJsSha256": "aab5832ebcefccd223b16ff3e8f09ca611841f53352c8439ea3acf7cc11ad002",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/cosmokit",
+      "retainedVersion": "1.8.5",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "13e5f45b1c2fbb5f5be7f604c8cbb0f30da3529a0b2d28e565e4faf13c728218",
+      "retainedIndexJsSha256": "ba44c0871656e4c7cac2c3c8a2ff644e0d2eb9d6bda7f6355866d686d513268e",
+      "officialPackagePresent": true,
+      "officialVersion": "1.8.5",
+      "officialPackageJsonSha256": "eedc5e1a5575d05749e9bf3a22fa56e67a5fb8153ca02838fae961ddcd0cf4ef",
+      "officialIndexJsSha256": "ba44c0871656e4c7cac2c3c8a2ff644e0d2eb9d6bda7f6355866d686d513268e",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-agent",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "5a1933ae764443b0f725af0a069d810e55cb83857f0a99eaf78fe70b0ee1d01b",
+      "retainedIndexJsSha256": "7b9aa39474de83115cf890dd7f8904cf0d59df0811cb335ab85565a04f1aac93",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "224385aa84ec7d522f81b169f2ac50443ead741e403a1489d6fbe78e12c73d49",
+      "officialIndexJsSha256": "7b9aa39474de83115cf890dd7f8904cf0d59df0811cb335ab85565a04f1aac93",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-agent-loop",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "f7ffa7f0e765b94960fd1a2f6709bb86850ed26cfb648f6b1c200100282bcb0b",
+      "retainedIndexJsSha256": "1fe67b17c4776da1ec82fa29637ec5e680bb292853ff1b2f586fde830b91ce82",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "341ca7d03c75d0c04803516479267cec1067229361e01a3ee87d7fcdbf50f0ae",
+      "officialIndexJsSha256": "00c4814d63f3d1e2754eb09144832d19b30499d6ea444730473f740b587948c2",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": false
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-agent-preset",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "a2387444c52b9d2fc177de3d6e6b3026e215ae08d325219bdbda6b5516a99076",
+      "retainedIndexJsSha256": "23cd2dd62ac3b27522a2d377e14b5a93f80c2189e733937dcdd02b73a6d3d1da",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "3bb2e6e31722a08022184d0408f41b7c325174536c4e326d6f4a1cda021c7ed8",
+      "officialIndexJsSha256": "23cd2dd62ac3b27522a2d377e14b5a93f80c2189e733937dcdd02b73a6d3d1da",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-agent-preset-registry",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "f2461e7bdb9592012679ccc9ee50f6a9555d4ddb578f754687806386155c0ccc",
+      "retainedIndexJsSha256": "ed62d573b8cc6d7ed3e3cb7932dbf5e237f5a603b3cc9d9e586187db00e821cc",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "36d9d97a8d04a57664cbd83bebcf369bf215dd9f5c3aca0d9cbd57b9b97286ca",
+      "officialIndexJsSha256": "ed62d573b8cc6d7ed3e3cb7932dbf5e237f5a603b3cc9d9e586187db00e821cc",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-anonymous-user-id",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "7d685049bf0bc413dba08c4b24a964742023c143275cf7f697dde03c39bae2e3",
+      "retainedIndexJsSha256": "8645c437702f29583b1b17dc69b7ee20a027317163fc43e44ebb4df4998490f0",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "2c2910e527018dfd4f9a20416f59644d72c85845a9648513e4936a2074498f54",
+      "officialIndexJsSha256": "8645c437702f29583b1b17dc69b7ee20a027317163fc43e44ebb4df4998490f0",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-app-boot",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "0573fcce8a7d8a6b634ca49c2077801ddabe496c30e3848fd23796b6370efeeb",
+      "retainedIndexJsSha256": "234db45e1b3f8c683b5bc1f551948b2a2ec52a6468c7b6937725a23f1c0e0d96",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "38ed12cd4992736d37c1251d7c3f1696e2903d0f398a7686f1e692c171e56525",
+      "officialIndexJsSha256": "234db45e1b3f8c683b5bc1f551948b2a2ec52a6468c7b6937725a23f1c0e0d96",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-atomic-write",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "c63322a2aef51bac67682bd4fd4d28723d98a939f37bc60dc98a076a100c28ca",
+      "retainedIndexJsSha256": "5f07978ef594a2711b2da301d5cb73a835cf1a48c1f8920ab5c6625137e12029",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "bbf399274ae948f980e8cb5552697b660d42f82b4c29ad6cb6013065ca248747",
+      "officialIndexJsSha256": "5f07978ef594a2711b2da301d5cb73a835cf1a48c1f8920ab5c6625137e12029",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-attachment",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "bccb2bf50846850f65f6154faefb0e32bbd172cb59a72957b62efd0fab997795",
+      "retainedIndexJsSha256": "9cd6c01a6cca9431f789be334afdfe4f5cf647224bb394cc0215056796520f58",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "a3deb103ea6f17c70133f7a296a28e85a20b6b79bc40930dff8f296ef411dfd2",
+      "officialIndexJsSha256": "9cd6c01a6cca9431f789be334afdfe4f5cf647224bb394cc0215056796520f58",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-brand",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "4d60b2ebf68b05cd362a2682f5d063f696520a7b54d08c251d7525aebdfad2df",
+      "retainedIndexJsSha256": "14feb59256b891982b2017d73ed03ee65e2a7365f48e4902a856acb0e52d5eb0",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "364e424abd6392b8ef47fccce82e50211697d3b5f85b1530d92a2d2dbc411bf6",
+      "officialIndexJsSha256": "14feb59256b891982b2017d73ed03ee65e2a7365f48e4902a856acb0e52d5eb0",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-chunked-list",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "fb0f8b84484c0b29e7608294b584939bea211fe1e9ebb6b2eb40a6bffce3787f",
+      "retainedIndexJsSha256": "30285ec550e8fd1d7507913333ef9f2138b0ca8f2fd033a73dace80cf95b1957",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "0b7250894bbad003d12080bf7dd4d5ae000506ccb510d8fcaa4cb19278fe0ca2",
+      "officialIndexJsSha256": "30285ec550e8fd1d7507913333ef9f2138b0ca8f2fd033a73dace80cf95b1957",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-cmdline",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "1af08a0a4804aa829b42b5c73de68cbc81fbe501db22121c008dd21fe14a33e8",
+      "retainedIndexJsSha256": "7253190611566485f8b6f836fae6e0f2a7abbc59bb807c42e874844016e6d3a0",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "84641a414d11b57cabd252e5e1bc6e7fdffc94077e2b222ee91b6328b8ceafac",
+      "officialIndexJsSha256": "7253190611566485f8b6f836fae6e0f2a7abbc59bb807c42e874844016e6d3a0",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-commands",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "2e11d04843f47367d5c5bbede11b34b46b6d8bec8c618b87f51a9bba3d0b8b72",
+      "retainedIndexJsSha256": "88909a0915e4e3b2148c72a912987c3e29ba025b5dea589a0f4543040dc34750",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "c627cd7296b112ce4ecd97f562eb6c089d500a0493117008ef808938869f1056",
+      "officialIndexJsSha256": "88909a0915e4e3b2148c72a912987c3e29ba025b5dea589a0f4543040dc34750",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-compaction",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "09ac6c9ba94bcecca06bb074a786e8d21d593b7f56a86e4c043d3d645783b3e6",
+      "retainedIndexJsSha256": "6ec67e516116e64da69cda58d6b182b22b51c5dc21c7e7615becdf59479a27ae",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "9cbcd774f2a93894fee327ee3d53e07a5f096fac7f01c2f5992563edb182da6f",
+      "officialIndexJsSha256": "6ec67e516116e64da69cda58d6b182b22b51c5dc21c7e7615becdf59479a27ae",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-compaction-image-offload",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "61a3346e4597da8dd0b7c623c7c10fc619c722b5d4be248698e396bd3e06b67d",
+      "retainedIndexJsSha256": "fb69943ae54f1113efd42eb2487244247c63fb811f42e780c3a783c80c3b47b7",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "e8354e5896af67df6d775a98840af0e16d2e0ae317550a47d54d27662fe21811",
+      "officialIndexJsSha256": "fb69943ae54f1113efd42eb2487244247c63fb811f42e780c3a783c80c3b47b7",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-config-editor",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "c9bb84c4a046c9a0ff6ec7504981df88ecf5b618402980703052660a0466a36d",
+      "retainedIndexJsSha256": "373e05c8250d25dda983ccf6e214a55e3792a211d1a7b883affcd66de47b5bf8",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "f4e4a4b676910078c4bd8dddeb16f8da9f80be8e614142fcd39d5c6dff0a1d5e",
+      "officialIndexJsSha256": "373e05c8250d25dda983ccf6e214a55e3792a211d1a7b883affcd66de47b5bf8",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-credentials",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "2ccc1883d85fd743200f6f9f8c16f47915dc047b8acbfa0297818eb9488031c4",
+      "retainedIndexJsSha256": "1edbfddea8c1b0833b19fd1c418943160380e9e59206595876aa07cb370d3770",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "259f40c676fd4250430ea9ed6c76d4f31d559c2d922b5a5486f7dffaa2e7251b",
+      "officialIndexJsSha256": "1edbfddea8c1b0833b19fd1c418943160380e9e59206595876aa07cb370d3770",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-deepseek-llm-api-extensions",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "adea129fa2a1ad4b85665d6a886e6ed63dab1d4d43873eae3d82a9e69eefdbb6",
+      "retainedIndexJsSha256": "3a8bafed2f2a0d024dbcf6c66552230448a8d62add71cb523fb81e96a4e9a875",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "7045145de00d86ffd3433accc7b19f33a3effe88527a0bc3a27cb56c5d94ec1a",
+      "officialIndexJsSha256": "3a8bafed2f2a0d024dbcf6c66552230448a8d62add71cb523fb81e96a4e9a875",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-experimental-native-run",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "f16d65c45b0d210d17e90c25964e101eabda00d770231c69e7d68f5e784d42b4",
+      "retainedIndexJsSha256": "f92c86962836abfb4972fd2fc5b1c964da8e43cf5cf3287a1238ba24a0e60656",
+      "officialPackagePresent": false,
+      "officialVersion": null,
+      "officialPackageJsonSha256": null,
+      "officialIndexJsSha256": null,
+      "runtimeIndexComparable": false,
+      "runtimeIndexEqual": null
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-fs",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "c6d3699a274a486e0ebc58cc541dcba13e0919551707cdadc488434bc8842574",
+      "retainedIndexJsSha256": "b165659f1eff0607222a7fe761bc56bae03fec8337c2e25affd064a3047dacb9",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "7aa321549b06260f1349c328fe41f93759440d07be464bd18220fd2c6b3303ec",
+      "officialIndexJsSha256": "b165659f1eff0607222a7fe761bc56bae03fec8337c2e25affd064a3047dacb9",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-hmr",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "688fd971136e16ff685486018b8b6c7e881cf09027d7cd2c222c06e383bf22f4",
+      "retainedIndexJsSha256": "75686a16199f90f5b580d96923d3d5c52a513402b399ad723d92506d00ea7676",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "d76b077db5c3a4544ba0283c3e65cac35a19bf5685a63754d017dd3e6eb4e55b",
+      "officialIndexJsSha256": "75686a16199f90f5b580d96923d3d5c52a513402b399ad723d92506d00ea7676",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-home-paths",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "eebb7256be571ac40fdf82a61f1a5f6268c612db14f8544e0586af1bd2f29050",
+      "retainedIndexJsSha256": "97c1c10b299a4f2aec5f34bac5370cad3834391cd75c91a76b1e7b8a643584f5",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "1a0d4095f0a58820b16b419b87782491d2ab67575f950591e4e46ae54f65e8ad",
+      "officialIndexJsSha256": "97c1c10b299a4f2aec5f34bac5370cad3834391cd75c91a76b1e7b8a643584f5",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-http-proxy",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "9b8e70ee0e6b6aa973d2e9717a6cebbf3cf81ebe0bee1b7cb3e3064c036af699",
+      "retainedIndexJsSha256": "5310861bc89788ea24be82a3b323e34cbd42b9e6214e2a179b2e6f92a8758cd5",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "2016a404bef0c55443d8cd7291ebca242b2ce1309af1b70f437770cc9284e3c5",
+      "officialIndexJsSha256": "5310861bc89788ea24be82a3b323e34cbd42b9e6214e2a179b2e6f92a8758cd5",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-invariants",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "a2cfc87a3e00c2e3befcfbe10ccc0602a3a8f7c09c7e64866d358b8f66b6d3a1",
+      "retainedIndexJsSha256": "1847721f505b1cb1a04000d5590a4675c20b6e9ab6c827c20a01c32c2317d68c",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "93b590aafc2fcb27be5b53bfbf3d74a02945981055b6f309ca03d2a216c1e11c",
+      "officialIndexJsSha256": "1847721f505b1cb1a04000d5590a4675c20b6e9ab6c827c20a01c32c2317d68c",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-jobs",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "812d0db8b2ec583b4d14ea4120c9008ce5cc3060209c242a81978b55210114d9",
+      "retainedIndexJsSha256": "909240e722c34877282c6868cd0e06915669e0ceaef690b1738ae72b4c3ef049",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "2cbd5a16c39b7dbf7ea844e73ae7368e2430c4ce83821c88d8b50d8ef55f1eb3",
+      "officialIndexJsSha256": "909240e722c34877282c6868cd0e06915669e0ceaef690b1738ae72b4c3ef049",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-launch-environment",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "4e6edae9320942ec66fc86b54a8acbab96218e3208a787503e86d6f0cd6e5a9d",
+      "retainedIndexJsSha256": "6aab33b43d6caa4ee483f7d796a17afb400fca02b7a259fb55d486626e6bb7f0",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "455baa438299918f3fc3f32f85c6b6cab8fdea8b7432a6a5b1c2c55d15b6c32d",
+      "officialIndexJsSha256": "6aab33b43d6caa4ee483f7d796a17afb400fca02b7a259fb55d486626e6bb7f0",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-llm",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "ed579a752bc9db66aaef70d647e1dae6d7e7dfbda8efd34d1650b69e8c3c88ee",
+      "retainedIndexJsSha256": "b187378f2de56b44a2ca65218a12d4e7850e56758d19a185bea0b1f00042d03b",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "6fb2d880b26d0c69b792d2830efbb1642f1d849537e24114301e0d9fbe9e8e4e",
+      "officialIndexJsSha256": "9132c8a8053ee82b9fb1ded4f98c85cf557f288a15a85c552c6b1fb319ead120",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": false
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-llm-deepseek",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "8032971c0ff8015e8f0175df5f2f7c7d1972e423b5116e6527d8b0c84495da7c",
+      "retainedIndexJsSha256": "40ac3aa85925555028867ac0426417e6207e977f1f363e14078570723b1d1456",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "761a7afd65fe421bb58d7dc372df2c71475055587e30f63e8bc68ad7e6ea6d63",
+      "officialIndexJsSha256": "226e2047b843f954d8478207613f3e44448671c6f98f8edee77008d0fe005484",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": false
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-llm-deepseek-api-key",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "bdd86a7a4488400d30c1819eadc00b74da4e363216bb4e550eeaeda750330979",
+      "retainedIndexJsSha256": "71688fb743a3187ebafa9d50e74ded4e899a5ccb0731f9d2d15a7abeaa57bb95",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "c38069aab4ec9adc51a528f21c6ea5305417c791b808a8e34d79533129c87639",
+      "officialIndexJsSha256": "71688fb743a3187ebafa9d50e74ded4e899a5ccb0731f9d2d15a7abeaa57bb95",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-package-manifest",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "1af41364ca708591505bfb6afe6abc330829098e2cbc49814e99880fd77cc787",
+      "retainedIndexJsSha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "dbe5f8abbe416aeb20af488d4334fcfe3393bc2352ffcf6c92a383718fe89dbb",
+      "officialIndexJsSha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-permission-presets",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "59db2a5a610f39a6fbaca221c76bd4831e42502877b92cdcc7791ce1f519ed51",
+      "retainedIndexJsSha256": "4f23c620145098d611d04d8363bc6716f49b26930c9141a21dc9a8df2b72ba63",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "4d76abcf5b32bda6965d633b75ffc09fc7afbc5450144d9b9c9ca05c61d52b54",
+      "officialIndexJsSha256": "4f23c620145098d611d04d8363bc6716f49b26930c9141a21dc9a8df2b72ba63",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-ptc-runtime",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "48f3b576f2b684376f4257486631add159e821ec79d761b211f9d26f55d38f44",
+      "retainedIndexJsSha256": "a4c4c2f87e2708c8b19b6e3faf5a0383968984612424a525ae36ce24ebda0cff",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "ced80cf971b6fccd3448a06e2e82df13bb24046453a99b0e1361c2454744620a",
+      "officialIndexJsSha256": "a4c4c2f87e2708c8b19b6e3faf5a0383968984612424a525ae36ce24ebda0cff",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-sandbox",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "021f29a6ddf8ffc95158888fc3fb579a99b1045b584ab6fb923739f1fbe3749b",
+      "retainedIndexJsSha256": "b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "def47b64b401fb7a9f4d2094397d0ec375ad75de5dc349679f832640aa954e48",
+      "officialIndexJsSha256": "b56373befbfcfe281c17c8892e9a4b2cdcb96851290b3ed0ff56b08915e2f743",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-sandbox-policy",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "da81d1c34a4e7612497c83a6cfbb9516cbdfbe1ca242c3230b6cd011aaa2535f",
+      "retainedIndexJsSha256": "772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "e32b6619022c84a2218aed1dff41ea61ea5e92f0c57766cb2bc952c78ca61106",
+      "officialIndexJsSha256": "772ca58f0f786d6cb4d839deb621634c31097c13228d81b14e3f3153d0524924",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-scope",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "f03e68a72274fb092954ea37e0df9b78064d2801973880f13fb30825d8eecf20",
+      "retainedIndexJsSha256": "2829df71d76e08941457d4dd173eac60783e55354921137c8b75e8b5c0d2ecca",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "5e7472b2722d3badae17e01da000138ac8af77396f05bc21e5621049ac9eaa48",
+      "officialIndexJsSha256": "2829df71d76e08941457d4dd173eac60783e55354921137c8b75e8b5c0d2ecca",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-sdk-client",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "59c49c60bfb4c93088d0dc60af4786bd76a6b683ba4330b7e02998111ebe8e21",
+      "retainedIndexJsSha256": "3e936345f36c1845ad07a66084a126cd0a9b511aa192501932874d7e09b9e7b8",
+      "officialPackagePresent": false,
+      "officialVersion": null,
+      "officialPackageJsonSha256": null,
+      "officialIndexJsSha256": null,
+      "runtimeIndexComparable": false,
+      "runtimeIndexEqual": null
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-sdk-jsonrpc-server",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "de9c72d68b3c55d5ff6594964f97e1eedeab5565cfd8a6b3bac2812d41186fba",
+      "retainedIndexJsSha256": "f935ba0fc284441b8937c45feddd030cd85ae6e2514b3fe64104dc28202d9353",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "68f45f66415caaf20995bb6f22629eba07eea093ee639f26853aed94e6be49ce",
+      "officialIndexJsSha256": "f935ba0fc284441b8937c45feddd030cd85ae6e2514b3fe64104dc28202d9353",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-sdk-protocol",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "867cb30d0f83652f1d7e9874acbfeed3fe09d83f77674f0df7a6bc2cf3d84a34",
+      "retainedIndexJsSha256": "371c38ca3514797d86df5f4bb78a56c40a2637294b83aababe8145bec6a20253",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "41c92886f1877b0e2a390d7bcd16e4f7df6093e376df182f9e755b01dd6a9237",
+      "officialIndexJsSha256": "371c38ca3514797d86df5f4bb78a56c40a2637294b83aababe8145bec6a20253",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "ac6fe6cf7778add8f4e97494c9eb7379880b57823836454a70f797ee5382d047",
+      "retainedIndexJsSha256": "87ea85e2fb5318bf1f826db9a1c88c1b26d3ea328027a7f32b211880c4d62b9d",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "5f513d38e301396ea82021593efc9e475817957e8f8dce0e64c3e5d722ed403e",
+      "officialIndexJsSha256": "87ea85e2fb5318bf1f826db9a1c88c1b26d3ea328027a7f32b211880c4d62b9d",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-format",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "401b9fdf5c07f1eb195019569b0ae6ba930423ff3aa2a1e6bd559713111795c7",
+      "retainedIndexJsSha256": "6c7417ec2cd555e2781197d91c4566c88ffcf2728f362d7a2937859be57226ec",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "f705199cb0a896a2f2e1ff9d7d544e0eb7917f66b9c7d8586018d48130fb2fb2",
+      "officialIndexJsSha256": "6c7417ec2cd555e2781197d91c4566c88ffcf2728f362d7a2937859be57226ec",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-format-catalog",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "b43d7208e2f4cacb8ccded7315445a10511381459331be75bf85367fbf75e236",
+      "retainedIndexJsSha256": "836bbb772ab505c299f1a4a246164c50c7c08b67ab0d17f1251d7ea2cd8c1818",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "a549f4b606c6b0c2b72b27b9363d0a40e2a52935a5a2b6af9bee7211e46d43c0",
+      "officialIndexJsSha256": "836bbb772ab505c299f1a4a246164c50c7c08b67ab0d17f1251d7ea2cd8c1818",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-format-v0-to-v1",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "59225859a4e629a1331291eec9a9069293ecd807f1fc56b9442a21a36cb7797c",
+      "retainedIndexJsSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "c01f5519227ae0b68e5f2ef819ebf3e7bfd4b7328d804ddf992ab41c168d5fc2",
+      "officialIndexJsSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-format-v1-to-v2",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "5f3781e251ac419afc884d18246938c57ebecc36146251055bbf658aacd1b770",
+      "retainedIndexJsSha256": "b2b401d880bb000017ba8663c4448b501427b23a1cd2f9fdb04cb7ec9d763eff",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "912f3079a2d697e5145a9a9cd97708e037da9665cc32538aefe4c2f29efa89ef",
+      "officialIndexJsSha256": "b2b401d880bb000017ba8663c4448b501427b23a1cd2f9fdb04cb7ec9d763eff",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-format-v2-to-v3",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "a51913a5aa005511d87cd220a89a45690f3f27de02882f2a3217eddfb534f383",
+      "retainedIndexJsSha256": "0dc56fb447e9046fc25995bcd08dbac26e832eba6e9eb583ef49d26467c27cd7",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "c52112683ae26c4a088d53415dd45dcaa69048437c21e571136d2a992ceabb88",
+      "officialIndexJsSha256": "0dc56fb447e9046fc25995bcd08dbac26e832eba6e9eb583ef49d26467c27cd7",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-format-v3-to-v4",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "7419b7b38865310691cd8bbeeeca2204b6d3842e2de2ebf03e808073282606b0",
+      "retainedIndexJsSha256": "382a3f28b95e0b9504969ac6f407f909aef0ba4699c3175d36c0ef91b31cfde2",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "6c9b42581a60e182370c10d3d4f33b7cb64071ad8cd93785827d0969c533197b",
+      "officialIndexJsSha256": "382a3f28b95e0b9504969ac6f407f909aef0ba4699c3175d36c0ef91b31cfde2",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-persistence",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "858ae65714efab50f570c35072a24deb0dea340ec575e08cc311a57ca642e032",
+      "retainedIndexJsSha256": "cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "90eeba20c596a12b409facb6922890d75a4c7b11945f7b4b711ac54f6bbe2274",
+      "officialIndexJsSha256": "cc0b6d3a224133af611b428d5a49020e300f86c3b4ba28037aeb219029bde3eb",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-persistence-jsonl",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "15c3a0fba3baae883c71baaf7b86b6ed6fc3748d7379c339489c8cd38bd9a64e",
+      "retainedIndexJsSha256": "0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "5cb0f10f78e4336e4391912f2963d2f456cef1e3639916b20bebaebc5f8e9284",
+      "officialIndexJsSha256": "0845707017acc2b4a8a75eab2244fa3fd88587b8094ab32014321dce7ca1e31b",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-projection",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "d4058d73549c9ba64539ae22f7aa240a72195ff60360ce42bc9dba5dd715258d",
+      "retainedIndexJsSha256": "022f1d13e25aeb3c18e10407d84c69e018c1c05a65c9ee36ed14d89b185a4fa8",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "024051dfdd53bfd6542ada25415c4d5a382055f24d1688fd6c76764e134a067a",
+      "officialIndexJsSha256": "022f1d13e25aeb3c18e10407d84c69e018c1c05a65c9ee36ed14d89b185a4fa8",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-projection-cache",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "8f3fc473cdd7fb5b431df9917471ec32a171d35678f829da5e6fb58fb4b14153",
+      "retainedIndexJsSha256": "797282e86a23ece3a6a6246765277ec00360813bc0bac0450caff8c56278db0b",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "6d0bb9323bfe339f99085d7075567855e882ac1c91032dabda89aee80f8eebf0",
+      "officialIndexJsSha256": "797282e86a23ece3a6a6246765277ec00360813bc0bac0450caff8c56278db0b",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-query",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "4609913dd8585bc3947aab2f11ab17f5fda4d1d6000a26e7238b6a4ef6ac2ec3",
+      "retainedIndexJsSha256": "dd8056fad008063c7e85169d4306720abe8efa6b32eac98f1b3053c6f89894aa",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "5f875c0aa0d8ceadd3120533fd4359deb4e76987de1ce6757c6ab91f9aef1710",
+      "officialIndexJsSha256": "dd8056fad008063c7e85169d4306720abe8efa6b32eac98f1b3053c6f89894aa",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-session-title",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "6fd0abe6253d92ce7c71ab0ed704c37703d0e9853f1c96898c14ae6943bd49bc",
+      "retainedIndexJsSha256": "9701b041939fe0bf153f90e94092940720b735fc96aa85ef4a0f902f9c15ff11",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "1953f2f9f260ddf21f1c77594f0274df750b58ef142b10d3ed1e52c96da94076",
+      "officialIndexJsSha256": "9701b041939fe0bf153f90e94092940720b735fc96aa85ef4a0f902f9c15ff11",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-settings",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "699cddcf1beb9105883da57d53d37f9cab71043aa27c5c6eadbe0e37e3a3f848",
+      "retainedIndexJsSha256": "9432b872597b7a31473072eb38a55979ab23375c76bd1d86d751388a692a0136",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "0114c950d067f1e983e7f63902014d6327e4d7c04412a3cb684c12ecf842383a",
+      "officialIndexJsSha256": "9432b872597b7a31473072eb38a55979ab23375c76bd1d86d751388a692a0136",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-shell",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "594a447b2e37032927b7cc5f05ab976bcba76b62a90e8dbc019d2fc7f1167ef6",
+      "retainedIndexJsSha256": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "2c0e19b89b054aaeedcd18565dabd4ec9772bd6fd13dc3e390f93a51cffae60e",
+      "officialIndexJsSha256": "6c5aa32fda2d92ef827d949480fd32cb4867f811ce06e875e70c59ab2c9261b1",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-storage",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "353a9bc70d2b90fae300fb65d70f17c1689b75852ff9fa471ec2ee4fd89173d1",
+      "retainedIndexJsSha256": "1289574c24ecfa5b134e2750d578c00ae59654de7d00133e117c4cc34095f3a3",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "b2d7abf88577a00e89922937f37663b79e19be6574518eeffb7b77fc1bc5611c",
+      "officialIndexJsSha256": "1289574c24ecfa5b134e2750d578c00ae59654de7d00133e117c4cc34095f3a3",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-storage-domain",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "7792f9904e4e9ae8d518e58458d7b1e44820660cfd2ea6a8d4b2b4a00d0823ee",
+      "retainedIndexJsSha256": "e536ba09b7ccc0f10bb54818dfe44454374e5cbf7aeba140b216ba1ca2e87517",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "d968c29a94a49304ef58ef7c4f6b96d3f9b9337708f53d4ff215731d00b5b592",
+      "officialIndexJsSha256": "e536ba09b7ccc0f10bb54818dfe44454374e5cbf7aeba140b216ba1ca2e87517",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-subagent",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "9a3860f6894009c9ae4a03edcc83069c32558522d04268a057d9fe2e34476c82",
+      "retainedIndexJsSha256": "75b50b1c9452a6aeb10d1c859e3f45b05e062ea1fad6ed3bcd9577f2bc912541",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "6caac7f71a2c2702902bfb32506867b687073dc94963528dba23c5e981624da9",
+      "officialIndexJsSha256": "75b50b1c9452a6aeb10d1c859e3f45b05e062ea1fad6ed3bcd9577f2bc912541",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-subprocess",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "7499365a58f010dcbe3cd9b2eb0a793d06152fd0531f5b894abf70a9e68ca95a",
+      "retainedIndexJsSha256": "0ea9e95a73639f9e69b48aa48f373f34881adffa2ee2ac2acd4702728da9592b",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "926289b9e5bbddf12191203117ef9aa67a71f0e24264358bf8db57428c045ba1",
+      "officialIndexJsSha256": "0ea9e95a73639f9e69b48aa48f373f34881adffa2ee2ac2acd4702728da9592b",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-system-prompt",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "854195c80f064b21613c7767d0a65c34e5a5b9c1c1f8212cdf374ebad5d470c3",
+      "retainedIndexJsSha256": "ff422afac6ba85f89afa985d921aed0b603feb354a05a549c48eae04cf0d2f57",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "6d83e7a42f04ca54f86f8bc5dbbdd7cabb52968bf51c4d864a2634d70bfd1437",
+      "officialIndexJsSha256": "ff422afac6ba85f89afa985d921aed0b603feb354a05a549c48eae04cf0d2f57",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-timeout",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "8ce88785bc67002b5d3ad430b83828a2a96e3195228b19572c1202768820ec70",
+      "retainedIndexJsSha256": "744fdb4f79c8d513c6d4014a018949cfb2f02f4dde4621167302c5467c3994ec",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "ac1bab44dc411e4229ca5a3b013340fca4a80c22638d4510b6c72acb6411209a",
+      "officialIndexJsSha256": "744fdb4f79c8d513c6d4014a018949cfb2f02f4dde4621167302c5467c3994ec",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-tool-todo",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "cc8635d507f7fbae711e72b6ee98cf0e91b8b36ca1eab8499cc80870940583c7",
+      "retainedIndexJsSha256": "6baad8bf8e53647319b408cbab0c8c13c0693f65d20b779484c4436f47a6a11b",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "b35feb74bfc315de305e2ca5d0fd0e2fb58ce18e5d2e476fbdcd4c78aec791c5",
+      "officialIndexJsSha256": "6baad8bf8e53647319b408cbab0c8c13c0693f65d20b779484c4436f47a6a11b",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-tools",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "4304df82765b9a2395bfd00888785404158e47a787e7121371d9d69f4dda6cc4",
+      "retainedIndexJsSha256": "40f47709337c3c205d4e09e647f8588f4977e66f6d52f019b3cc7ef81159d84f",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "fa34d96a62f4b40ee3add8e23dab87e50379781e04faeaceeddd084c258435af",
+      "officialIndexJsSha256": "40f47709337c3c205d4e09e647f8588f4977e66f6d52f019b3cc7ef81159d84f",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-typert-protocol",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "847d7758d0c2ca9ee3b609eeecc73f179d685e226ed205d1d6bf22f5440a32fb",
+      "retainedIndexJsSha256": "f7e0fa4b750267f6adaa1b901be7987f0d830800ec3a05f247251bf77de0b809",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "81f763ee84ae961f4f12cd893302950aeb90b6e8bdf6f3c456907b5dff03cceb",
+      "officialIndexJsSha256": "f7e0fa4b750267f6adaa1b901be7987f0d830800ec3a05f247251bf77de0b809",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-user-approval",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "8e954d9b959123d4a6905c6ccdf49dead213890f237974dda1b6956dbb3e23c9",
+      "retainedIndexJsSha256": "6a5ad1ba3c3dc3abbbae52e6c8c4463970ee0c1c8988cebb0d5cf2acd17ee90b",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "301cb8ee3967a1190308a2ae44b804b4ed8bcad30c5bda527bcaf013f48b5a8a",
+      "officialIndexJsSha256": "6a5ad1ba3c3dc3abbbae52e6c8c4463970ee0c1c8988cebb0d5cf2acd17ee90b",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-util-crypto",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "3688d9736fb8deda3aabb7657a4588d984677a631333db749ba286dc57a70a1d",
+      "retainedIndexJsSha256": "640b26c8e5a1156c6c8e8749a22f805c9c0e34444778eb4ee9529be3e88ec862",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "e77a043b7837fc27c12bd0aa3cf849340f19e93a5ea1e98b203c87d39c7c2847",
+      "officialIndexJsSha256": "640b26c8e5a1156c6c8e8749a22f805c9c0e34444778eb4ee9529be3e88ec862",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-util-time",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "bf334b578cfcf3d03cb68d6e76fd96d9731fe89b1995a5920327ce00b0790720",
+      "retainedIndexJsSha256": "9730c7bc2fe11c1f8a5b1a558e3872039fe6f5ab4fbb279c63de70a8d476b18a",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "ae363e173bee4066720a331f339df46598fa3441a1a9d225abf68f5110035f74",
+      "officialIndexJsSha256": "9730c7bc2fe11c1f8a5b1a558e3872039fe6f5ab4fbb279c63de70a8d476b18a",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-util-values",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "9acd71d95237b2cecd70a8d39caf0e0e2f720188ed1cab2d71644039ea7a90d6",
+      "retainedIndexJsSha256": "d291828dc4ff9c4b43a67e7ed81625c8f90ebdcf4de2f5cbf2c33f38208ce2b8",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "2a15152e51019eb526463b6a2a8b87d9ba08717af623af1b139d4fbcd87e0bb8",
+      "officialIndexJsSha256": "d291828dc4ff9c4b43a67e7ed81625c8f90ebdcf4de2f5cbf2c33f38208ce2b8",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/dsh-workspace",
+      "retainedVersion": "0.2.0-rc.2",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "4d51c5cb24008b88709b6fc95cf5c9dbfb460ce846b7dc398a4d9fae56bff4c5",
+      "retainedIndexJsSha256": "a33af459cfc7af29dd17412443a63655fd5037dd348b0dec20a413ce60c6c8bc",
+      "officialPackagePresent": true,
+      "officialVersion": "0.2.0-rc.2",
+      "officialPackageJsonSha256": "b9ee07ad69a2421ce3b1848821e0ce19fbeca7ec83ff255ff5b85e5f2318718d",
+      "officialIndexJsSha256": "a33af459cfc7af29dd17412443a63655fd5037dd348b0dec20a413ce60c6c8bc",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/node-addon-system",
+      "retainedVersion": "0.1.2",
+      "retainedDeclaredLicense": "BSD-3-Clause",
+      "retainedPackageJsonSha256": "d7d004595b5d66bdb7c75d4e7afc6ce7e25eebd0143ff7aaed7cf52b892ca156",
+      "retainedIndexJsSha256": "a0f04e2990b6fff091d6776c41e56dac8c630a37b944632e743fa8f2ee9c4813",
+      "officialPackagePresent": true,
+      "officialVersion": "0.1.2",
+      "officialPackageJsonSha256": "e8aebe0548e3fd3e733b03476a0a6531076ba40678137421ecd7fb191792d50a",
+      "officialIndexJsSha256": "a0f04e2990b6fff091d6776c41e56dac8c630a37b944632e743fa8f2ee9c4813",
+      "runtimeIndexComparable": true,
+      "runtimeIndexEqual": true
+    },
+    {
+      "packageName": "@deepseek-ai/node-addon-system-linux-x64",
+      "retainedVersion": "0.1.2",
+      "retainedDeclaredLicense": "BSD-3-Clause",
+      "retainedPackageJsonSha256": "94429032711a433193c98cd1369bdae5204d6d14c97557f8db4399be7ff8a384",
+      "retainedIndexJsSha256": null,
+      "officialPackagePresent": true,
+      "officialVersion": "0.1.2",
+      "officialPackageJsonSha256": "f2c14cfef615df7755050dba8567b5c0821178513b6ec31f2227bfa8f66be1e9",
+      "officialIndexJsSha256": null,
+      "runtimeIndexComparable": false,
+      "runtimeIndexEqual": null
+    },
+    {
+      "packageName": "@deepseek-ai/schemastery",
+      "retainedVersion": "3.18.4",
+      "retainedDeclaredLicense": "MIT",
+      "retainedPackageJsonSha256": "853b0935cb1d49c477de8600c91ed1829fa46c61d2cd83dbbf406bb405ef7f93",
+      "retainedIndexJsSha256": null,
+      "officialPackagePresent": true,
+      "officialVersion": "3.18.4",
+      "officialPackageJsonSha256": "81c5663da570b5072eecaa9d823dd600315308538ed1fd931b276523fb40d95f",
+      "officialIndexJsSha256": null,
+      "runtimeIndexComparable": false,
+      "runtimeIndexEqual": null
+    }
+  ],
+  "assemblerSource": {
+    "path": "scripts/assemble-owner-runtime.mjs",
+    "sha256": "8bd5a84631a6011d2c3b594c5427a7625b3c56a2129f06c7a8004ef624eca4a8",
+    "fixedCoreCommit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+    "behaviorFromSource": "official runtime root plus retained candidate .packages overlays; workspace metadata ranges normalized, executable bytes preserved",
+    "executedByReviewer": false
+  },
+  "currentWhitelistedSourceBuildInputHashes": [
+    {
+      "path": "package.json",
+      "sha256": "a303ffb8994be8e7a874bc887db1abd47a77a6e08872e65f1d65281f43eab91b"
+    },
+    {
+      "path": "packages/core/agent-loop/package.json",
+      "sha256": "f7ffa7f0e765b94960fd1a2f6709bb86850ed26cfb648f6b1c200100282bcb0b"
+    },
+    {
+      "path": "packages/core/agent-loop/src/agent.ts",
+      "sha256": "1b14ad31528782f02e6e187c0647436b2114e9bbf326bb25647d26e9f1675620"
+    },
+    {
+      "path": "packages/core/agent-loop/src/assistant-stream.ts",
+      "sha256": "120d2bec5efeec2aa54bf0e4261a45282936272d610dbbab21eee36b902629de"
+    },
+    {
+      "path": "packages/core/agent-loop/src/constants.ts",
+      "sha256": "435d31d3c8740f5ebaefa5c12f22d7cda8ea8c6d018e6fcda459161174ecc971"
+    },
+    {
+      "path": "packages/core/agent-loop/src/inbox.ts",
+      "sha256": "70c07ea75ebcf18df353bbccf7c2aa3ecf6cb0d687b96e3520b675680c29f662"
+    },
+    {
+      "path": "packages/core/agent-loop/src/index.ts",
+      "sha256": "5c3345e741b8bb0b06b5802397add3eed9eb75ae2c0c899b0084981f1d9bf6c5"
+    },
+    {
+      "path": "packages/core/agent-loop/src/invariant.ts",
+      "sha256": "109c89b44b3449b92c10a7116b00af0e49a8a80ff2be3d79a22c7d48992a08b5"
+    },
+    {
+      "path": "packages/core/agent-loop/src/runtime-context.ts",
+      "sha256": "4944ee5cbbc24f21c27f1f0be54af7601da280b7fd2354e48fcc0ef6beeea839"
+    },
+    {
+      "path": "packages/core/agent-loop/src/tool-calls.ts",
+      "sha256": "5c7e8d8ff0028b436efdd13e5dffa4801d2311c211c3af039e7dab705f87b303"
+    },
+    {
+      "path": "packages/core/agent-loop/tsconfig.json",
+      "sha256": "cc79023734032635686d44736222ede837b360e8c8a490df664dfbc397e7253e"
+    },
+    {
+      "path": "packages/core/agent-loop/tsdown.config.ts",
+      "sha256": "6d284c7f7e842f0eb93b0bbef7eb1f558e30a59e2f9f347a8655137f6ec04ebb"
+    },
+    {
+      "path": "packages/experimental/native-run/package.json",
+      "sha256": "f16d65c45b0d210d17e90c25964e101eabda00d770231c69e7d68f5e784d42b4"
+    },
+    {
+      "path": "packages/experimental/native-run/src/driver.ts",
+      "sha256": "570c21fe28aa1e7166521d5b93c39343bfb7c8d01f7b55aa3531e11bf3a32f96"
+    },
+    {
+      "path": "packages/experimental/native-run/src/ids.ts",
+      "sha256": "0de5c41d63a10fcfde943d2955d7f54a6675191cb5ca4635317cf9c61979387f"
+    },
+    {
+      "path": "packages/experimental/native-run/src/index.ts",
+      "sha256": "8fc97398d3d9e91ecd09c1eeda0061ce4105b3086304774d9b4cbc2fa88dd0a3"
+    },
+    {
+      "path": "packages/experimental/native-run/src/journal.ts",
+      "sha256": "ad2d720d61ee10b2cb63c9024360c39ad291b4be9849d8734330909618cece70"
+    },
+    {
+      "path": "packages/experimental/native-run/src/session-driver.ts",
+      "sha256": "ae3e500fb1fbd46ceb2bad3bc3adfae3be28179fb5d42f1173cdd6306ebf57bb"
+    },
+    {
+      "path": "packages/experimental/native-run/src/types.ts",
+      "sha256": "192bad062feec50339d49a6e86a14d849f8c517a060113e5558a10c245d4db0a"
+    },
+    {
+      "path": "packages/experimental/native-run/src/values.ts",
+      "sha256": "30a0bbdcac80dbc8425c6666bd7e76bbc520582ab911cbf3e84dd3ba1e1af833"
+    },
+    {
+      "path": "packages/experimental/native-run/tsconfig.json",
+      "sha256": "88c503725f86788f599d3faa5017f4ed17753d6c66d7444be739135f4d002203"
+    },
+    {
+      "path": "packages/experimental/native-run/tsdown.config.ts",
+      "sha256": "a93ca56f519b8bdee26bfb7a2e6e43538a01d870fece0893ee29677ff65cfb0d"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/package.json",
+      "sha256": "8032971c0ff8015e8f0175df5f2f7c7d1972e423b5116e6527d8b0c84495da7c"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/adapter.ts",
+      "sha256": "ce8ddb6ff5d511bb5c4bebc312cbfcc5fc78c7942c5d95c16c30ea6e74e5a692"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/config.ts",
+      "sha256": "73f802bf72663ace689782db8a4031791864e9a97c995de620ac4c9ce683a30b"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/defaults.ts",
+      "sha256": "f0c753f0d4188f615182d7d25eabed7bc24021ece255524ac5cb8089718b0520"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/file-id.ts",
+      "sha256": "27aff248186c4e7230a6ddbd803bdee4eadb655607a859c350e77bb29cb9c269"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/file-store.ts",
+      "sha256": "3a361dcc47ab661a89f8a44e65e607f8d4e56a073cfce9cde8e4121e43bd109e"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/files-api.ts",
+      "sha256": "0f38622c30c85266bf17db38e0171a130bbee5ce0404327a1de949b1393eca26"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/host.ts",
+      "sha256": "7b2c11a02ea96e70cf2f5439f4e3939595bfcdfd7cf49f95b00e0d16bb8ed601"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/image-tokens.ts",
+      "sha256": "9a7e16b2fd451f99a99b36a39eda33aa1d26f0d3243545f0152ec7f802ec064a"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/images.ts",
+      "sha256": "bf72a07169a9db4ad9944d76f5f0788ad83ef627d4911e92e9273f565dfd0e1f"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/index.ts",
+      "sha256": "fd440fe02373ed4f05b5afec488ad946d4ae7072f88cbbaf39b62ee4930082fe"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/messages-api.ts",
+      "sha256": "c4f2036fc3b561690f05426f308bbee525a4a5ae121e47ebf61b7bc3a7b8656c"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/model-info.ts",
+      "sha256": "b173d9dd4aa63405f7c30e3fe5844fc59b5117d3e1ed58476a09b72eb2fbff70"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/models.ts",
+      "sha256": "fbd13439754e6eb9f81463b31cff26fded69d249ae8a768054a3236c5ff0c108"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/protected-providers.ts",
+      "sha256": "81a5b6f0b5a402f83e4f733429ab55eed45c66fa1c0469337d831314c78b6e95"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/replay.ts",
+      "sha256": "3edd01ffaedc422a148e1a66e8e93203ac07cb5aa558e35485501e564216f148"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/request-extensions.ts",
+      "sha256": "03607973027a1126869e43bbdb67653482a5196536ffa70d73ada9c123baa28d"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/request-files.ts",
+      "sha256": "ff78a42d27cefd8cb7f2f30fe95802d87d817af05df476ea0c4236c3c0678a22"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/request-pricing.ts",
+      "sha256": "8dcbb62ffcdb7f45eecc176c5219bc1dd424e36c4c9b469d5cb6223b1a503d8d"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/serialize.ts",
+      "sha256": "5468bea545731cf5e8057296559aa0b648174900ca86821d022ffe3b468cf29c"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/sse.ts",
+      "sha256": "7ffcba377583018aa1a7f86c6d757b7dd6c1955ad8252103e2f33a4ceb90a741"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/translate.ts",
+      "sha256": "303bdb48a1900b6e3585edd6be817984ec42230894bcdf9c3cc2423c23a3f563"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/transport.ts",
+      "sha256": "7d1f6ed8fe861ee71ba2d0c6a2a9e8512ddc1b6dc17d43a8795ab520a38746b6"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/types.ts",
+      "sha256": "13b1fa40657c0315eaafa86161896b812e6b7e6699f5ca7d73b5003c9bfabada"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/upload-index.ts",
+      "sha256": "d14e35054f7a034cabf3fbd87ac9f336f4af39585e30b45322d195b38bba1791"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/src/wire-types.ts",
+      "sha256": "38ea37c292c8ba4be2cf0f24f08e2cd62f70c3d437485293fa48909a5bea341d"
+    },
+    {
+      "path": "packages/llm/llm-deepseek/tsconfig.json",
+      "sha256": "fe136bb48d0c71e7b0219b8b5fa9ac8ef8284479365e0e8300f07506e662d1ce"
+    },
+    {
+      "path": "packages/llm/llm/package.json",
+      "sha256": "ed579a752bc9db66aaef70d647e1dae6d7e7dfbda8efd34d1650b69e8c3c88ee"
+    },
+    {
+      "path": "packages/llm/llm/src/adapter-failure.ts",
+      "sha256": "533507191d814fc7b3df5ae65076b2ebc4134bbb47a2bbd9bb7309d7e7f9241b"
+    },
+    {
+      "path": "packages/llm/llm/src/api-key.ts",
+      "sha256": "16bf926a82b0c0c1d4adbee78e2a1eebe260f100285795edb8330f3fe46141a4"
+    },
+    {
+      "path": "packages/llm/llm/src/assembler.ts",
+      "sha256": "a2d065645058a70195a504b101e9eed23df3eaced3def868d602f3a863b03887"
+    },
+    {
+      "path": "packages/llm/llm/src/assistant-stream.ts",
+      "sha256": "9ff074108132ef0ffeefffd8e7967d05db4c6bef1689242807ef7a1d2105dfeb"
+    },
+    {
+      "path": "packages/llm/llm/src/attribution.ts",
+      "sha256": "031f0a29b75498b9208ab2ede0a32b755c925f1a992562dd23970cff7caea075"
+    },
+    {
+      "path": "packages/llm/llm/src/brand.ts",
+      "sha256": "a3a3f22174353af8aea34a9a439986530bffcc6df6339e55612fd5a1fa4fb14c"
+    },
+    {
+      "path": "packages/llm/llm/src/call-config.ts",
+      "sha256": "c2ead88240db88af3199235389585d2ddc566312d8976d9648a5f5190d32e6c6"
+    },
+    {
+      "path": "packages/llm/llm/src/content.ts",
+      "sha256": "e679f0972cef3f6301c4a9f321ee288ef0a63223ec51c093349c186cdc81ff35"
+    },
+    {
+      "path": "packages/llm/llm/src/error.ts",
+      "sha256": "63df8344d49df8f90054852c1de81bc6e56c11de11179e37dcad882be5758035"
+    },
+    {
+      "path": "packages/llm/llm/src/index.ts",
+      "sha256": "543612ab20d6a041f4ec916b7dfa801a5fdf8d03a7822f9f7f72c20cb8ceb422"
+    },
+    {
+      "path": "packages/llm/llm/src/invariant.ts",
+      "sha256": "ba2fd65ba8a0d886b5f21810f5f5d008984ac64387b024de0237ff71a7e483bd"
+    },
+    {
+      "path": "packages/llm/llm/src/message.ts",
+      "sha256": "5826fb32bc3d6e2221a7a39cc8b4fecc57282540a332417bb9f2ac3522b5c7da"
+    },
+    {
+      "path": "packages/llm/llm/src/retry-policy.ts",
+      "sha256": "eee2423a0152096026446dd651f29678e0c504f0349a91758720f01f74efa871"
+    },
+    {
+      "path": "packages/llm/llm/src/types.ts",
+      "sha256": "f5206fd5daf18d3899202c96ca0edb6e7c1a10ddc535edead062ed28f2261b2d"
+    },
+    {
+      "path": "packages/llm/llm/tsconfig.json",
+      "sha256": "cd29b00935268e1d9ee2521bb1d1e2b4ab352a2d10dc190610546d8fdd07a865"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "67e847e73f1f0a16d38d9c414babacae6817bd74622c7ff534e07cb0b1336455"
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "sha256": "8486cab8bfbba2b0f740eac3d5109132b18a3bd53d3b07aebf441e4f1462eb4e"
+    },
+    {
+      "path": "scripts/build.ts",
+      "sha256": "6afb64c9045c90549ff8201a890d572f8f87dae3eebf9c14e5b6ebfc448b6056"
+    },
+    {
+      "path": "tsconfig.base.json",
+      "sha256": "eb47be0de852184d2e9aec29228736dda45f8455e8744073c6b46c963abca93c"
+    },
+    {
+      "path": "tsconfig.host.json",
+      "sha256": "f808187f394992f7653d29c5dfd1400a741777c7b89705fa6d71c4a3b4016839"
+    },
+    {
+      "path": "tsconfig.protected-tests.json",
+      "sha256": "37de27cc99e24428b51ab0ea2132fa59ba15e6031fb425dd346b9f358c1fec3c"
+    },
+    {
+      "path": "tsdown.config.ts",
+      "sha256": "af5cf6832716fce53f1443b9daa1f4434a8dd5ac90d9f8bf59aaae937b1904a4"
+    }
+  ],
+  "runtimeLanesSeparated": {
+    "A9AndR4ActualRecordedConsumer": "official runtime stock SessionController/AgentLoop; map6d38",
+    "retainedOverlay": "distinct assembly candidate used for owner/native source evaluation; no claim that A9/r4 used it",
+    "experimentalNativeSessionDriver": "distinct protected consumer fixture; five-file tests do not bridge A stock consumer evidence"
+  },
+  "currentSourceBuildReconstructedRetainedRuntime": false,
+  "coldBuildOrInstallAttempted": false,
+  "preciseGenerationStopSettlement": "UNSUPPORTED",
+  "actualKeysEnvValuesHomeConfigsLedgersLogsRead": false,
+  "runtimeCodeContentsCopied": false
+}
