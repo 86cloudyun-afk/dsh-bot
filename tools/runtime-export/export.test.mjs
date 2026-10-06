@@ -104,6 +104,38 @@ test('independent verifier rejects altered executable bytes', async t => {
   await fs.writeFile(join(out, '.packages/@fixture+a/lib/index.js'), 'tampered');
   await assert.rejects(() => api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_HASH_MISMATCH' });
 });
+for (const [name, specialMode] of [['setuid', 0o4000], ['setgid', 0o2000], ['sticky', 0o1000], ['combined', 0o7000]]) {
+  test(`special permission bits: verifier rejects ${name} on unchanged non-executable payload`, async t => {
+    const f = await fixture(t); await fs.chmod(join(f.a, 'lib/index.js'), 0o644);
+    const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
+    const manifestPath = join(out, 'artifact-manifest.json'); const manifest = await fs.readFile(manifestPath); const pin = hash(manifest);
+    assert.equal((await api('verifyRuntime')({ directory: out, expectedManifestSha256: pin })).verified, true);
+    const path = join(out, '.packages/@fixture+a/lib/index.js'); const bytes = await fs.readFile(path);
+    await fs.chmod(path, 0o644 | specialMode);
+    assert.equal((await fs.stat(path)).mode & 0o7777, 0o644 | specialMode);
+    assert.deepEqual(await fs.readFile(path), bytes); assert.deepEqual(await fs.readFile(manifestPath), manifest);
+    await assert.rejects(api('verifyRuntime')({ directory: out }), { code: 'ARTIFACT_HASH_MISMATCH' });
+    await assert.rejects(api('verifyRuntime')({ directory: out, expectedManifestSha256: pin }), { code: 'ARTIFACT_HASH_MISMATCH' });
+  });
+  test(`special permission bits: preflight refuses ${name} without stripping source mode`, async t => {
+    const f = await fixture(t); const path = join(f.a, 'lib/index.js'); await fs.chmod(path, 0o644 | specialMode);
+    assert.equal((await fs.stat(path)).mode & 0o7777, 0o644 | specialMode);
+    const p = await api('planRuntime')(f.options);
+    assert.ok(p.issues.some(x => x.code === 'PAYLOAD_SPECIAL_MODE_REFUSED' && x.package === '@fixture/a' && x.path === 'lib/index.js'));
+    const out = join(f.tmp, 'out'); await assert.rejects(api('exportRuntime')({ plan: p, outputDirectory: out }), { code: 'EXPORT_PLAN_RED' });
+    await assert.rejects(fs.access(out), { code: 'ENOENT' });
+    assert.equal((await fs.stat(path)).mode & 0o7777, 0o644 | specialMode);
+  });
+  test(`special permission bits: export refuses ${name} added after planning`, async t => {
+    const f = await fixture(t); const path = join(f.a, 'lib/index.js'); await fs.chmod(path, 0o644);
+    const p = await api('planRuntime')(f.options); assert.deepEqual(p.issues, []); const bytes = await fs.readFile(path);
+    await fs.chmod(path, 0o644 | specialMode);
+    assert.equal((await fs.stat(path)).mode & 0o7777, 0o644 | specialMode);
+    const out = join(f.tmp, 'out'); await assert.rejects(api('exportRuntime')({ plan: p, outputDirectory: out }), { code: 'INPUT_CHANGED_AFTER_PLAN' });
+    await assert.rejects(fs.access(out), { code: 'ENOENT' });
+    assert.deepEqual(await fs.readFile(path), bytes); assert.equal((await fs.stat(path)).mode & 0o7777, 0o644 | specialMode);
+  });
+}
 test('independent verifier rejects unexpected payload files', async t => {
   const f = await fixture(t); const p = await api('planRuntime')(f.options); const out = join(f.tmp, 'out'); await api('exportRuntime')({ plan: p, outputDirectory: out });
   await fs.writeFile(join(out, '.packages/@fixture+a/extra.js'), 'unlisted');

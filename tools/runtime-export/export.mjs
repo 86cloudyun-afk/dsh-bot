@@ -82,6 +82,7 @@ async function payload(record, issues) {
   for (const path of sorted(selected)) {
     const absolute = join(record.absolute, path); const stat = await fs.lstat(absolute);
     if (!stat.isFile() || stat.isSymbolicLink() || await fs.realpath(absolute) !== absolute) { issue('PAYLOAD_SYMLINK_REFUSED', path); continue; }
+    if (stat.mode & 0o7000) { issue('PAYLOAD_SPECIAL_MODE_REFUSED', path); continue; }
     const bytes = await fs.readFile(absolute);
     entries.push({ path, bytes: bytes.length, sha256: sha(bytes), mode: stat.mode & 0o777 });
   }
@@ -221,7 +222,7 @@ export async function exportRuntime({ plan, outputDirectory }) {
     const allFiles = [];
     for (const item of plan.packages) for (const file of item.files) {
       const source = join(item.absolute, file.path); const stat = await fs.lstat(source);
-      if (!stat.isFile() || stat.isSymbolicLink() || await fs.realpath(source) !== source) throw fail('INPUT_CHANGED_AFTER_PLAN');
+      if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o7000) || await fs.realpath(source) !== source) throw fail('INPUT_CHANGED_AFTER_PLAN');
       const bytes = await fs.readFile(source); if (sha(bytes) !== file.sha256 || bytes.length !== file.bytes) throw fail('INPUT_CHANGED_AFTER_PLAN');
       const path = '.packages/' + item.slot + '/' + file.path;
       await fs.mkdir(dirname(join(staging, path)), { recursive: true });
@@ -260,7 +261,7 @@ export async function verifyRuntime({ directory, expectedManifestSha256 }) {
     expected.add(file.path); const path = join(root, file.path); const stat = await fs.lstat(path);
     if (!stat.isFile() || stat.isSymbolicLink() || await fs.realpath(path) !== path) throw fail('ARTIFACT_FILE_SET_MISMATCH');
     const bytes = await fs.readFile(path);
-    if (bytes.length !== file.bytes || sha(bytes) !== file.sha256 || (stat.mode & 0o777) !== file.mode) throw fail('ARTIFACT_HASH_MISMATCH');
+    if (bytes.length !== file.bytes || sha(bytes) !== file.sha256 || (stat.mode & 0o7777) !== file.mode) throw fail('ARTIFACT_HASH_MISMATCH');
   }
   const packageMetadata = new Map();
   for (const item of manifest.packages) {
