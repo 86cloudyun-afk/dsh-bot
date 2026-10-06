@@ -1,6 +1,6 @@
 # 候选安装与依赖边界
 
-这是一份源码候选说明，不是完整 v1 已发布安装包。package.json 仍为0.1.0-alpha.1、private；没有修改版本、tag、npm发布设置或许可证授予。当前根目录没有产品 LICENSE，也没有产品 lockfile。完整公开分发需先核权利与可复现依赖，不能从上游 MIT 元数据推断所有本地补丁均已完成授权核验。
+这是一份源码候选说明，不是完整 v1 已发布安装包。package.json 仍为0.1.0-alpha.1、private；没有修改版本、tag、npm发布设置或许可证授予。根目录已有固定 devDependency @deepseek-ai/dsh=0.2.0-rc.2 与 package-lock.json（v3），仅补公共 SDK 的锁定安装；产品 LICENSE 仍缺。完整公开分发需先核权利、私有 Host 接口与可复现构建，不能从上游 MIT 元数据推断所有本地补丁均已完成授权核验。
 
 ## 三种入口分别处理
 
@@ -10,16 +10,29 @@
 | 实际 DSH Loader plugin/client | 包内 src/plugin.mjs、src/client/client.js；需要固定 DSH 服务与UI模块。只读snapshot不等于已安装私有owner写绑定，合成React/RPC检查不等于认证浏览器验收。 |
 | native owner/验收profile | 需要固定、可审查的Host源码/构建材料和同根依赖；仅官方rc.2包不保证拥有候选所用Host API。既有装配示例是条件式验收配方，不能宣称公开冷安装已成功。 |
 
-当前元数据声明Cordis4.0.4及8个DSH0.2.0-rc.2可选peer。静态literal import库存另发现未在dependencies/peerDependencies声明的5项：@deepseek-ai/dsh-cmdline、@deepseek-ai/dsh-deepseek-llm-api-extensions、@deepseek-ai/dsh-experimental-native-run、@deepseek-ai/dsh-llm-deepseek、react。库存覆盖src/ui/scripts的33个唯一specifier，仅表示源码引用；没有联网解析、安装或版本兼容证明。experimental-native-run属于开发Host材料，不能仅改包名或用SDK wrapper制造缺少的Host接口/终态证明。
+当前元数据声明Cordis4.0.4及8个DSH0.2.0-rc.2可选peer，并用固定devDependency锁定公开DSH。既有静态literal import库存另发现未直接在dependencies/peerDependencies声明的5项：@deepseek-ai/dsh-cmdline、@deepseek-ai/dsh-deepseek-llm-api-extensions、@deepseek-ai/dsh-experimental-native-run、@deepseek-ai/dsh-llm-deepseek、react。库存覆盖src/ui/scripts的33个唯一specifier，仅表示源码引用；新增公共SDK lock的安装证据不能外推这些入口的版本兼容或私有Host接口。experimental-native-run属于开发Host材料，不能仅改包名或用SDK wrapper制造缺少的Host接口/终态证明。
 
-package.json的files仅包含src、cordis.patch.yml、README.md。现有npm打包白名单不包含scripts、docs、tests；这里的源码树检查配方不能直接当成npm tar内可用命令。当前没有承诺公开安装器、完整锁定依赖或已验证OS组合。
+package.json的files仅包含src、cordis.patch.yml、README.md。现有npm打包白名单不包含scripts、docs、tests；这里的源码树检查配方不能直接当成npm tar内可用命令。公共SDK lock不包含完整开发Host产物配方；当前没有承诺公开安装器、完整native依赖或已验证OS组合。
+
+## 公共 SDK 的锁定安装
+
+在对应候选源码目录、已确认的Node/npm工具链下，开发与CI使用同一命令：
+
+```sh
+cd "$PRODUCT_SOURCE_DIRECTORY"
+npm ci --ignore-scripts --no-audit --no-fund
+```
+
+固定package输入与原样v3 lock已有独立空Home/cache的npm ci成功记录；本次源码集成没有重新生成lock或重做联网安装。这一步忽略全部lifecycle scripts，只验证公共SDK安装，不是完整Host冷构建、私有native exports或产品功能验收。CI随后仍执行原受限npm test与npm run check；本补丁的完整CI结果待精确head核验，不以安装成功推定测试全部通过。
+
+Host原生模块构建还需要与目标Node版本精确匹配的完整官方headers（包括node_api.h与config.gypi），以及受支持的Python、make和C/C++工具链；macOS通常由Xcode Command Line Tools提供编译工具。仅有Node可执行文件与版本号不足以满足此前置条件。node-gyp的--nodedir可指定相应源码/headers，使用该选项时从headers分发读取config.gypi；这里不提供未验证的消费路径或跨npm版本的环境变量命令。参见[node-gyp官方说明](https://github.com/nodejs/node-gyp/blob/main/README.md)。固定Host构建与运行时导出装配仍须分别验收，不能用旧产物复制代替可复现配方。
 
 ## 兼容性声明
 
 | 组合 | 证据范围 |
 | --- | --- |
 | Node24.19.0 + 原云隔离目录 | 69控制与27客户端合成历史检查，以及本轮限定profile元数据测试；不是独立新机器安装。 |
-| Node22.23.2 + Ubuntu/macOS既有PR CI | 仅旧PR控制68项/静态25模块；不能外推本候选完整GUI/native或Node22声明兼容。 |
+| Node22.23.2 + Ubuntu/macOS CI | 旧PR控制68项/静态25模块及本候选UI夹具、目录规范化的限定真实CI证据；公共SDK集成后的完整suite仍待核，不能外推完整GUI/native兼容。 |
 | 新环境固定Host材料 + 空profile/Home/cache | 待冷构建/依赖与真实功能验收；尚不在支持组合中。 |
 
 ## 可执行的限定离线检查
