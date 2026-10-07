@@ -1,5 +1,5 @@
 /** Fresh single-Bot Loader profile. Installs product bytes; never copies a Home or credentials. */
-import {mkdir, writeFile, realpath} from 'node:fs/promises';
+import {mkdir, writeFile, realpath, lstat, symlink} from 'node:fs/promises';
 import {join, resolve, isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {installProductPackage} from './package-snapshot.mjs';
@@ -39,12 +39,22 @@ export async function installBotGuiProfile({directory, productRoot, runtimeRoot,
   const root = resolve(directory), work = resolve(cwd);
   const within = (p, parent) => p === parent || p.startsWith(parent + '/');
   if (within(work,root) || within(root,work) || [product,runtime].some(p => within(root,p) || within(work,p))) throw Error('gui_fresh_paths_required');
+  const runtimeModules=join(runtime,'node_modules');
+  try {
+    const stat=await lstat(runtimeModules);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || await realpath(runtimeModules) !== runtimeModules) throw Error('gui_runtime_dependencies_required');
+  } catch { throw Error('gui_runtime_dependencies_required'); }
   await mkdir(root, {mode:0o700});
   await mkdir(work, {mode:0o700});
   const home = join(root,'home'), profile = 'dsh-bot-gui', dir = join(home,'profiles',profile);
   await mkdir(join(dir,'node_modules'), {recursive:true,mode:0o700});
   const packageInstallation = await installProductPackage({directory:join(dir,'node_modules','dsh-bot'),
     productRoot:product, packagePlacement,packageSourceMode,packageSnapshot:packageSnapshot && Object.freeze({...packageSnapshot})});
+  // The caller qualifies this whole runtime; retain one Cordis/core/private-SDK dependency graph.
+  // symlink refuses an existing dependency view and never changes the runtime or source export.
+  const productDependencyView=join(dir,'node_modules','dsh-bot','node_modules');
+  await symlink(runtimeModules,productDependencyView,'dir');
+  const runtimeDependencyBinding={kind:'same-runtime-node-modules',runtimeRoot:runtime,nodeModules:runtimeModules,productDependencyView};
   const surfaceDir=join(dir,'node_modules','dsh-bot-gui-surface');
   await mkdir(surfaceDir,{mode:0o700});
   await writeFile(join(surfaceDir,'package.json'),JSON.stringify({name:'dsh-bot-gui-surface',private:true,type:'module',
@@ -83,7 +93,7 @@ export async function installBotGuiProfile({directory, productRoot, runtimeRoot,
     dsh:{profile:{bundles:['@deepseek-ai/dsh-base','@deepseek-ai/dsh-web-app']}},dependencies:{'dsh-bot':'0.1.0-alpha.1'}},null,2)+'\n',{flag:'wx',mode:0o600});
   await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify(patch,null,2)+'\n',{flag:'wx',mode:0o600});
   const result = {profile,home,cwd:work,dsh:join(runtime,'node_modules','@deepseek-ai','dsh','lib','bin.js'),
-    credentialReferences:['DEEPSEEK_API_KEY'],credentialsCreated:false,coreSdkEdited:false,packageInstallation};
+    credentialReferences:['DEEPSEEK_API_KEY'],credentialsCreated:false,coreSdkEdited:false,packageInstallation,runtimeDependencyBinding};
   await writeFile(join(root,'composition.json'),JSON.stringify(result,null,2)+'\n',{flag:'wx',mode:0o600});
   return result;
 }
