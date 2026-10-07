@@ -24,19 +24,24 @@ const json = async (path, value) => write(path, JSON.stringify(value, null, 2) +
 // Instrument real owned-file reads, including descriptor reads. No fake bytes or
 // simulated assembly result is returned: the callback may mutate a fixture after
 // its actual first read, reproducing the reviewed metadata snapshot race.
-function observeReads(t, afterRead) {
-  const paths = [], readFile = mutableFs.readFile, open = mutableFs.open;
+function observeReads(t, afterRead, afterRealpath) {
+  const paths = [], pathnameReads = [], readFile = mutableFs.readFile, open = mutableFs.open, realpath = mutableFs.realpath;
   const observed = async (path, bytes) => { paths.push(String(path)); await afterRead?.(String(path), bytes); return bytes; };
-  t.mock.method(mutableFs, 'readFile', async (path, ...args) => observed(path, await readFile(path, ...args)));
+  t.mock.method(mutableFs, 'readFile', async (path, ...args) => {
+    pathnameReads.push(String(path)); return observed(path, await readFile(path, ...args));
+  });
   t.mock.method(mutableFs, 'open', async (path, ...args) => {
     const handle = await open(path, ...args), read = handle.readFile.bind(handle);
     handle.readFile = async (...values) => observed(path, await read(...values));
     return handle;
   });
+  if (afterRealpath) t.mock.method(mutableFs, 'realpath', async (path, ...args) => {
+    const result = await realpath(path, ...args); await afterRealpath(String(path)); return result;
+  });
   syncBuiltinESMExports();
   const restore = () => { t.mock.restoreAll(); syncBuiltinESMExports(); };
   t.after(restore);
-  return { paths, restore };
+  return { paths, pathnameReads, restore };
 }
 const octal = (value, length) => value.toString(8).padStart(length - 1, '0') + '\0';
 function archive(files) {
@@ -397,4 +402,80 @@ test('verification metadata rereads stay bound to the pinned receipt inventory',
   const cause = await module.verifyDistributionRuntime({ directory: result.runtimeDirectory, expectedManifestSha256: result.manifestSha256 }).then(() => assert.fail('later metadata checks must retain the pinned inventory authority'), cause => cause);
   reads.restore(); assert.equal(changed, true);
   assert.equal(cause.code, 'INPUT_CHANGED_DURING_ASSEMBLY');
+});
+
+test('verification metadata rereads retain the pinned file mode', async t => {
+  const { options } = await fixture(t), result = await module.assembleDistributionRuntime(options);
+  const path = join(result.runtimeDirectory, 'node_modules/color-fixture/package.json');
+  let count = 0, changed = false;
+  const reads = observeReads(t, async selected => {
+    if (selected !== path || ++count !== 2) return;
+    changed = true; await fs.chmod(path, 0o600);
+  });
+  const cause = await module.verifyDistributionRuntime({ directory: result.runtimeDirectory, expectedManifestSha256: result.manifestSha256 }).then(() => assert.fail('metadata mode drift must be refused'), cause => cause);
+  reads.restore();
+  assert.equal(changed, true, 'the real descriptor read must have triggered the owned-file chmod');
+  assert.equal(result.manifest.files.find(file => file.path === 'node_modules/color-fixture/package.json').mode, 0o644);
+  assert.equal((await fs.stat(path)).mode & 0o777, 0o600);
+  assert.equal(cause.code, 'INPUT_CHANGED_DURING_ASSEMBLY');
+});
+
+test('delegated overlay validation never reads a replaced linked manifest target', async t => {
+  const { options, root } = await fixture(t), selected = join(options.overlayDirectory, 'artifact-manifest.json');
+  const outside = join(root, 'owned-linked-target-after-check.json'); await write(outside, 'PRIVXYZ');
+  let canonicalChecks = 0, replaced = false, linkedTargetRead = false;
+  const reads = observeReads(t, (path, bytes) => {
+    if (path === selected && replaced && Buffer.from(bytes).toString().includes('PRIVXYZ')) linkedTargetRead = true;
+  }, async path => {
+    if (path !== selected || ++canonicalChecks !== 3) return;
+    replaced = true; await fs.unlink(selected); await fs.symlink(outside, selected);
+  });
+  await assert.rejects(module.assembleDistributionRuntime(options));
+  reads.restore();
+  assert.equal(replaced, true, 'a real canonical check must have triggered the owned manifest replacement');
+  assert.equal(linkedTargetRead, false, 'delegated reads must never reach the linked outside bytes');
+  assert.equal(reads.paths.includes(outside), false);
+  await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+});
+
+test('shared overlay verification reads only exclusive private views and removes them', async t => {
+  const { options, root } = await fixture(t), reads = observeReads(t);
+  const result = await module.assembleDistributionRuntime(options); reads.restore();
+  assert.equal(result.manifest.overlayVerificationBefore.trustedManifestPinChecked, true);
+  assert.equal(result.manifest.overlayVerificationAfter.trustedManifestPinChecked, true);
+  assert.equal(reads.pathnameReads.some(path => path.startsWith(options.overlayDirectory + '/')), false, 'shared naked pathname reads must never use caller-controlled overlay files');
+  const delegated = reads.pathnameReads.filter(path => path.includes('/.dsh-overlay-verify-') && path.endsWith('/artifact-manifest.json'));
+  assert.equal(new Set(delegated.map(dirname)).size, 2, 'before and after checks must use distinct privately created file views');
+  assert.equal((await fs.readdir(root)).some(name => name.startsWith('.dsh-overlay-verify-')), false);
+});
+
+for (const kind of ['bytes', 'mode', 'extra']) test(`private overlay view still refuses original source ${kind} drift`, async t => {
+  const { options, root } = await fixture(t), source = join(options.overlayDirectory, '.packages/@deepseek-ai+dsh-agent/lib/index.js');
+  let changed = false;
+  const reads = observeReads(t, async selected => {
+    if (changed || !selected.includes('/.dsh-overlay-verify-') || !selected.endsWith('/artifact-manifest.json')) return;
+    changed = true;
+    if (kind === 'bytes') await fs.appendFile(source, '\nowned source changed\n');
+    else if (kind === 'mode') await fs.chmod(source, 0o600);
+    else await write(join(options.overlayDirectory, 'unlisted.txt'), 'owned source extra');
+  });
+  const cause = await module.assembleDistributionRuntime(options).then(() => assert.fail('the private view must not weaken original source revalidation'), cause => cause);
+  reads.restore(); assert.equal(changed, true);
+  assert.equal(cause.code, kind === 'extra' ? 'ARTIFACT_FILE_SET_MISMATCH' : 'ARTIFACT_HASH_MISMATCH');
+  await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+  assert.equal((await fs.readdir(root)).some(name => name.startsWith('.dsh-overlay-verify-')), false);
+});
+
+test('private verification view cleanup preserves a replaced caller directory', async t => {
+  const { options, root } = await fixture(t); let replacement;
+  const reads = observeReads(t, async selected => {
+    if (replacement || !selected.includes('/.dsh-overlay-verify-') || !selected.endsWith('/artifact-manifest.json')) return;
+    replacement = dirname(selected); await fs.rename(replacement, join(root, 'owned-verification-view-retained'));
+    await fs.mkdir(replacement); await write(join(replacement, 'caller.txt'), 'CALLER_VERIFICATION_REPLACEMENT_REMAINS');
+  });
+  const cause = await module.assembleDistributionRuntime(options).then(() => assert.fail('a replaced private verification view must be refused'), cause => cause);
+  reads.restore(); assert.ok(replacement);
+  assert.equal(cause.cleanupErrorCategory, 'VERIFICATION_VIEW_OWNERSHIP_CHANGED');
+  assert.equal(await fs.readFile(join(replacement, 'caller.txt'), 'utf8'), 'CALLER_VERIFICATION_REPLACEMENT_REMAINS');
+  await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
 });

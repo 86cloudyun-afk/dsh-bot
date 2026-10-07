@@ -28,6 +28,7 @@ async function canonical(path, directory = false) {
   if (resolve(path) !== path || await fs.realpath(path) !== path || stat.isSymbolicLink() || (directory ? !stat.isDirectory() : !stat.isFile())) throw error('CANONICAL_INPUT_REQUIRED');
   return stat;
 }
+const sameFileState = (a, b) => a.isFile() && b.isFile() && a.ino === b.ino && a.dev === b.dev && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs && (a.mode & 0o7777) === (b.mode & 0o7777);
 async function readCanonical(path) {
   const before = await canonical(path);
   if (before.mode & 0o7000) throw error('SPECIAL_FILE_MODE_REFUSED');
@@ -36,8 +37,10 @@ async function readCanonical(path) {
   const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const opened = await handle.stat(), current = await canonical(path);
-    if (!opened.isFile() || opened.ino !== before.ino || opened.dev !== before.dev || current.ino !== opened.ino || current.dev !== opened.dev || (opened.mode & 0o7777) !== (before.mode & 0o7777)) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
-    return { bytes: await handle.readFile(), stat: opened };
+    if (!sameFileState(before, opened) || !sameFileState(opened, current)) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
+    const bytes = await handle.readFile(), after = await handle.stat(), final = await canonical(path);
+    if (bytes.length !== opened.size || !sameFileState(opened, after) || !sameFileState(after, final)) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
+    return { bytes, stat: after };
   } finally { await handle.close(); }
 }
 async function pinned(path, digest, category) {
@@ -51,6 +54,87 @@ async function fileRecord(root, path) {
   return { path, bytes: bytes.length, sha256: sha(bytes), mode: stat.mode & 0o777 };
 }
 const sameRecord = (a, b) => a && b && a.bytes === b.bytes && a.sha256 === b.sha256 && a.mode === b.mode;
+async function readTrusted(root, file, category = 'INPUT_CHANGED_DURING_ASSEMBLY') {
+  if (!file || !safe(file.path) || prohibited(file.path)) throw error('UNSAFE_PAYLOAD_PATH');
+  const result = await readCanonical(join(root, file.path));
+  if (!sameRecord(file, { bytes: result.bytes.length, sha256: sha(result.bytes), mode: result.stat.mode & 0o777 })) throw error(category);
+  return result;
+}
+function overlayFileSet(manifest) {
+  if (!Array.isArray(manifest.files) || !Array.isArray(manifest.packages)) throw error('ARTIFACT_MANIFEST_INVALID');
+  const files = new Set(['artifact-manifest.json']), directories = new Set(['.packages']), slots = new Set(manifest.packages.map(pkg => pkg.slot));
+  for (const file of manifest.files) {
+    if (!safe(file.path) || prohibited(file.path) || file.path.split('/').includes('node_modules') || !file.path.startsWith('.packages/') || !slots.has(file.path.split('/')[1]) || files.has(file.path) || !/^[a-f0-9]{64}$/.test(file.sha256 ?? '') || !Number.isSafeInteger(file.bytes) || file.bytes < 0 || !Number.isInteger(file.mode) || file.mode < 0 || file.mode > 0o777) throw error('ARTIFACT_FILE_SET_MISMATCH');
+    files.add(file.path);
+    let parent = dirname(file.path); while (parent !== '.') { directories.add(parent); parent = dirname(parent); }
+  }
+  return { files, directories };
+}
+async function checkOverlayFileSet(root, expected) {
+  const files = new Set(), directories = new Set();
+  const walk = async (at = '') => {
+    await canonical(join(root, at), true);
+    for (const item of await fs.readdir(join(root, at), { withFileTypes: true })) {
+      const path = at ? at + '/' + item.name : item.name;
+      if (item.isDirectory() && expected.directories.has(path)) { directories.add(path); await walk(path); }
+      else if (item.isFile() && expected.files.has(path)) files.add(path);
+      else throw error('ARTIFACT_FILE_SET_MISMATCH');
+    }
+  };
+  await walk();
+  if (files.size !== expected.files.size || directories.size !== expected.directories.size) throw error('ARTIFACT_FILE_SET_MISMATCH');
+}
+async function verifyOverlayView(options, manifest, temporaryParent) {
+  const manifestPath = join(options.overlayDirectory, 'artifact-manifest.json');
+  const manifestBytes = await pinned(manifestPath, options.expectedManifestSha256, 'ARTIFACT_MANIFEST_HASH_MISMATCH');
+  const expected = overlayFileSet(manifest);
+  await checkOverlayFileSet(options.overlayDirectory, expected);
+  await canonical(temporaryParent, true);
+  let view, owned, failure, result;
+  const checkOwnership = async () => {
+    const current = await canonical(view, true);
+    if (!owned || current.ino !== owned.ino || current.dev !== owned.dev || (current.mode & 0o777) !== 0o700) throw error('VERIFICATION_VIEW_OWNERSHIP_CHANGED');
+  };
+  try {
+    view = await fs.mkdtemp(join(temporaryParent, '.dsh-overlay-verify-'));
+    owned = await canonical(view, true);
+    await checkOwnership();
+    // The shared verifier's pathname reads operate only on this exclusive,
+    // owner-only view. Caller-controlled source files are read through safe
+    // descriptors and checked against the trusted manifest before copying.
+    for (const file of manifest.files) {
+      const { bytes } = await readTrusted(options.overlayDirectory, file, 'ARTIFACT_HASH_MISMATCH');
+      const path = join(view, file.path); await fs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
+      await fs.writeFile(path, bytes, { flag: 'wx', mode: file.mode }); await fs.chmod(path, file.mode);
+    }
+    await fs.writeFile(join(view, 'artifact-manifest.json'), manifestBytes, { flag: 'wx', mode: 0o600 });
+    await checkOwnership();
+    try { result = await verifyRuntime({ directory: view, expectedManifestSha256: options.expectedManifestSha256 }); }
+    catch (cause) { if (cause instanceof SyntaxError) throw error('ARTIFACT_JSON_INVALID'); throw cause; }
+    await checkOwnership();
+    // A view never substitutes for the full original source check: reread the
+    // original pinned manifest and every listed file, including modes, then
+    // refuse newly added or replaced original paths before accepting a result.
+    await pinned(manifestPath, options.expectedManifestSha256, 'ARTIFACT_MANIFEST_HASH_MISMATCH');
+    for (const file of manifest.files) await readTrusted(options.overlayDirectory, file, 'ARTIFACT_HASH_MISMATCH');
+    await checkOverlayFileSet(options.overlayDirectory, expected);
+    await checkOwnership();
+  } catch (cause) { failure = cause; }
+  if (view) {
+    try {
+      const current = await fs.lstat(view);
+      if (!owned || !current.isDirectory() || current.isSymbolicLink() || current.ino !== owned.ino || current.dev !== owned.dev) throw error('VERIFICATION_VIEW_OWNERSHIP_CHANGED');
+      await fs.rm(view, { recursive: true, force: true });
+    } catch (cleanup) {
+      if (cleanup.code !== 'ENOENT') {
+        if (!failure) failure = error('VERIFICATION_VIEW_CLEANUP_FAILED');
+        failure.cleanupErrorCategory = cleanup.code;
+      }
+    }
+  }
+  if (failure) throw failure;
+  return result;
+}
 async function payloadFiles(root, at = '', skipModules = true) {
   if (at && (!safe(at) || prohibited(at))) throw error('PROHIBITED_PACKAGE_PAYLOAD');
   const result = [];
@@ -202,8 +286,7 @@ async function metadataClosure(output, coreNames, expectedBindings, trustedFiles
   const packageFiles = trustedFiles.filter(x => x.path.endsWith('/package.json')).sort((a, b) => a.path.localeCompare(b.path));
   const roots = new Map(), edges = [];
   for (const file of packageFiles) {
-    const { bytes } = await readCanonical(join(output, file.path)), meta = parseJson(bytes), path = dirname(file.path);
-    if (sha(bytes) !== file.sha256 || bytes.length !== file.bytes) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
+    const { bytes } = await readTrusted(output, file), meta = parseJson(bytes), path = dirname(file.path);
     if (!packageName(meta.name) || !meta.version) continue; // Some public packages publish fixture package.json files.
     if (!/node_modules\/(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(path)) continue;
     if (coreNames.has(meta.name)) {
@@ -239,8 +322,8 @@ async function inventoryRuntime(root, at = '') {
   }
   return { files, directories, links };
 }
-async function normalizeMetadata(output, path, versions, changes, packageLabel, skipped) {
-  const { bytes: before } = await readCanonical(join(output, path)), meta = parseJson(before); let changed = false;
+async function normalizeMetadata(output, file, versions, changes, packageLabel, skipped) {
+  const path = file.path, { bytes: before } = await readTrusted(output, file), meta = parseJson(before); let changed = false;
   const unresolvedDevelopmentRanges = [], removedSkippedOptionalDependencies = [];
   for (const name of Object.keys(meta.optionalDependencies ?? {})) if (skipped.some(item => item.package === packageLabel && item.dependency === name && item.reason.startsWith('PLATFORM_'))) {
     delete meta.optionalDependencies[name]; removedSkippedOptionalDependencies.push(name); changed = true;
@@ -278,8 +361,7 @@ async function verifyPackageIdentities(root, identities, files) {
     seen.add(item.path);
     const path = item.path + '/package.json', expected = indexed.get(path);
     if (!expected) throw error('DISTRIBUTION_PACKAGE_IDENTITY_INVALID');
-    const { bytes, stat } = await readCanonical(join(root, path));
-    if (!sameRecord(expected, { bytes: bytes.length, sha256: sha(bytes), mode: stat.mode & 0o777 })) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
+    const { bytes } = await readTrusted(root, expected);
     const meta = parseJson(bytes);
     if (meta.name !== item.name || meta.version !== item.version) throw error('DISTRIBUTION_PACKAGE_IDENTITY_MISMATCH');
   }
@@ -296,11 +378,7 @@ export async function assembleDistributionRuntime(options) {
   try { await fs.lstat(output); throw error('OUTPUT_ALREADY_EXISTS'); } catch (cause) { if (cause.code !== 'ENOENT') throw cause; }
   const overlayManifestPath = join(options.overlayDirectory, 'artifact-manifest.json');
   const manifest = parseJson(await pinned(overlayManifestPath, options.expectedManifestSha256, 'ARTIFACT_MANIFEST_HASH_MISMATCH'));
-  const verifyOverlay = async () => {
-    await canonical(overlayManifestPath);
-    try { return await verifyRuntime({ directory: options.overlayDirectory, expectedManifestSha256: options.expectedManifestSha256 }); }
-    catch (cause) { if (cause instanceof SyntaxError) throw error('ARTIFACT_JSON_INVALID'); throw cause; }
-  };
+  const verifyOverlay = () => verifyOverlayView(options, manifest, dirname(output));
   const beforeVerification = await verifyOverlay();
   if (manifest.platform !== process.platform || manifest.arch !== process.arch) throw error('OVERLAY_PLATFORM_ARCH_MISMATCH');
   const identityBytes = await pinned(options.sourceIdentityPath, options.expectedSourceIdentitySha256, 'SOURCE_IDENTITY_HASH_MISMATCH'), identity = parseJson(identityBytes);
@@ -358,7 +436,7 @@ export async function assembleDistributionRuntime(options) {
       expectedBindings.push({ from: pkg.path, dependency: name, reference, resolved: target.path });
     }
     for (const pkg of manifest.packages) {
-      const { bytes } = await readCanonical(join(output, 'node_modules', pkg.name, 'package.json')), meta = parseJson(bytes), importer = sourceLock.importers[pkg.sourcePath];
+      const path = 'node_modules/' + pkg.name + '/package.json', { bytes } = await readTrusted(output, copiedFiles.get(path)), meta = parseJson(bytes), importer = sourceLock.importers[pkg.sourcePath];
       if (!importer) throw error('CORE_LOCK_IMPORTER_MISSING');
       for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies']) for (const name of Object.keys(meta[section] ?? {})) {
         if (coreNames.has(name)) { expectedBindings.push({ from: 'node_modules/' + pkg.name, dependency: name, resolved: 'node_modules/' + name }); continue; }
@@ -373,13 +451,13 @@ export async function assembleDistributionRuntime(options) {
     }
     const metadataChanges = [];
     await checkOwnership();
-    for (const pkg of manifest.packages) await normalizeMetadata(output, 'node_modules/' + pkg.name + '/package.json', versions, metadataChanges, pkg.name, manifest.skipped);
+    for (const pkg of manifest.packages) await normalizeMetadata(output, copiedFiles.get('node_modules/' + pkg.name + '/package.json'), versions, metadataChanges, pkg.name, manifest.skipped);
     for (const file of product.files) {
       const destination = 'node_modules/dsh-bot/' + file.path;
       await copyRecord(options.productRoot, file, output, destination);
       copiedFiles.set(destination, { ...file, path: destination });
     }
-    const cliPath = 'node_modules/@deepseek-ai/dsh/package.json', { bytes: beforeCli } = await readCanonical(join(output, cliPath)), cli = parseJson(beforeCli);
+    const cliPath = 'node_modules/@deepseek-ai/dsh/package.json', { bytes: beforeCli } = await readTrusted(output, copiedFiles.get(cliPath)), cli = parseJson(beforeCli);
     cli.dependencies = { ...cli.dependencies, 'dsh-bot': product.meta.version };
     const afterCli = Buffer.from(JSON.stringify(cli, null, 2) + '\n'); await fs.writeFile(join(output, cliPath), afterCli);
     metadataChanges.push({ package: '@deepseek-ai/dsh', path: cliPath, beforeSha256: sha(beforeCli), afterSha256: sha(afterCli), afterBytes: afterCli.length, productDependencyAdded: true });
@@ -390,7 +468,7 @@ export async function assembleDistributionRuntime(options) {
     }
     // Recreate each package's bin at its own npm level. Source .bin links are not copied.
     for (const pkg of official.packages) {
-      const { bytes } = await readCanonical(join(output, pkg.path, 'package.json')), meta = parseJson(bytes);
+      const { bytes } = await readTrusted(output, copiedFiles.get(pkg.path + '/package.json')), meta = parseJson(bytes);
       const bins = typeof meta.bin === 'string' ? { [meta.name.split('/').at(-1)]: meta.bin } : meta.bin ?? {};
       const level = pkg.path.slice(0, pkg.path.lastIndexOf('node_modules/') + 'node_modules'.length);
       for (const [name, value] of Object.entries(bins)) {
@@ -463,9 +541,9 @@ export async function verifyDistributionRuntime({ directory, expectedManifestSha
   for (const pkg of manifest.externalPackages) expectedIdentity(pkg);
   expectedIdentity({ path: 'node_modules/@deepseek-ai/dsh', name: '@deepseek-ai/dsh', version: CLI_VERSION });
   expectedIdentity({ path: 'node_modules/dsh-bot', name: 'dsh-bot', version: manifest.productIdentity.version });
-  const { bytes: cliBytes } = await readCanonical(join(directory, 'node_modules/@deepseek-ai/dsh/package.json'));
+  const { bytes: cliBytes } = await readTrusted(directory, manifest.files.find(file => file.path === 'node_modules/@deepseek-ai/dsh/package.json'));
   if (parseJson(cliBytes).dependencies?.['dsh-bot'] !== manifest.productIdentity.version) throw error('DISTRIBUTION_PRODUCT_LAUNCHER_BINDING_MISMATCH');
-  const { bytes: productBytes } = await readCanonical(join(directory, 'node_modules/dsh-bot/package.json'));
+  const { bytes: productBytes } = await readTrusted(directory, manifest.files.find(file => file.path === 'node_modules/dsh-bot/package.json'));
   if (JSON.stringify(parseJson(productBytes).files) !== JSON.stringify(manifest.productIdentity.publicationFiles)) throw error('DISTRIBUTION_PRODUCT_PUBLICATION_IDENTITY_MISMATCH');
   const closure = await metadataClosure(directory, coreNames, manifest.exactBindings, manifest.files);
   if (JSON.stringify(closure) !== JSON.stringify(manifest.dependencyClosure)) throw error('DISTRIBUTION_DEPENDENCY_CLOSURE_MISMATCH');
@@ -483,7 +561,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const ioCodes = new Set(['ENOENT', 'EACCES', 'EPERM', 'EEXIST', 'ENOTDIR', 'EIO', 'ENOMEM', 'ELOOP', 'ERR_ACCESS_DENIED']);
     const errorCategory = ownErrors.has(cause) || ioCodes.has(cause?.code) ? cause.code : 'ASSEMBLY_FAILED';
     const cleanup = cause?.cleanupErrorCategory;
-    const cleanupErrorCategory = cleanup === undefined ? undefined : ioCodes.has(cleanup) || ['ARTIFACT_OWNERSHIP_UNAVAILABLE', 'OUTPUT_OWNERSHIP_CHANGED'].includes(cleanup) ? cleanup : 'CLEANUP_FAILED';
+    const cleanupErrorCategory = cleanup === undefined ? undefined : ioCodes.has(cleanup) || ['ARTIFACT_OWNERSHIP_UNAVAILABLE', 'OUTPUT_OWNERSHIP_CHANGED', 'VERIFICATION_VIEW_OWNERSHIP_CHANGED'].includes(cleanup) ? cleanup : 'CLEANUP_FAILED';
     process.stderr.write(JSON.stringify({ errorCategory, cleanupErrorCategory }) + '\n'); process.exitCode = 1;
   }
 }
