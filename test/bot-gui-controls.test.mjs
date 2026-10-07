@@ -77,9 +77,20 @@ test('verified original work continues through the private GUI channel with the 
   assert.doesNotMatch([...f.storage.values()].join(''),/generationObservation|settlementVerified|usageKnown|delegateTool|parentSource/);
  }finally{await f.dispose();}
 });
+test('restored known work can continue through its current private capability while retaining the original accepted stop',async()=>{
+ const f=fixture();f.server.botEpoch=3;f.server.work={...f.server.work,generation:2,state:'fenced',stop:{state:'accepted'}};
+ try{const tree=await f.settle(),button=find(tree,'data-dsh-bot-work-continue');
+  assert.doesNotMatch(find(tree,'data-dsh-bot-work-detail').children[0].children[0],/accepted/);
+  assert.equal(button.props.disabled,false);await button.props.onClick();await f.settle();
+  const calls=f.calls.filter(call=>call.endpoint==='continueWork');assert.equal(calls.length,1);
+  assert.equal(calls[0].frame.taskId,'original-task');assert.equal(calls[0].frame.sessionId,'original-work-session');assert.equal(calls[0].frame.generation,2);
+  assert.equal(f.server.work.stop.state,'accepted');
+ }finally{await f.dispose();}
+});
 test('UNKNOWN work and a missing private continuation capability cannot allocate an operation or RPC',async()=>{
- for(const mode of ['unknown','missing']){const f=fixture();if(mode==='unknown')f.server.work={...f.server.work,held:true,state:'unknown',generationObservation:{...unknown,local:'returned'},preciseNativeSettlementVerified:false};else f.server.canContinue=false;
+ for(const mode of ['unknown','missing']){const f=fixture();if(mode==='unknown')f.server.work={...f.server.work,held:true,state:'unknown',stop:{state:'accepted'},generationObservation:{...unknown,local:'returned'},preciseNativeSettlementVerified:false};else{f.server.canContinue=false;f.server.work={...f.server.work,stop:{state:'accepted'}};}
   try{const tree=await f.settle(),button=find(tree,'data-dsh-bot-work-continue');assert.ok(button);assert.equal(button.props.disabled,true);await button.props.onClick();assert.equal(f.calls.filter(c=>c.endpoint==='continueWork').length,0);
+   if(mode==='unknown')assert.match(find(tree,'data-dsh-bot-work-detail').children[0].children[0],/accepted/);
    assert.equal([...f.storage.keys()].some(key=>key.startsWith('dsh-bot/gui-controls/')),false);
   }finally{await f.dispose();}}
 });

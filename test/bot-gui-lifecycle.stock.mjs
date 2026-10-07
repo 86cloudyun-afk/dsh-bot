@@ -98,6 +98,9 @@ test('known GUI main, parent and zero-tool child restore their original native i
  assert.equal((await f.ownerCall('requestContactStop',botId,{operationId:'gui-old-contact-stop-denied',nonce:'gui-old-contact-stop-denied',contactOperationId:originalContact.operationId})).ok,false);
  assert.equal(f.requests(),beforeQuery);
  const parent=after.work.find(work=>work.task_id==='lifecycle-parent'),child=after.work.find(work=>work.task_id==='lifecycle-child');
+ const restoredControls=(await f.call('bootstrap')).value.controls;
+ assert.equal(parent.stop.state,'accepted');
+ assert.equal(restoredControls.work.find(work=>work.taskId===parent.taskId&&work.sessionId===parent.sessionId&&work.generation===parent.generation)?.canContinue,true);
  assert.deepEqual(f.ctx.tools.schemas(f.ctx.agents.get(parent.sessionId)).map(tool=>tool.name),['dsh_bot_delegate']);assert.equal(f.ctx.tools.schemas(f.ctx.agents.get(child.sessionId)).length,0);
  assert.equal(f.ctx.agents.get(child.sessionId).session.header.parentSession,parent.sessionId);
  const request={operationId:'known-tree-parent-continue',nonce:'known-tree-parent-continue',botId,taskId:parent.taskId,sessionId:parent.sessionId,generation:1};
@@ -112,6 +115,38 @@ test('known GUI main, parent and zero-tool child restore their original native i
  const recovered=(await next.ownerCall('selectedView',botId)).value;assert.equal(recovered.held,0);assert.equal(recovered.work.every(work=>work.preciseNativeSettlementVerified),true);
  const coldHistorical=await next.ownerCall('inspectContactReceipt',botId,{operationId:originalContact.operationId,nonce:originalContact.nonce});
  assert.equal(coldHistorical.value.messageId,firstContact.value.messageId);assert.equal(coldHistorical.value.preciseNativeSettlementVerified,true);assert.equal(next.requests(),0);
+});
+
+test('first active cold GUI recovery preserves a known parent g2 and its original zero-tool child without replay',async t=>{
+ let mainCalls=0,parentCalls=0;
+ const fetcher=(_url,init)=>{const input=JSON.stringify(JSON.parse(init.body).messages.find(message=>message.role==='user')?.content);
+  if(input.includes('Goal: first-cold-child-goal'))return syntheticResponse({text:'FIRST_CHILD_RESULT'});
+  if(input.includes('Goal: first-cold-parent-goal'))return parentCalls++===0?syntheticGuiDelegation('first-cold-child','first-cold-child-goal'):syntheticResponse({text:'FIRST_PARENT_RESULT'});
+  return mainCalls++===0?syntheticGuiDelegation('first-cold-parent','first-cold-parent-goal'):syntheticResponse({text:'FIRST_MAIN_RESULT'});
+ };
+ const f=await guiGenerationRuntime(t,{enabled:true,fetcher});
+ const created=(await f.call('createBot',{operationId:'first-active-cold-create',nonce:'first-active-cold-create',name:'首次已知树重启'})).value,botId=created.botId;
+ assert.equal(created.state,'created');
+ assert.equal((await f.ownerCall('sendContactText',botId,{operationId:'first-active-cold-main',nonce:'first-active-cold-main',text:'Create the original parent and child'})).ok,true);
+ const selected=async owner=>{const result=await owner.ownerCall('selectedView',botId);assert.equal(result.ok,true);return result.value;};
+ const initial=await observeUntil(()=>selected(f),value=>value.work.length===2&&value.held===0&&value.work.every(work=>work.preciseNativeSettlementVerified&&work.result)
+  &&value.contact.preciseNativeSettlementVerified&&value.contact.reply?.inputKind==='dsh-bot-work-result');
+ const parent=initial.work.find(work=>work.task_id==='first-cold-parent');
+ const continued=await f.call('continueWork',{operationId:'first-active-cold-continue',nonce:'first-active-cold-continue',botId,taskId:parent.taskId,sessionId:parent.sessionId,generation:1});
+ assert.equal(continued.ok,true);assert.equal(continued.value.generation,2);
+ const before=await observeUntil(()=>selected(f),value=>value.work.find(work=>work.taskId===parent.taskId)?.generation===2
+  &&value.work.find(work=>work.taskId===parent.taskId)?.result?.turn===2&&value.held===0&&value.work.every(work=>work.preciseNativeSettlementVerified)
+  &&value.contact.generation>initial.contact.generation&&value.contact.preciseNativeSettlementVerified&&value.contact.reply?.inputKind==='dsh-bot-work-result');
+ const identities=before.work.map(work=>({taskId:work.taskId,sessionId:work.sessionId,generation:work.generation}));
+ await f.close();
+ const next=await guiGenerationRuntime(t,{directory:f.directory,enabled:true,fetcher}),boot=(await next.call('bootstrap')).value;
+ assert.equal(boot.modelDispatchStatus,'available');assert.equal(boot.modelRequestsEnabled,true);assert.equal(boot.controls.botEpoch,1);
+ assert.equal(boot.selectedBotId,botId);assert.equal(boot.contactSessionId,created.sessionId);assert.equal(next.ctx.agents.list().length,3);
+ const recovered=await selected(next);assert.equal(recovered.held,0);assert.equal(recovered.work.every(work=>work.preciseNativeSettlementVerified),true);
+ assert.deepEqual(recovered.work.map(work=>({taskId:work.taskId,sessionId:work.sessionId,generation:work.generation})),identities);
+ const child=recovered.work.find(work=>work.task_id==='first-cold-child');
+ assert.equal(next.ctx.agents.get(child.sessionId).session.header.parentSession,parent.sessionId);
+ assert.equal(next.ctx.tools.schemas(next.ctx.agents.get(child.sessionId)).length,0);assert.equal(next.requests(),0);
 });
 
 test('an UNKNOWN child keeps the entire original GUI tree cold and read-only even when the main and parent are known',async t=>{
