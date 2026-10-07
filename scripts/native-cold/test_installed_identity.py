@@ -1,5 +1,5 @@
 """Synthetic files and bytes only. No SDK/Node children or network."""
-import copy,hashlib,json,os,stat,tempfile,unittest
+import copy,hashlib,importlib.util,json,os,stat,tempfile,unittest
 from contextlib import contextmanager
 from pathlib import Path,PosixPath
 from unittest.mock import patch
@@ -153,6 +153,15 @@ class FixedReadTests(unittest.TestCase):
                 with self.assertRaises(R.SafetyError) as caught:I.fixed(path,maximum=maximum)
                 self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
 
+class SafePathTests(unittest.TestCase):
+    def test_safe_paths_retain_segment_character_length_and_type_boundaries(self):
+        for value in ('a','a/b.js','@s/a.json','.hidden','...','a/.../b','space name.js','中文/é.js','a/\v.json','a/\f.json','a'*1023):
+            with self.subTest(valid=value):self.assertIs(I.safe(value),True)
+        for value in ('','/a','a/','a//b','.','..','./a','../a','a/./b','a/../b','a\tb','a\rb','a\nb','a\x00b','a\\b','a'*1024,None,b'a',1,True):
+            with self.subTest(invalid=value):self.assertIs(I.safe(value),False)
+        class Text(str):pass
+        self.assertIs(I.safe(Text('a')),False)
+
 class PrefixPathTests(unittest.TestCase):
     @contextmanager
     def owned(self):
@@ -161,6 +170,141 @@ class PrefixPathTests(unittest.TestCase):
 
     def write(self,path,data):
         path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data);path.chmod(0o600)
+
+    def identity_copy(self):
+        spec=importlib.util.spec_from_file_location('owned_identity_copy',I.__file__)
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        return module
+
+    def test_preimport_iterator_replacements_keep_empty_and_outside_results(self):
+        for outside in (False,True):
+            with self.subTest(outside=outside),self.owned() as parent:
+                root=parent/'tree';self.write(root/'inside.js',b'owned inside');path=parent/'outside.js';self.write(path,b'owned outside')
+                original=PosixPath.iterdir;calls=[]
+                def injected(directory):
+                    if directory==root:calls.append(directory);return iter([path] if outside else [])
+                    return original(directory)
+                with patch.object(PosixPath,'iterdir',injected):
+                    module=self.identity_copy()
+                    if outside:
+                        with self.assertRaises(ValueError):module.files_under(root)
+                    else:self.assertEqual(module.files_under(root),[])
+                self.assertEqual(calls,[root])
+
+    def test_iterator_replacement_during_root_listing_is_used_for_descendants(self):
+        for outside in (False,True):
+            with self.subTest(outside=outside),self.owned() as parent:
+                root=parent/'tree';nested=root/'nested';self.write(nested/'inside.js',b'owned inside');path=parent/'outside.js';self.write(path,b'owned outside')
+                module=self.identity_copy();original_iter=PosixPath.iterdir;original_list=os.listdir;calls=[]
+                def injected(directory):
+                    if directory==nested:calls.append(directory);return iter([path] if outside else [])
+                    return original_iter(directory)
+                def listing(directory):
+                    names=original_list(directory)
+                    if Path(directory)==root:PosixPath.iterdir=injected
+                    return names
+                with patch.object(PosixPath,'iterdir',original_iter),patch.object(os,'listdir',listing):
+                    if outside:
+                        with self.assertRaises(ValueError):module.files_under(root)
+                    else:self.assertEqual(module.files_under(root),[])
+                self.assertEqual(calls,[nested])
+                self.assertIs(type(calls[0]),PosixPath)
+
+    def test_preimport_and_current_stat_replacements_receive_actual_paths(self):
+        for before_import in (False,True):
+            with self.subTest(beforeImport=before_import),self.owned() as root:
+                path=root/'inside.js';self.write(path,b'owned stat hook');original=PosixPath.stat;calls=[]
+                module=None if before_import else self.identity_copy()
+                def injected(value,*args,**kwargs):
+                    if value==path:
+                        calls.append(value);raise PermissionError(13,'SYNTHETIC_HOOK_DENIED',str(value))
+                    return original(value,*args,**kwargs)
+                with patch.object(PosixPath,'stat',injected):
+                    if module is None:module=self.identity_copy()
+                    with self.assertRaises(PermissionError):module.files_under(root)
+                self.assertEqual(calls,[path]);self.assertIs(type(calls[0]),PosixPath)
+
+    def test_current_predicate_and_lstat_replacements_keep_original_refusals(self):
+        for name,error in (('lstat',PermissionError),('is_file',R.SafetyError),('is_symlink',R.SafetyError),('is_dir',NotADirectoryError)):
+            with self.subTest(method=name),self.owned() as root:
+                path=root/'inside.js';self.write(path,b'owned predicate hook');module=self.identity_copy();original=getattr(PosixPath,name);calls=[]
+                def injected(value,*args,**kwargs):
+                    if value==path:
+                        calls.append(value)
+                        if name=='lstat':raise PermissionError(13,'SYNTHETIC_HOOK_DENIED',str(value))
+                        return name!='is_file'
+                    return original(value,*args,**kwargs)
+                with patch.object(PosixPath,name,injected),self.assertRaises(error):module.files_under(root)
+                self.assertEqual(calls,[path]*(2 if name=='is_dir' else 1));self.assertTrue(all(type(value) is PosixPath for value in calls))
+
+    def test_preimport_predicate_can_use_actual_path_methods(self):
+        with self.owned() as root:
+            path=root/'inside.js';self.write(path,b'owned predicate compatibility');original=PosixPath.is_dir;calls=[]
+            def injected(value):
+                calls.append(value);value.resolve(strict=True);return original(value)
+            with patch.object(PosixPath,'is_dir',injected):
+                module=self.identity_copy();self.assertEqual([row['path'] for row in module.files_under(root)],['inside.js'])
+            self.assertEqual(calls,[root,path]);self.assertTrue(all(type(value) is PosixPath for value in calls))
+
+    def test_preimport_and_current_resolve_replacements_keep_original_errors(self):
+        for before_import in (False,True):
+            with self.subTest(beforeImport=before_import),self.owned() as root:
+                path=root/'inside.js';self.write(path,b'owned resolve hook');original=PosixPath.resolve;calls=[]
+                module=None if before_import else self.identity_copy()
+                def injected(value,*args,**kwargs):
+                    if value==path:
+                        calls.append((value,args,kwargs));raise PermissionError(13,'SYNTHETIC_RESOLVE_DENIED',str(value))
+                    return original(value,*args,**kwargs)
+                with patch.object(PosixPath,'resolve',injected):
+                    if module is None:module=self.identity_copy()
+                    with self.assertRaises(PermissionError):module.files_under(root)
+                self.assertEqual(calls,[(path,(),{'strict':True})]);self.assertIs(type(calls[0][0]),PosixPath)
+
+    def test_predicate_replacement_between_entry_observations_is_used(self):
+        with self.owned() as root:
+            path=root/'inside.js';self.write(path,b'owned between-observation hook');module=self.identity_copy();original_stat=os.stat;original_file=PosixPath.is_file;calls=[]
+            def injected(value):
+                if value==path:calls.append(value);return False
+                return original_file(value)
+            def observed(value,*args,**kwargs):
+                result=original_stat(value,*args,**kwargs)
+                if Path(value)==path and kwargs.get('follow_symlinks') is False:PosixPath.is_file=injected
+                return result
+            with patch.object(PosixPath,'is_file',original_file),patch.object(os,'stat',observed),self.assertRaises(R.SafetyError):module.files_under(root)
+            self.assertEqual(calls,[path]);self.assertIs(type(calls[0]),PosixPath)
+
+    def test_unknown_class_and_static_predicates_use_actual_descriptor_binding(self):
+        for before_import in (False,True):
+            for descriptor in (classmethod,staticmethod):
+                with self.subTest(beforeImport=before_import,descriptor=descriptor.__name__),self.owned() as root:
+                    path=root/'inside.js';self.write(path,b'owned descriptor binding');calls=[]
+                    module=None if before_import else self.identity_copy()
+                    if descriptor is classmethod:
+                        def injected(cls):calls.append((cls,));return False
+                    else:
+                        def injected():calls.append(());return False
+                    with patch.object(PosixPath,'is_file',descriptor(injected)):
+                        if module is None:module=self.identity_copy()
+                        with self.assertRaises(R.SafetyError) as caught:module.files_under(root)
+                    self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+                    self.assertEqual(calls,[(PosixPath,)] if descriptor is classmethod else [()])
+
+    def test_unknown_descriptor_binds_once_to_the_actual_path(self):
+        for before_import in (False,True):
+            with self.subTest(beforeImport=before_import),self.owned() as root:
+                path=root/'inside.js';self.write(path,b'owned descriptor effects');bindings=[];calls=[]
+                module=None if before_import else self.identity_copy()
+                class Predicate:
+                    def __get__(self,instance,owner):
+                        bindings.append((instance,owner))
+                        def injected(*args):calls.append((instance,args));return False
+                        return injected
+                with patch.object(PosixPath,'is_file',Predicate()):
+                    if module is None:module=self.identity_copy()
+                    with self.assertRaises(R.SafetyError) as caught:module.files_under(root)
+                self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+                self.assertEqual(bindings,[(path,PosixPath)]);self.assertEqual(calls,[(path,())])
+                self.assertIs(type(bindings[0][0]),PosixPath)
 
     def installation(self,root):
         source=root/'source';sdk=source/'node_modules/synthetic-sdk';sdk.mkdir(parents=True)
@@ -186,6 +330,13 @@ class PrefixPathTests(unittest.TestCase):
             self.assertEqual([row['path'] for row in rows],sorted(values,key=lambda value:value.encode()))
             self.assertEqual(rows,[{'path':name,'bytes':len(values[name]),'sha256':hashlib.sha256(values[name]).hexdigest(),'mode':0o600} for name in sorted(values,key=lambda value:value.encode())])
 
+    def test_sdk_suffix_filter_keeps_the_original_five_content_suffixes(self):
+        accepted={'a.js','b.mjs','c.cjs','d.json','e.wasm','.js','nested/module.js'}
+        excluded={'a.JS','b.js.old','c.mjsx','d.json.map','plain','nested/package.JSON'}
+        with self.owned() as root:
+            for name in accepted|excluded:self.write(root/name,b'owned suffix fixture')
+            self.assertEqual({row['path'] for row in I.files_under(root,True)},accepted)
+
     def test_standard_tree_avoids_per_entry_relative_construction(self):
         with self.owned() as root:
             self.write(root/'a.js',b'owned');self.write(root/'nested/b.js',b'owned')
@@ -196,9 +347,10 @@ class PrefixPathTests(unittest.TestCase):
             self.assertEqual(observed,[])
 
     def test_deep_directory_names_have_no_leading_root_separator(self):
-        with self.owned() as root:
-            name='/'.join(['depth']*32+['file.js']);self.write(root/name,b'owned depth')
-            self.assertEqual([row['path'] for row in I.files_under(root)],[name])
+        for count in (32,160):
+            with self.subTest(depth=count),self.owned() as root:
+                name='/'.join(['d']*count+['file.js']);self.write(root/name,b'owned depth')
+                self.assertEqual([row['path'] for row in I.files_under(root)],[name])
 
     def test_empty_alias_and_relative_roots_preserve_original_boundary(self):
         with self.owned() as parent:
@@ -263,19 +415,55 @@ class PrefixPathTests(unittest.TestCase):
             with patch.object(PosixPath,'iterdir',entries):rows=I.files_under(root)
             self.assertEqual([row['path'] for row in rows],['child/file.js']);self.assertEqual(events,['relative','as_posix'])
 
-    def test_all_file_resolves_opens_fstats_and_full_hashes_remain(self):
+    def test_all_file_canonical_observations_opens_fstats_and_full_hashes_remain(self):
         with self.owned() as root:
             values={'a.js':b'owned binary\x00\xff','nested/b.js':b'owned other'}
             for path,data in values.items():self.write(root/path,data)
-            originals=(PosixPath.resolve,os.open,os.fstat,hashlib.sha256);resolved=[];opened=[];fstats=[];hashed=[]
-            def resolve(path,*args,**kwargs):resolved.append(path);return originals[0](path,*args,**kwargs)
+            originals=(os.lstat,os.open,os.fstat,hashlib.sha256);resolved=[];opened=[];fstats=[];hashed=[]
+            def resolve(path,*args,**kwargs):resolved.append(os.fspath(path));return originals[0](path,*args,**kwargs)
             def open_file(path,flags,*args,**kwargs):opened.append((path,flags));return originals[1](path,flags,*args,**kwargs)
             def fstat(fd):fstats.append(fd);return originals[2](fd)
             def digest(data=b'',*args,**kwargs):hashed.append(data);return originals[3](data,*args,**kwargs)
-            with patch.object(PosixPath,'resolve',resolve),patch.object(os,'open',open_file),patch.object(os,'fstat',fstat),patch.object(hashlib,'sha256',digest):I.files_under(root)
-            self.assertEqual(len(resolved),4);self.assertEqual(len(opened),2);self.assertEqual(len(fstats),4)
+            with patch.object(os,'lstat',resolve),patch.object(os,'open',open_file),patch.object(os,'fstat',fstat),patch.object(hashlib,'sha256',digest):I.files_under(root)
+            expected=[]
+            for path in (root,root/'a.js',root/'nested',root/'nested/b.js'):
+                parent=Path('/')
+                for part in path.parts[1:]:parent=parent/part;expected.append(str(parent))
+            self.assertEqual(resolved,expected);self.assertEqual(len(opened),2);self.assertEqual(len(fstats),4)
             self.assertTrue(all(flags & os.O_NOFOLLOW and flags & os.O_NONBLOCK for _,flags in opened))
             self.assertEqual(hashed,[values['a.js'],values['nested/b.js']])
+
+    def test_canonical_fresh_calls_observe_each_ancestor_again(self):
+        with self.owned() as root:
+            path=root/'nested/file.js';self.write(path,b'owned fresh canonical')
+            original=os.lstat;observed=[]
+            def lstat(value,*args,**kwargs):observed.append(os.fspath(value));return original(value,*args,**kwargs)
+            with patch.object(os,'lstat',lstat):
+                I.fixed(path);first=observed.copy();observed.clear();I.fixed(path)
+            self.assertEqual(observed,first)
+            self.assertEqual(first[-1],str(path))
+            self.assertEqual(len(first),len(path.parts)-1)
+
+    def test_directory_alias_after_confirmation_is_refused_before_file_open(self):
+        with self.owned() as parent:
+            root=parent/'tree';self.write(root/'file.js',b'owned directory race')
+            original=os.lstat;opened=os.open;fired=[];calls=[]
+            def lstat(value,*args,**kwargs):
+                info=original(value,*args,**kwargs)
+                if Path(value)==root and not fired:
+                    fired.append(True);root.rename(parent/'moved');root.symlink_to('moved',target_is_directory=True)
+                return info
+            def open_file(path,flags,*args,**kwargs):calls.append(path);return opened(path,flags,*args,**kwargs)
+            with patch.object(os,'lstat',lstat),patch.object(os,'open',open_file),self.assertRaises(R.SafetyError) as caught:I.files_under(root)
+            self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED');self.assertEqual(calls,[])
+
+    def test_other_runtime_uses_original_strict_resolver(self):
+        with self.owned() as root:
+            self.write(root/'file.js',b'owned resolver fallback')
+            original=PosixPath.resolve;observed=[]
+            def resolve(path,*args,**kwargs):observed.append((path,kwargs));return original(path,*args,**kwargs)
+            with patch.object(I,'_FAST_POSIX',False),patch.object(PosixPath,'resolve',resolve):I.files_under(root)
+            self.assertEqual(observed,[(root,{'strict':True}),(root/'file.js',{'strict':True})])
 
     def test_full_check_avoids_relative_construction_and_retains_record_reopen(self):
         with self.owned() as root:
