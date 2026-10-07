@@ -8,6 +8,10 @@ const key=(...p)=>canonical(p);
 const clone=value=>structuredClone(value);
 const string=value=>typeof value==='string'&&value.length>0&&value.length<=200;
 const positive=value=>Number.isSafeInteger(value)&&value>0;
+/** Internal exact source retention; opaque generations never leave the private owner composition. */
+export function ownedMainGenerationRunsFor(source,host,ownerCtx){const state=sources.get(source);requireValue(!state||state.host===host&&state.ownerCtx===ownerCtx,'main_generation_binding_conflict');return state?[...state.runs.values()].map(run=>({binding:clone(run.binding),generation:run.generation})):[];}
+/** A historical generation is adopted only after the resumed SDK source returned its exact branded receipt. */
+export function adoptOwnedMainGenerationHistory(source,host,ownerCtx,coordinates,binding,generation,sdk,view){requireValue(sdk.isOwnedGenerationSource(source,ownerCtx)===true&&sdk.isOwnedGenerationReceipt(view?.receipt,source,binding)===true&&view.remote==='settled'&&view.usageKnown===true&&canonical(view.binding)===canonical(binding),'main_generation_receipt_conflict');let state=sources.get(source);if(!state){state={host,ownerCtx,coordinates:clone(coordinates),runs:new Map(),admission:null};sources.set(source,state);}requireValue(state.host===host&&state.ownerCtx===ownerCtx&&canonical(state.coordinates)===canonical(coordinates),'main_generation_binding_conflict');state.runs.set(binding.generation,{binding:clone(binding),generation,cancelled:false});}
 
 export function createOwnedMainGenerationBridge({host,ownerCtx,source,botId,botEpoch,authorityEpoch,sessionId,configVersion}){
  requireValue(source&&typeof source==='object','unsupported_owned_generation_source');
