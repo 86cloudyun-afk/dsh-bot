@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
+import mutableFs from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { createRequire } from 'node:module';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import { planRuntime, exportRuntime } from '../tools/runtime-export/export.mjs';
 
 const module = await import('./assemble-distribution-runtime.mjs').catch(error => {
@@ -19,6 +21,23 @@ const write = async (path, value, mode = 0o644) => {
   await fs.chmod(path, mode);
 };
 const json = async (path, value) => write(path, JSON.stringify(value, null, 2) + '\n');
+// Instrument real owned-file reads, including descriptor reads. No fake bytes or
+// simulated assembly result is returned: the callback may mutate a fixture after
+// its actual first read, reproducing the reviewed metadata snapshot race.
+function observeReads(t, afterRead) {
+  const paths = [], readFile = mutableFs.readFile, open = mutableFs.open;
+  const observed = async (path, bytes) => { paths.push(String(path)); await afterRead?.(String(path), bytes); return bytes; };
+  t.mock.method(mutableFs, 'readFile', async (path, ...args) => observed(path, await readFile(path, ...args)));
+  t.mock.method(mutableFs, 'open', async (path, ...args) => {
+    const handle = await open(path, ...args), read = handle.readFile.bind(handle);
+    handle.readFile = async (...values) => observed(path, await read(...values));
+    return handle;
+  });
+  syncBuiltinESMExports();
+  const restore = () => { t.mock.restoreAll(); syncBuiltinESMExports(); };
+  t.after(restore);
+  return { paths, restore };
+}
 const octal = (value, length) => value.toString(8).padStart(length - 1, '0') + '\0';
 function archive(files) {
   const blocks = [];
@@ -33,7 +52,7 @@ function archive(files) {
   }
   return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
 }
-async function fixture(t, { unsafeTarPath, skippedOptionalWorkspace } = {}) {
+async function fixture(t, { unsafeTarPath, skippedOptionalWorkspace, invalidGzip } = {}) {
   const parent = process.env.DSH_BOT_TEST_ROOT || '/workspace/dsh-v1-evidence/distribution-consumer';
   await fs.mkdir(parent, { recursive: true });
   const root = await fs.realpath(await fs.mkdtemp(join(parent, 'assembly-test-')));
@@ -44,7 +63,7 @@ async function fixture(t, { unsafeTarPath, skippedOptionalWorkspace } = {}) {
   const external = [];
   for (const version of ['1.0.0', '2.0.0']) {
     const name = 'color-fixture', meta = { name, version, main: 'index.js', scripts: { install: 'touch lifecycle-was-run' } };
-    const bytes = archive({ 'package/package.json': JSON.stringify(meta), 'package/index.js': `module.exports = '${version}';\n`, 'package/LICENSE': 'Fixture MIT notice\n', ...(unsafeTarPath ? { [unsafeTarPath]: 'untrusted archive path' } : {}) });
+    const bytes = invalidGzip ? Buffer.from('PRIVXYZ') : archive({ 'package/package.json': JSON.stringify(meta), 'package/index.js': `module.exports = '${version}';\n`, 'package/LICENSE': 'Fixture MIT notice\n', ...(unsafeTarPath ? { [unsafeTarPath]: 'untrusted archive path' } : {}) });
     const integrity = sri(bytes), file = name + '@' + version;
     const metadata = { ...meta, dist: { integrity, tarball: `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz` } };
     await write(join(registryDirectory, file + '.tgz'), bytes);
@@ -103,9 +122,18 @@ async function fixture(t, { unsafeTarPath, skippedOptionalWorkspace } = {}) {
   await write(join(officialRoot, 'Home/config.yml'), 'MUST NOT COPY'); await write(join(productRoot, '.env'), 'MUST NOT COPY');
   const publicLicensePath = join(sourceRoot, 'LICENSE'), nativeLicensePath = join(sourceRoot, 'native/system/LICENSE');
   await write(publicLicensePath, 'MIT License\nCopyright fixture\n'); await write(nativeLicensePath, 'BSD 3-Clause License\nCopyright fixture\n');
+  const muslCopyrightPath = join(sourceRoot, 'licenses/musl.COPYRIGHT.txt'), muslSourceNoticesPath = join(sourceRoot, 'licenses/musl.source-notices.txt');
+  await write(muslCopyrightPath, 'musl fixture public COPYRIGHT\nMIT License\nCopyright libc contributors\n');
+  await write(muslSourceNoticesPath, 'Additional fixture public musl source notices.\nBSD permission text\n');
   const registryReceiptsPath = join(root, 'receipts.json'); await json(registryReceiptsPath, { receipts: external, scriptsExecuted: false });
-  const options = { officialRoot, officialLockPath, expectedOfficialLockSha256: sha(await fs.readFile(officialLockPath)), overlayDirectory, expectedManifestSha256: sha(await fs.readFile(join(overlayDirectory, 'artifact-manifest.json'))), sourceIdentityPath, expectedSourceIdentitySha256: sha(await fs.readFile(sourceIdentityPath)), sourceLockPath, registryDirectory, registryReceiptsPath, productRoot, outputDirectory: join(root, 'runtime'), publicLicensePath, expectedPublicLicenseSha256: sha(await fs.readFile(publicLicensePath)), nativeLicensePath, expectedNativeLicenseSha256: sha(await fs.readFile(nativeLicensePath)) };
+  const options = { officialRoot, officialLockPath, expectedOfficialLockSha256: sha(await fs.readFile(officialLockPath)), overlayDirectory, expectedManifestSha256: sha(await fs.readFile(join(overlayDirectory, 'artifact-manifest.json'))), sourceIdentityPath, expectedSourceIdentitySha256: sha(await fs.readFile(sourceIdentityPath)), sourceLockPath, registryDirectory, registryReceiptsPath, productRoot, outputDirectory: join(root, 'runtime'), publicLicensePath, expectedPublicLicenseSha256: sha(await fs.readFile(publicLicensePath)), nativeLicensePath, expectedNativeLicenseSha256: sha(await fs.readFile(nativeLicensePath)), muslCopyrightPath, expectedMuslCopyrightSha256: sha(await fs.readFile(muslCopyrightPath)), muslSourceNoticesPath, expectedMuslSourceNoticesSha256: sha(await fs.readFile(muslSourceNoticesPath)) };
   return { root, options, external };
+}
+function cliArguments(options) {
+  const flags = {
+    '--official': 'officialRoot', '--official-lock': 'officialLockPath', '--official-lock-sha256': 'expectedOfficialLockSha256', '--overlay': 'overlayDirectory', '--manifest-sha256': 'expectedManifestSha256', '--source-identity': 'sourceIdentityPath', '--source-identity-sha256': 'expectedSourceIdentitySha256', '--source-lock': 'sourceLockPath', '--registry': 'registryDirectory', '--receipts': 'registryReceiptsPath', '--product': 'productRoot', '--output': 'outputDirectory', '--public-license': 'publicLicensePath', '--public-license-sha256': 'expectedPublicLicenseSha256', '--native-license': 'nativeLicensePath', '--native-license-sha256': 'expectedNativeLicenseSha256', '--musl-copyright': 'muslCopyrightPath', '--musl-copyright-sha256': 'expectedMuslCopyrightSha256', '--musl-source-notices': 'muslSourceNoticesPath', '--musl-source-notices-sha256': 'expectedMuslSourceNoticesSha256',
+  };
+  return [resolve(import.meta.dirname, 'assemble-distribution-runtime.mjs'), ...Object.entries(flags).flatMap(([flag, key]) => [flag, options[key]])];
 }
 
 test('assembler exports a separate explicit format 2 consumer', () => {
@@ -241,4 +269,132 @@ test('product publication payload cannot copy a symlink to caller configuration'
   await fs.symlink(join(root, 'private-config.yml'), join(options.productRoot, 'src/config-link.yml'));
   await assert.rejects(module.assembleDistributionRuntime(options), { code: 'CANONICAL_INPUT_REQUIRED' });
   await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+});
+
+for (const [kind, select] of [
+  ['official package metadata', options => join(options.officialRoot, 'node_modules/@deepseek-ai/dsh/package.json')],
+  ['product package metadata', options => join(options.productRoot, 'package.json')],
+  ['overlay manifest', options => join(options.overlayDirectory, 'artifact-manifest.json')],
+]) test(`linked ${kind} is refused without reading its outside target`, async t => {
+  const { options, root } = await fixture(t), selected = select(options), outside = join(root, 'outside-synthetic-private.json');
+  await write(outside, 'PRIVXYZ'); await fs.unlink(selected); await fs.symlink(outside, selected);
+  const reads = observeReads(t);
+  const cause = await module.assembleDistributionRuntime(options).then(() => assert.fail('linked input must be refused'), cause => cause);
+  reads.restore();
+  assert.equal(cause.code, 'CANONICAL_INPUT_REQUIRED');
+  assert.equal(cause.message.includes('PRIVXYZ'), false);
+  assert.equal(reads.paths.includes(selected), false, 'canonical refusal must precede any bytes read');
+  assert.equal(reads.paths.includes(outside), false);
+  await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+});
+
+for (const selected of ['.env', '.aws', 'Home', 'src/.aws']) test(`protected publication declaration ${selected} is refused before reading files`, async t => {
+  const { options } = await fixture(t), path = join(options.productRoot, 'package.json');
+  const meta = JSON.parse(await fs.readFile(path)); meta.files.push(selected); await json(path, meta);
+  const protectedFile = join(options.productRoot, selected, ...selected.endsWith('.aws') ? ['credentials'] : selected === 'Home' ? ['config.yml'] : []);
+  await write(protectedFile, 'OWNED_SYNTHETIC_PRIVATE_CONTENT');
+  const reads = observeReads(t);
+  const cause = await module.assembleDistributionRuntime(options).then(() => assert.fail('protected publication declaration must be refused'), cause => cause);
+  reads.restore();
+  assert.equal(cause.code, 'PROHIBITED_PRODUCT_PUBLICATION_PATH');
+  assert.equal(reads.paths.includes(protectedFile), false, 'prohibition must be checked before traversing the selected path');
+  await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+});
+
+for (const kind of ['official', 'product']) test(`${kind} metadata first-read version drift is refused`, async t => {
+  const { options } = await fixture(t);
+  const path = kind === 'official' ? join(options.officialRoot, 'node_modules/color-fixture/package.json') : join(options.productRoot, 'package.json');
+  let changed = false;
+  const reads = observeReads(t, async (selected, bytes) => {
+    if (selected !== path || changed) return;
+    changed = true; const meta = JSON.parse(bytes); meta.version = '999.0.0'; await json(path, meta);
+  });
+  const cause = await module.assembleDistributionRuntime(options).then(() => assert.fail('metadata decision snapshot drift must be refused'), cause => cause);
+  reads.restore();
+  assert.equal(changed, true, 'the real first metadata read must have triggered the mutation');
+  assert.equal(cause.code, 'INPUT_CHANGED_DURING_ASSEMBLY');
+  await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+});
+
+test('CLI malformed JSON reports a fixed category without raw synthetic content', async t => {
+  const { options } = await fixture(t);
+  await write(join(options.officialRoot, 'node_modules/@deepseek-ai/dsh/package.json'), 'PRIVXYZ');
+  const result = spawnSync(process.execPath, cliArguments(options), { env: { PATH: '/usr/local/bin:/usr/bin:/bin', TZ: 'UTC', LANG: 'C' }, encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr.includes('PRIVXYZ'), false);
+  assert.deepEqual(JSON.parse(result.stderr), { errorCategory: 'ARTIFACT_JSON_INVALID' });
+});
+
+test('CLI unknown decompression errors use a fixed category', async t => {
+  const { options } = await fixture(t, { invalidGzip: true });
+  const result = spawnSync(process.execPath, cliArguments(options), { env: { PATH: '/usr/local/bin:/usr/bin:/bin', TZ: 'UTC', LANG: 'C' }, encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 1); assert.equal(result.stdout, '');
+  assert.deepEqual(JSON.parse(result.stderr), { errorCategory: 'ASSEMBLY_FAILED' });
+});
+
+test('late output replacement preserves caller files under ownership-aware cleanup', async t => {
+  const { options, root } = await fixture(t), path = join(options.outputDirectory, 'distribution-runtime-manifest.json');
+  let replaced = false;
+  const reads = observeReads(t, async selected => {
+    if (selected !== path || replaced) return;
+    replaced = true; await fs.rename(options.outputDirectory, join(root, 'owned-output-retained'));
+    await fs.mkdir(options.outputDirectory); await write(join(options.outputDirectory, 'caller.txt'), 'CALLER_REPLACEMENT_REMAINS');
+  });
+  const cause = await module.assembleDistributionRuntime(options).then(() => assert.fail('replacement must be refused'), cause => cause);
+  reads.restore(); assert.equal(replaced, true);
+  assert.equal(cause.cleanupErrorCategory, 'OUTPUT_OWNERSHIP_CHANGED');
+  assert.equal(await fs.readFile(join(options.outputDirectory, 'caller.txt'), 'utf8'), 'CALLER_REPLACEMENT_REMAINS');
+});
+
+test('self-consistent changed package bytes cannot retain the locked final identity', async t => {
+  const { options } = await fixture(t), result = await module.assembleDistributionRuntime(options);
+  const path = 'node_modules/color-fixture/package.json', absolute = join(result.runtimeDirectory, path);
+  const meta = JSON.parse(await fs.readFile(absolute)); meta.version = '999.0.0'; await json(absolute, meta);
+  const manifest = result.manifest, bytes = await fs.readFile(absolute), record = manifest.files.find(x => x.path === path);
+  record.sha256 = sha(bytes); record.bytes = bytes.length;
+  await json(result.manifestPath, manifest);
+  await assert.rejects(module.verifyDistributionRuntime({ directory: result.runtimeDirectory, expectedManifestSha256: sha(await fs.readFile(result.manifestPath)) }), { code: 'DISTRIBUTION_PACKAGE_IDENTITY_MISMATCH' });
+});
+
+test('final product publication metadata must match its first-read declaration', async t => {
+  const { options } = await fixture(t), result = await module.assembleDistributionRuntime(options);
+  const path = 'node_modules/dsh-bot/package.json', absolute = join(result.runtimeDirectory, path);
+  const meta = JSON.parse(await fs.readFile(absolute)); meta.files = ['Home']; await json(absolute, meta);
+  const bytes = await fs.readFile(absolute), record = result.manifest.files.find(x => x.path === path);
+  record.sha256 = sha(bytes); record.bytes = bytes.length; await json(result.manifestPath, result.manifest);
+  await assert.rejects(module.verifyDistributionRuntime({ directory: result.runtimeDirectory, expectedManifestSha256: sha(await fs.readFile(result.manifestPath)) }), { code: 'DISTRIBUTION_PRODUCT_PUBLICATION_IDENTITY_MISMATCH' });
+});
+
+test('notices contain complete caller-pinned musl text within its compiled-libc scope', async t => {
+  const { options } = await fixture(t), result = await module.assembleDistributionRuntime(options);
+  const notices = await fs.readFile(join(result.runtimeDirectory, 'NOTICES.txt'), 'utf8');
+  assert.equal(notices.includes(await fs.readFile(options.muslCopyrightPath, 'utf8')), true);
+  assert.equal(notices.includes(await fs.readFile(options.muslSourceNoticesPath, 'utf8')), true);
+  const musl = result.manifest.licenses.filter(item => item.scope.includes('musl'));
+  assert.equal(musl.length, 2);
+  assert.deepEqual(musl.map(item => item.sha256), [options.expectedMuslCopyrightSha256, options.expectedMuslSourceNoticesSha256]);
+  assert.equal(result.manifest.modifiedPackageRights, 'UNKNOWN');
+  assert.equal(result.manifest.publicReleaseQualified, false);
+});
+
+test('musl copyright and source notice pins are required and checked before output creation', async t => {
+  const { options } = await fixture(t);
+  await assert.rejects(module.assembleDistributionRuntime({ ...options, expectedMuslCopyrightSha256: undefined }), { code: 'TRUSTED_DIGEST_REQUIRED' });
+  await assert.rejects(module.assembleDistributionRuntime({ ...options, expectedMuslCopyrightSha256: '0'.repeat(64) }), { code: 'MUSL_COPYRIGHT_HASH_MISMATCH' });
+  await assert.rejects(module.assembleDistributionRuntime({ ...options, expectedMuslSourceNoticesSha256: '0'.repeat(64) }), { code: 'MUSL_SOURCE_NOTICES_HASH_MISMATCH' });
+  await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+});
+
+test('verification metadata rereads stay bound to the pinned receipt inventory', async t => {
+  const { options } = await fixture(t), result = await module.assembleDistributionRuntime(options);
+  const path = join(result.runtimeDirectory, 'node_modules/color-fixture/package.json');
+  let count = 0, changed = false;
+  const reads = observeReads(t, async (selected, bytes) => {
+    if (selected !== path || ++count !== 2) return;
+    changed = true; const meta = JSON.parse(bytes); meta.version = '999.0.0'; await json(path, meta);
+  });
+  const cause = await module.verifyDistributionRuntime({ directory: result.runtimeDirectory, expectedManifestSha256: result.manifestSha256 }).then(() => assert.fail('later metadata checks must retain the pinned inventory authority'), cause => cause);
+  reads.restore(); assert.equal(changed, true);
+  assert.equal(cause.code, 'INPUT_CHANGED_DURING_ASSEMBLY');
 });

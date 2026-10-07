@@ -4,18 +4,20 @@ import { join, dirname, resolve, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { constants } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { verifyRuntime } from '../tools/runtime-export/export.mjs';
 
 const CLI_VERSION = '0.2.0-rc.2';
 const RECEIPT = 'distribution-runtime-manifest.json';
 const sha = value => createHash('sha256').update(value).digest('hex');
-const error = code => Object.assign(new Error(code), { code });
+const ownErrors = new WeakSet();
+const error = code => { const cause = Object.assign(new Error(code), { code }); ownErrors.add(cause); return cause; };
 const inside = (root, path) => path === root || path.startsWith(root + sep);
 const safe = path => typeof path === 'string' && path !== '' && !isAbsolute(path) && !path.includes('\\') && !path.includes('\0') && !path.split('/').some(x => x === '' || x === '.' || x === '..');
 const packageName = name => typeof name === 'string' && /^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(name);
 const prohibited = path => path.split('/').some(x => ['.git', '.env', '.aws', '.codex', '.agents', 'Home'].includes(x) || x.startsWith('.env.'));
-const parseJson = bytes => JSON.parse(bytes.toString('utf8'));
+const parseJson = bytes => { try { return JSON.parse(bytes.toString('utf8')); } catch { throw error('ARTIFACT_JSON_INVALID'); } };
 const packagePath = (root, name) => {
   if (!packageName(name)) throw error('INVALID_PACKAGE_NAME');
   return join(root, 'node_modules', ...name.split('/'));
@@ -26,18 +28,31 @@ async function canonical(path, directory = false) {
   if (resolve(path) !== path || await fs.realpath(path) !== path || stat.isSymbolicLink() || (directory ? !stat.isDirectory() : !stat.isFile())) throw error('CANONICAL_INPUT_REQUIRED');
   return stat;
 }
+async function readCanonical(path) {
+  const before = await canonical(path);
+  if (before.mode & 0o7000) throw error('SPECIAL_FILE_MODE_REFUSED');
+  // Refuse a replaced leaf without opening its target. The opened descriptor
+  // must still identify the canonical file before any payload bytes are read.
+  const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = await handle.stat(), current = await canonical(path);
+    if (!opened.isFile() || opened.ino !== before.ino || opened.dev !== before.dev || current.ino !== opened.ino || current.dev !== opened.dev || (opened.mode & 0o7777) !== (before.mode & 0o7777)) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
+    return { bytes: await handle.readFile(), stat: opened };
+  } finally { await handle.close(); }
+}
 async function pinned(path, digest, category) {
-  const bytes = await fs.readFile(path);
+  const { bytes } = await readCanonical(path);
   if (sha(bytes) !== digest) throw error(category);
   return bytes;
 }
 async function fileRecord(root, path) {
-  const absolute = join(root, path), stat = await canonical(absolute);
-  if (stat.mode & 0o7000) throw error('SPECIAL_FILE_MODE_REFUSED');
-  const bytes = await fs.readFile(absolute);
+  if (!safe(path) || prohibited(path)) throw error('UNSAFE_PAYLOAD_PATH');
+  const { bytes, stat } = await readCanonical(join(root, path));
   return { path, bytes: bytes.length, sha256: sha(bytes), mode: stat.mode & 0o777 };
 }
+const sameRecord = (a, b) => a && b && a.bytes === b.bytes && a.sha256 === b.sha256 && a.mode === b.mode;
 async function payloadFiles(root, at = '', skipModules = true) {
+  if (at && (!safe(at) || prohibited(at))) throw error('PROHIBITED_PACKAGE_PAYLOAD');
   const result = [];
   for (const item of (await fs.readdir(join(root, at), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
     const path = at ? at + '/' + item.name : item.name;
@@ -50,8 +65,7 @@ async function payloadFiles(root, at = '', skipModules = true) {
 }
 async function copyRecord(sourceRoot, file, output, destination) {
   if (!safe(destination) || prohibited(destination)) throw error('UNSAFE_PAYLOAD_PATH');
-  const stat = await canonical(join(sourceRoot, file.path));
-  const bytes = await fs.readFile(join(sourceRoot, file.path));
+  const { bytes, stat } = await readCanonical(join(sourceRoot, file.path));
   if (sha(bytes) !== file.sha256 || bytes.length !== file.bytes || (stat.mode & 0o7777) !== file.mode) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
   const target = join(output, destination);
   await fs.mkdir(dirname(target), { recursive: true });
@@ -68,11 +82,13 @@ async function publicPackages(officialRoot, lock) {
     try { stat = await fs.lstat(join(officialRoot, path)); }
     catch (cause) { if (cause.code === 'ENOENT' && binding.optional) continue; throw error('OFFICIAL_LOCKED_PACKAGE_MISSING'); }
     if (!stat.isDirectory() || await fs.realpath(join(officialRoot, path)) !== join(officialRoot, path)) throw error('OFFICIAL_PACKAGE_SYMLINK_REFUSED');
-    const name = path.split('node_modules/').at(-1), bytes = await fs.readFile(join(officialRoot, path, 'package.json')), meta = parseJson(bytes);
+    const name = path.split('node_modules/').at(-1), { bytes, stat: metadataStat } = await readCanonical(join(officialRoot, path, 'package.json')), meta = parseJson(bytes);
+    const metadataRecord = { path: 'package.json', bytes: bytes.length, sha256: sha(bytes), mode: metadataStat.mode & 0o777 };
     if (meta.name !== name || meta.version !== binding.version || typeof binding.integrity !== 'string' || !/^sha(?:256|384|512)-[A-Za-z0-9+/]+=*$/.test(binding.integrity)) throw error('OFFICIAL_LOCK_PACKAGE_MISMATCH');
     let url; try { url = new URL(binding.resolved); } catch { throw error('PUBLIC_REGISTRY_PROVENANCE_REQUIRED'); }
     if (url.protocol !== 'https:' || url.hostname !== 'registry.npmjs.org' || url.username || url.password) throw error('PUBLIC_REGISTRY_PROVENANCE_REQUIRED');
     const entries = await payloadFiles(join(officialRoot, path));
+    if (!sameRecord(metadataRecord, entries.find(file => file.path === 'package.json'))) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
     packages.push({ name, version: meta.version, path, resolved: binding.resolved, integrity: binding.integrity, packageJsonSha256: sha(bytes) });
     files.push(...entries.map(file => ({ ...file, path: path + '/' + file.path })));
   }
@@ -130,7 +146,7 @@ function checkSri(bytes, integrity) {
   return createHash(algorithm).update(bytes).digest('base64') === value;
 }
 async function registryPackages(options, manifest) {
-  const receiptBytes = await fs.readFile(options.registryReceiptsPath), inventory = parseJson(receiptBytes);
+  const { bytes: receiptBytes } = await readCanonical(options.registryReceiptsPath), inventory = parseJson(receiptBytes);
   if (inventory.scriptsExecuted !== false || !Array.isArray(inventory.receipts)) throw error('REGISTRY_RECEIPT_INVALID');
   const packages = [];
   for (const item of manifest.externalPackages) {
@@ -144,8 +160,7 @@ async function registryPackages(options, manifest) {
       return path;
     };
     const tarballPath = inputPath(receipt.tarballPath), metadataPath = inputPath(receipt.metadataPath);
-    await canonical(tarballPath); await canonical(metadataPath);
-    const raw = await fs.readFile(tarballPath), metadataBytes = await fs.readFile(metadataPath), metadata = parseJson(metadataBytes);
+    const { bytes: raw } = await readCanonical(tarballPath), { bytes: metadataBytes } = await readCanonical(metadataPath), metadata = parseJson(metadataBytes);
     if (!checkSri(raw, item.integrity) || raw.length !== receipt.bytes || sha(raw) !== receipt.tarballSha256) throw error('REGISTRY_TARBALL_INTEGRITY_MISMATCH');
     if (metadata.name !== item.name || metadata.version !== version || metadata.dist?.integrity !== item.integrity || receipt.integrity !== item.integrity || receipt.actualIntegrity !== item.integrity || sha(metadataBytes) !== receipt.metadataSha256) throw error('REGISTRY_METADATA_INTEGRITY_MISMATCH');
     const files = tarPayload(raw), meta = parseJson(files.find(x => x.path === 'package.json').data);
@@ -157,12 +172,13 @@ async function registryPackages(options, manifest) {
   return { packages, receiptSha256: sha(receiptBytes) };
 }
 async function readSourceLock(options, official) {
-  const bytes = await fs.readFile(options.sourceLockPath);
+  const { bytes } = await readCanonical(options.sourceLockPath);
   if (bytes.toString('utf8').trimStart().startsWith('{')) return parseJson(bytes);
   const yaml = official.packages.find(x => x.path === 'node_modules/js-yaml');
   if (!yaml) throw error('LOCKED_YAML_PARSER_REQUIRED');
   // Only the caller-selected, lock-bound public parser is used; never install one.
-  return createRequire(join(options.officialRoot, 'package-lock.json'))('js-yaml').load(bytes.toString('utf8'));
+  try { return createRequire(join(options.officialRoot, 'package-lock.json'))('js-yaml').load(bytes.toString('utf8')); }
+  catch { throw error('SOURCE_LOCK_PARSE_INVALID'); }
 }
 async function addLink(output, path, target) {
   if (!safe(path) || !safe(target)) throw error('UNSAFE_RUNTIME_LINK');
@@ -182,11 +198,12 @@ async function resolveDependency(root, from, name) {
   }
   return null;
 }
-async function metadataClosure(output, coreNames, expectedBindings) {
-  const packageFiles = (await inventoryRuntime(output)).files.filter(x => x.path.endsWith('/package.json'));
+async function metadataClosure(output, coreNames, expectedBindings, trustedFiles) {
+  const packageFiles = trustedFiles.filter(x => x.path.endsWith('/package.json')).sort((a, b) => a.path.localeCompare(b.path));
   const roots = new Map(), edges = [];
   for (const file of packageFiles) {
-    const meta = parseJson(await fs.readFile(join(output, file.path))), path = dirname(file.path);
+    const { bytes } = await readCanonical(join(output, file.path)), meta = parseJson(bytes), path = dirname(file.path);
+    if (sha(bytes) !== file.sha256 || bytes.length !== file.bytes) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
     if (!packageName(meta.name) || !meta.version) continue; // Some public packages publish fixture package.json files.
     if (!/node_modules\/(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(path)) continue;
     if (coreNames.has(meta.name)) {
@@ -223,7 +240,7 @@ async function inventoryRuntime(root, at = '') {
   return { files, directories, links };
 }
 async function normalizeMetadata(output, path, versions, changes, packageLabel, skipped) {
-  const before = await fs.readFile(join(output, path)), meta = parseJson(before); let changed = false;
+  const { bytes: before } = await readCanonical(join(output, path)), meta = parseJson(before); let changed = false;
   const unresolvedDevelopmentRanges = [], removedSkippedOptionalDependencies = [];
   for (const name of Object.keys(meta.optionalDependencies ?? {})) if (skipped.some(item => item.package === packageLabel && item.dependency === name && item.reason.startsWith('PLATFORM_'))) {
     delete meta.optionalDependencies[name]; removedSkippedOptionalDependencies.push(name); changed = true;
@@ -241,28 +258,50 @@ async function normalizeMetadata(output, path, versions, changes, packageLabel, 
   changes.push({ package: packageLabel, path, beforeSha256: sha(before), afterSha256: sha(after), afterBytes: after.length, workspaceRangesNormalized: changed, unresolvedDevelopmentRanges, removedSkippedOptionalDependencies });
 }
 async function productPayload(productRoot) {
-  const bytes = await fs.readFile(join(productRoot, 'package.json')), meta = parseJson(bytes);
+  const { bytes, stat } = await readCanonical(join(productRoot, 'package.json')), meta = parseJson(bytes);
   if (meta.name !== 'dsh-bot' || !Array.isArray(meta.files) || !meta.files.every(safe)) throw error('EXPLICIT_PRODUCT_PUBLICATION_FILES_REQUIRED');
-  const files = [await fileRecord(productRoot, 'package.json')];
+  if (meta.files.some(prohibited)) throw error('PROHIBITED_PRODUCT_PUBLICATION_PATH');
+  const metadataRecord = { path: 'package.json', bytes: bytes.length, sha256: sha(bytes), mode: stat.mode & 0o777 };
+  const files = [metadataRecord];
   for (const path of meta.files) {
     const stat = await canonical(join(productRoot, path), (await fs.lstat(join(productRoot, path))).isDirectory());
     if (stat.isDirectory()) files.push(...(await payloadFiles(join(productRoot, path))).map(file => ({ ...file, path: path + '/' + file.path })));
     else files.push(await fileRecord(productRoot, path));
   }
+  if (!sameRecord(metadataRecord, await fileRecord(productRoot, 'package.json'))) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
   return { meta, files };
+}
+async function verifyPackageIdentities(root, identities, files) {
+  const seen = new Set(), indexed = new Map(files.map(file => [file.path, file]));
+  for (const item of identities) {
+    if (!safe(item.path) || !packageName(item.name) || typeof item.version !== 'string' || seen.has(item.path)) throw error('DISTRIBUTION_PACKAGE_IDENTITY_INVALID');
+    seen.add(item.path);
+    const path = item.path + '/package.json', expected = indexed.get(path);
+    if (!expected) throw error('DISTRIBUTION_PACKAGE_IDENTITY_INVALID');
+    const { bytes, stat } = await readCanonical(join(root, path));
+    if (!sameRecord(expected, { bytes: bytes.length, sha256: sha(bytes), mode: stat.mode & 0o777 })) throw error('INPUT_CHANGED_DURING_ASSEMBLY');
+    const meta = parseJson(bytes);
+    if (meta.name !== item.name || meta.version !== item.version) throw error('DISTRIBUTION_PACKAGE_IDENTITY_MISMATCH');
+  }
 }
 
 export async function assembleDistributionRuntime(options) {
-  const pathKeys = ['officialRoot', 'officialLockPath', 'overlayDirectory', 'sourceIdentityPath', 'sourceLockPath', 'registryDirectory', 'registryReceiptsPath', 'productRoot', 'publicLicensePath', 'nativeLicensePath'];
-  for (const key of ['expectedManifestSha256', 'expectedOfficialLockSha256', 'expectedSourceIdentitySha256', 'expectedPublicLicenseSha256', 'expectedNativeLicenseSha256']) if (!/^[a-f0-9]{64}$/.test(options[key] ?? '')) throw error('TRUSTED_DIGEST_REQUIRED');
+  const pathKeys = ['officialRoot', 'officialLockPath', 'overlayDirectory', 'sourceIdentityPath', 'sourceLockPath', 'registryDirectory', 'registryReceiptsPath', 'productRoot', 'publicLicensePath', 'nativeLicensePath', 'muslCopyrightPath', 'muslSourceNoticesPath'];
+  for (const key of ['expectedManifestSha256', 'expectedOfficialLockSha256', 'expectedSourceIdentitySha256', 'expectedPublicLicenseSha256', 'expectedNativeLicenseSha256', 'expectedMuslCopyrightSha256', 'expectedMuslSourceNoticesSha256']) if (!/^[a-f0-9]{64}$/.test(options[key] ?? '')) throw error('TRUSTED_DIGEST_REQUIRED');
   for (const key of pathKeys) await canonical(options[key], ['officialRoot', 'overlayDirectory', 'registryDirectory', 'productRoot'].includes(key));
   const output = options.outputDirectory;
   if (typeof output !== 'string' || !isAbsolute(output) || resolve(output) !== output) throw error('ABSOLUTE_ARTIFACT_PATHS_REQUIRED');
   if (await fs.realpath(dirname(output)) !== dirname(output)) throw error('CANONICAL_OUTPUT_PARENT_REQUIRED');
   if (pathKeys.some(key => inside(options[key], output) || inside(output, options[key]))) throw error('EXCLUSIVE_RUNTIME_OUTSIDE_INPUTS_REQUIRED');
   try { await fs.lstat(output); throw error('OUTPUT_ALREADY_EXISTS'); } catch (cause) { if (cause.code !== 'ENOENT') throw cause; }
-  const beforeVerification = await verifyRuntime({ directory: options.overlayDirectory, expectedManifestSha256: options.expectedManifestSha256 });
-  const manifest = parseJson(await fs.readFile(join(options.overlayDirectory, 'artifact-manifest.json')));
+  const overlayManifestPath = join(options.overlayDirectory, 'artifact-manifest.json');
+  const manifest = parseJson(await pinned(overlayManifestPath, options.expectedManifestSha256, 'ARTIFACT_MANIFEST_HASH_MISMATCH'));
+  const verifyOverlay = async () => {
+    await canonical(overlayManifestPath);
+    try { return await verifyRuntime({ directory: options.overlayDirectory, expectedManifestSha256: options.expectedManifestSha256 }); }
+    catch (cause) { if (cause instanceof SyntaxError) throw error('ARTIFACT_JSON_INVALID'); throw cause; }
+  };
+  const beforeVerification = await verifyOverlay();
   if (manifest.platform !== process.platform || manifest.arch !== process.arch) throw error('OVERLAY_PLATFORM_ARCH_MISMATCH');
   const identityBytes = await pinned(options.sourceIdentityPath, options.expectedSourceIdentitySha256, 'SOURCE_IDENTITY_HASH_MISMATCH'), identity = parseJson(identityBytes);
   const { sourceFiles, ...sourceIdentity } = identity;
@@ -275,6 +314,8 @@ export async function assembleDistributionRuntime(options) {
   const registry = await registryPackages(options, manifest);
   const publicLicense = await pinned(options.publicLicensePath, options.expectedPublicLicenseSha256, 'PUBLIC_LICENSE_HASH_MISMATCH');
   const nativeLicense = await pinned(options.nativeLicensePath, options.expectedNativeLicenseSha256, 'NATIVE_LICENSE_HASH_MISMATCH');
+  const muslCopyright = await pinned(options.muslCopyrightPath, options.expectedMuslCopyrightSha256, 'MUSL_COPYRIGHT_HASH_MISMATCH');
+  const muslSourceNotices = await pinned(options.muslSourceNoticesPath, options.expectedMuslSourceNoticesSha256, 'MUSL_SOURCE_NOTICES_HASH_MISMATCH');
   const product = await productPayload(options.productRoot);
   let claimed, created = false;
   const checkOwnership = async () => {
@@ -317,7 +358,7 @@ export async function assembleDistributionRuntime(options) {
       expectedBindings.push({ from: pkg.path, dependency: name, reference, resolved: target.path });
     }
     for (const pkg of manifest.packages) {
-      const meta = parseJson(await fs.readFile(join(output, 'node_modules', pkg.name, 'package.json'))), importer = sourceLock.importers[pkg.sourcePath];
+      const { bytes } = await readCanonical(join(output, 'node_modules', pkg.name, 'package.json')), meta = parseJson(bytes), importer = sourceLock.importers[pkg.sourcePath];
       if (!importer) throw error('CORE_LOCK_IMPORTER_MISSING');
       for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies']) for (const name of Object.keys(meta[section] ?? {})) {
         if (coreNames.has(name)) { expectedBindings.push({ from: 'node_modules/' + pkg.name, dependency: name, resolved: 'node_modules/' + name }); continue; }
@@ -338,7 +379,7 @@ export async function assembleDistributionRuntime(options) {
       await copyRecord(options.productRoot, file, output, destination);
       copiedFiles.set(destination, { ...file, path: destination });
     }
-    const cliPath = 'node_modules/@deepseek-ai/dsh/package.json', beforeCli = await fs.readFile(join(output, cliPath)), cli = parseJson(beforeCli);
+    const cliPath = 'node_modules/@deepseek-ai/dsh/package.json', { bytes: beforeCli } = await readCanonical(join(output, cliPath)), cli = parseJson(beforeCli);
     cli.dependencies = { ...cli.dependencies, 'dsh-bot': product.meta.version };
     const afterCli = Buffer.from(JSON.stringify(cli, null, 2) + '\n'); await fs.writeFile(join(output, cliPath), afterCli);
     metadataChanges.push({ package: '@deepseek-ai/dsh', path: cliPath, beforeSha256: sha(beforeCli), afterSha256: sha(afterCli), afterBytes: afterCli.length, productDependencyAdded: true });
@@ -349,7 +390,7 @@ export async function assembleDistributionRuntime(options) {
     }
     // Recreate each package's bin at its own npm level. Source .bin links are not copied.
     for (const pkg of official.packages) {
-      const meta = parseJson(await fs.readFile(join(output, pkg.path, 'package.json')));
+      const { bytes } = await readCanonical(join(output, pkg.path, 'package.json')), meta = parseJson(bytes);
       const bins = typeof meta.bin === 'string' ? { [meta.name.split('/').at(-1)]: meta.bin } : meta.bin ?? {};
       const level = pkg.path.slice(0, pkg.path.lastIndexOf('node_modules/') + 'node_modules'.length);
       for (const [name, value] of Object.entries(bins)) {
@@ -358,26 +399,33 @@ export async function assembleDistributionRuntime(options) {
         try { await fs.lstat(join(output, path)); } catch (cause) { if (cause.code !== 'ENOENT') throw cause; await addLink(output, path, target); }
       }
     }
-    const notices = `Private source-build runtime. Public release qualification: false.\nPublic baseline root license follows; applies only within its public source scope.\n${publicLicense.toString('utf8')}\nPublic native/system source license follows; applies only to native/system scope.\n${nativeLicense.toString('utf8')}\nPackage-local original notices are retained. MIT fallback entry metadata is not a dual-license determination.\nRights for private patches and every modified package: UNKNOWN.\nThe complete official SDK graph is retained for private GUI qualification. Minimal closure and license/source-offer audit remain open, including MPL and LGPL dependencies.\nSandbox enforcement is unverified; no enforcement success is asserted.\n`;
+    const notices = `Private source-build runtime. Public release qualification: false.\nPublic baseline root license follows; applies only within its public source scope.\n${publicLicense.toString('utf8')}\nPublic native/system source license follows; applies only to native/system scope.\n${nativeLicense.toString('utf8')}\nPublic musl 1.2.5 copyright follows; applies only to included compiled musl/libc portions.\n${muslCopyright.toString('utf8')}\nAdditional unmodified musl 1.2.5 source notices follow; conservatively retained without claiming every listed function or architecture is embedded.\n${muslSourceNotices.toString('utf8')}\nPackage-local original notices are retained. MIT fallback entry metadata is not a dual-license determination.\nRights for private patches and every modified package: UNKNOWN.\nThe complete official SDK graph is retained for private GUI qualification. Minimal closure and license/source-offer audit remain open, including MPL and LGPL dependencies.\nSandbox enforcement is unverified; no enforcement success is asserted.\n`;
     await fs.writeFile(join(output, 'NOTICES.txt'), notices, { flag: 'wx', mode: 0o644 });
     await fs.chmod(join(output, 'NOTICES.txt'), 0o644);
     copiedFiles.set('NOTICES.txt', { path: 'NOTICES.txt', bytes: Buffer.byteLength(notices), sha256: sha(notices), mode: 0o644 });
-    const closure = await metadataClosure(output, coreNames, expectedBindings);
-    const afterVerification = await verifyRuntime({ directory: options.overlayDirectory, expectedManifestSha256: options.expectedManifestSha256 });
+    const closure = await metadataClosure(output, coreNames, expectedBindings, [...copiedFiles.values()]);
+    const afterVerification = await verifyOverlay();
     await pinned(options.sourceIdentityPath, sha(identityBytes), 'SOURCE_IDENTITY_CHANGED');
     await pinned(options.sourceLockPath, sha(sourceLockBytes), 'SOURCE_LOCK_CHANGED');
     await pinned(options.officialLockPath, sha(officialLockBytes), 'OFFICIAL_LOCK_CHANGED');
     const inventory = await inventoryRuntime(output);
     const expectedCopiedFiles = [...copiedFiles.values()].sort((a, b) => a.path.localeCompare(b.path));
     if (JSON.stringify([...inventory.files].sort((a, b) => a.path.localeCompare(b.path))) !== JSON.stringify(expectedCopiedFiles)) throw error('COPIED_PAYLOAD_HASH_MODE_MISMATCH');
+    const identities = new Map(official.packages.map(pkg => [pkg.path, { path: pkg.path, name: pkg.name, version: pkg.version }]));
+    for (const pkg of manifest.packages) identities.set('node_modules/' + pkg.name, { path: 'node_modules/' + pkg.name, name: pkg.name, version: pkg.version });
+    for (const pkg of registry.packages) identities.set(pkg.path, { path: pkg.path, name: pkg.meta.name, version: pkg.meta.version });
+    identities.set('node_modules/dsh-bot', { path: 'node_modules/dsh-bot', name: product.meta.name, version: product.meta.version });
+    const packageIdentities = [...identities.values()].sort((a, b) => a.path.localeCompare(b.path));
+    await verifyPackageIdentities(output, packageIdentities, inventory.files);
     const receipt = { format: 1, classification: 'PRIVATE_PINNED_SOURCE_BUILD_DISTRIBUTION_RUNTIME', platform: process.platform, arch: process.arch,
       overlayManifestSha256: options.expectedManifestSha256, sourceIdentitySha256: sha(identityBytes), sourceIdentity, sourceFileIndexSha256: manifest.sourceFileIndexSha256, verifiedSourceFileCount: manifest.verifiedSourceFileCount,
       sourceLockSha256: sha(sourceLockBytes), sourceLockObjectSha256: manifest.lockObjectSha256, corePackageCount: manifest.corePackageCount, externalPackageCount: registry.packages.length,
       officialCliVersion: CLI_VERSION, officialLockSha256: sha(officialLockBytes), officialPackages: official.packages, officialInputFileIndexSha256: sha(JSON.stringify(official.files)), officialInputFileCount: official.files.length,
       officialByteTrustScope: 'Caller-selected installed public graph; pinned npm lock provenance and fresh file hashes. Installed files were not compared to npm raw tarballs by this consumer.',
       registryReceiptsSha256: registry.receiptSha256, externalPackages: registry.packages.map(pkg => ({ ...pkg.provenance, path: pkg.path })), exactBindings: expectedBindings,
-      productFiles: product.files, metadataChanges, dependencyClosure: closure, overlayVerificationBefore: beforeVerification, overlayVerificationAfter: afterVerification,
-      licenses: [{ scope: 'public baseline source', sha256: sha(publicLicense) }, { scope: 'public native/system source only', sha256: sha(nativeLicense) }], modifiedPackageRights: 'UNKNOWN',
+      productFiles: product.files, productIdentity: { name: product.meta.name, version: product.meta.version, publicationFiles: product.meta.files }, corePackages: manifest.packages.map(pkg => ({ name: pkg.name, version: pkg.version, path: 'node_modules/' + pkg.name })), packageIdentities,
+      metadataChanges, dependencyClosure: closure, overlayVerificationBefore: beforeVerification, overlayVerificationAfter: afterVerification,
+      licenses: [{ scope: 'public baseline source', sha256: sha(publicLicense) }, { scope: 'public native/system source only', sha256: sha(nativeLicense) }, { scope: 'public musl 1.2.5 compiled libc portions only', sha256: sha(muslCopyright) }, { scope: 'public musl 1.2.5 additional source notices, conservatively retained for compiled libc portions', sha256: sha(muslSourceNotices) }], modifiedPackageRights: 'UNKNOWN',
       copiedFileCount: copiedFiles.size, copiedFileIndexSha256: sha(JSON.stringify(expectedCopiedFiles)), lifecycleScriptsExecuted: false, executableBytesAltered: false, credentialsOrHomesCopied: false, publicReleaseQualified: false, sandboxEnforcementVerified: false,
       qualification: 'Private isolated official CLI / source-built overlay for GUI acceptance; complete SDK closure retained. Public release, minimal closure, rights and full license obligations remain unqualified.',
       ...inventory };
@@ -399,22 +447,43 @@ export async function verifyDistributionRuntime({ directory, expectedManifestSha
   if (!/^[a-f0-9]{64}$/.test(expectedManifestSha256 ?? '')) throw error('TRUSTED_DIGEST_REQUIRED');
   await canonical(directory, true); await canonical(join(directory, RECEIPT));
   const bytes = await pinned(join(directory, RECEIPT), expectedManifestSha256, 'DISTRIBUTION_MANIFEST_HASH_MISMATCH'), manifest = parseJson(bytes);
-  if (manifest.classification !== 'PRIVATE_PINNED_SOURCE_BUILD_DISTRIBUTION_RUNTIME' || manifest.platform !== process.platform || manifest.arch !== process.arch || !Array.isArray(manifest.files) || !Array.isArray(manifest.links) || !Array.isArray(manifest.directories)) throw error('DISTRIBUTION_MANIFEST_INVALID');
+  if (manifest.classification !== 'PRIVATE_PINNED_SOURCE_BUILD_DISTRIBUTION_RUNTIME' || manifest.platform !== process.platform || manifest.arch !== process.arch || !Array.isArray(manifest.files) || !Array.isArray(manifest.links) || !Array.isArray(manifest.directories) || !Array.isArray(manifest.packageIdentities) || !Array.isArray(manifest.corePackages) || manifest.corePackages.length !== manifest.corePackageCount || manifest.productIdentity?.name !== 'dsh-bot') throw error('DISTRIBUTION_MANIFEST_INVALID');
   const actual = await inventoryRuntime(directory);
   if (JSON.stringify(actual.files.map(x => x.path)) !== JSON.stringify(manifest.files.map(x => x.path)) || JSON.stringify(actual.directories) !== JSON.stringify(manifest.directories) || JSON.stringify(actual.links) !== JSON.stringify(manifest.links)) throw error('DISTRIBUTION_FILE_SET_MISMATCH');
   if (JSON.stringify(actual.files) !== JSON.stringify(manifest.files)) throw error('DISTRIBUTION_FILE_HASH_MISMATCH');
-  const coreNames = new Set(manifest.exactBindings.filter(x => x.resolved.startsWith('node_modules/@deepseek-ai/') && !x.resolved.includes('/node_modules/', 13)).map(x => x.resolved.slice(13)));
-  const closure = await metadataClosure(directory, coreNames, manifest.exactBindings);
+  await verifyPackageIdentities(directory, manifest.packageIdentities, actual.files);
+  const identities = new Map(manifest.packageIdentities.map(item => [item.path, item]));
+  const expectedIdentity = item => {
+    const actual = identities.get(item.path);
+    if (!actual || actual.name !== item.name || actual.version !== item.version) throw error('DISTRIBUTION_PACKAGE_IDENTITY_MISMATCH');
+  };
+  for (const pkg of manifest.corePackages) expectedIdentity(pkg);
+  const coreNames = new Set(manifest.corePackages.map(pkg => pkg.name));
+  for (const pkg of manifest.officialPackages) if (!coreNames.has(pkg.name) || pkg.path !== 'node_modules/' + pkg.name) expectedIdentity(pkg);
+  for (const pkg of manifest.externalPackages) expectedIdentity(pkg);
+  expectedIdentity({ path: 'node_modules/@deepseek-ai/dsh', name: '@deepseek-ai/dsh', version: CLI_VERSION });
+  expectedIdentity({ path: 'node_modules/dsh-bot', name: 'dsh-bot', version: manifest.productIdentity.version });
+  const { bytes: cliBytes } = await readCanonical(join(directory, 'node_modules/@deepseek-ai/dsh/package.json'));
+  if (parseJson(cliBytes).dependencies?.['dsh-bot'] !== manifest.productIdentity.version) throw error('DISTRIBUTION_PRODUCT_LAUNCHER_BINDING_MISMATCH');
+  const { bytes: productBytes } = await readCanonical(join(directory, 'node_modules/dsh-bot/package.json'));
+  if (JSON.stringify(parseJson(productBytes).files) !== JSON.stringify(manifest.productIdentity.publicationFiles)) throw error('DISTRIBUTION_PRODUCT_PUBLICATION_IDENTITY_MISMATCH');
+  const closure = await metadataClosure(directory, coreNames, manifest.exactBindings, manifest.files);
   if (JSON.stringify(closure) !== JSON.stringify(manifest.dependencyClosure)) throw error('DISTRIBUTION_DEPENDENCY_CLOSURE_MISMATCH');
   return { verified: true, manifestSha256: sha(bytes), fileCount: actual.files.length, corePackageCount: manifest.corePackageCount, externalPackageCount: manifest.externalPackageCount };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const flags = { '--official': 'officialRoot', '--official-lock': 'officialLockPath', '--official-lock-sha256': 'expectedOfficialLockSha256', '--overlay': 'overlayDirectory', '--manifest-sha256': 'expectedManifestSha256', '--source-identity': 'sourceIdentityPath', '--source-identity-sha256': 'expectedSourceIdentitySha256', '--source-lock': 'sourceLockPath', '--registry': 'registryDirectory', '--receipts': 'registryReceiptsPath', '--product': 'productRoot', '--output': 'outputDirectory', '--public-license': 'publicLicensePath', '--public-license-sha256': 'expectedPublicLicenseSha256', '--native-license': 'nativeLicensePath', '--native-license-sha256': 'expectedNativeLicenseSha256' };
+  const flags = { '--official': 'officialRoot', '--official-lock': 'officialLockPath', '--official-lock-sha256': 'expectedOfficialLockSha256', '--overlay': 'overlayDirectory', '--manifest-sha256': 'expectedManifestSha256', '--source-identity': 'sourceIdentityPath', '--source-identity-sha256': 'expectedSourceIdentitySha256', '--source-lock': 'sourceLockPath', '--registry': 'registryDirectory', '--receipts': 'registryReceiptsPath', '--product': 'productRoot', '--output': 'outputDirectory', '--public-license': 'publicLicensePath', '--public-license-sha256': 'expectedPublicLicenseSha256', '--native-license': 'nativeLicensePath', '--native-license-sha256': 'expectedNativeLicenseSha256', '--musl-copyright': 'muslCopyrightPath', '--musl-copyright-sha256': 'expectedMuslCopyrightSha256', '--musl-source-notices': 'muslSourceNoticesPath', '--musl-source-notices-sha256': 'expectedMuslSourceNoticesSha256' };
   const options = {};
   try {
     for (let i = 2; i < process.argv.length; i += 2) { if (!flags[process.argv[i]] || process.argv[i + 1] === undefined || options[flags[process.argv[i]]] !== undefined) throw error('INVALID_EXPLICIT_FLAGS'); options[flags[process.argv[i]]] = process.argv[i + 1]; }
     const result = await assembleDistributionRuntime(options);
     process.stdout.write(JSON.stringify({ runtimeDirectory: result.runtimeDirectory, dsh: result.dsh, manifestPath: result.manifestPath, manifestSha256: result.manifestSha256, ownership: result.ownership, corePackageCount: result.manifest.corePackageCount, externalPackageCount: result.manifest.externalPackageCount, publicReleaseQualified: false, lifecycleScriptsExecuted: false }) + '\n');
-  } catch (cause) { process.stderr.write(JSON.stringify({ errorCategory: cause.code ?? cause.message, package: cause.package, dependency: cause.dependency, cleanupErrorCategory: cause.cleanupErrorCategory }) + '\n'); process.exitCode = 1; }
+  } catch (cause) {
+    const ioCodes = new Set(['ENOENT', 'EACCES', 'EPERM', 'EEXIST', 'ENOTDIR', 'EIO', 'ENOMEM', 'ELOOP', 'ERR_ACCESS_DENIED']);
+    const errorCategory = ownErrors.has(cause) || ioCodes.has(cause?.code) ? cause.code : 'ASSEMBLY_FAILED';
+    const cleanup = cause?.cleanupErrorCategory;
+    const cleanupErrorCategory = cleanup === undefined ? undefined : ioCodes.has(cleanup) || ['ARTIFACT_OWNERSHIP_UNAVAILABLE', 'OUTPUT_OWNERSHIP_CHANGED'].includes(cleanup) ? cleanup : 'CLEANUP_FAILED';
+    process.stderr.write(JSON.stringify({ errorCategory, cleanupErrorCategory }) + '\n'); process.exitCode = 1;
+  }
 }
