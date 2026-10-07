@@ -14,13 +14,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24.19.0
       - name: One isolated key-presence probe with fixed Node identity
         run: >-
           python3 -B scripts/native-cold/probe-macos-environment.py
-          --node "$(command -v node)"
+          --node-directory "$RUNNER_TEMP/mac-environment-node"
           --temp-dir "$RUNNER_TEMP"
           --evidence-dir "$RUNNER_TEMP/mac-environment-diagnostic"
           --expected-sha "${{ github.sha }}"
