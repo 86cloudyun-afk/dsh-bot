@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp, readFile, readdir, lstat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {packageSnapshotOptions} from './package-snapshot-fixture.mjs';
+import {applyEntryPatches,entryListSchema} from '@deepseek-ai/cordis-plugin-include';
+import yaml from 'js-yaml';
 
 async function installer() {
   const m = await import('../scripts/install-bot-gui-profile.mjs').catch(e => {
@@ -41,6 +43,18 @@ test('fresh GUI profile installs packed owner with real BrowserAuth and an empty
   assert.deepEqual(r.credentialReferences, ['DEEPSEEK_API_KEY']);
   assert.equal(r.credentialsCreated, false);
   assert.equal(r.coreSdkEdited, false);
+  const bundleRoot=join(import.meta.dirname,'..','node_modules','@deepseek-ai');
+  const base=yaml.load(await readFile(join(bundleRoot,'dsh-base','cordis.patch.yml'),'utf8'),{schema:entryListSchema});
+  const webManifest=JSON.parse(await readFile(join(bundleRoot,'dsh-web-app','package.json'),'utf8'));
+  const web=[];
+  for(const path of webManifest.dsh.bundle.patch) web.push(...yaml.load(await readFile(join(bundleRoot,'dsh-web-app',path),'utf8'),{schema:entryListSchema}));
+  let rows=applyEntryPatches([],base,()=>{});
+  rows=applyEntryPatches(rows,web,()=>{});
+  rows=applyEntryPatches(rows,patch,()=>{});
+  assert.equal(rows.find(r=>r.id==='web-startup').disabled,true,'stock Web flags must not swallow owner enablement');
+  assert.equal(rows.find(r=>r.id==='bot-gui-startup')?.name,'dsh-bot/bot-gui-startup');
+  assert.equal(rows.find(r=>r.id==='config-editor').disabled,undefined,'stock locale/settings reads need their config service');
+  assert.ok(rows.find(r=>r.id==='connection').config.maxRequestBodyBytes>=280668843,'respect stock aggregate attachment invariant');
 });
 
 test('GUI profile refuses reuse and source/runtime nesting before writes', async () => {
