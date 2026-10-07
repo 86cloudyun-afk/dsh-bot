@@ -22,6 +22,8 @@ Model requests require the explicit process flag `--enable-model-requests`; this
 
 The enable flag expresses operator intent, not native execution authority. This GUI always requires an owned generation source for main sends. Without an exact private source, bootstrap reports effective sending disabled with unconfirmed continuation, the Agent model gate refuses, and the selected owner RPC refuses before allocating a message/operation or waking a bare Agent. Reads and original Bot/main identities remain available. The forthcoming protected creation/history journal bridge must create or resume through the native capability before it can enable sending; an old bare or unsealed Agent is never retrofitted.
 
+Native source callbacks separate original authority from dispatch. Authority compares the actual live owner, fixed Bot/main/config/epochs, unchanged Task identity, full original input digest, and the exact durable generation/slot lease. It remains valid for an original fenced generation so its actual source can verify that original receipt. Dispatch adds the explicit model gate, latest main/work generation and kind-specific contact/work fences. A main work-result retains its parent's full original work binding. These private policy callbacks only deny or permit the SDK's existing checks; copied ledger labels cannot mint a source or settlement receipt, and the policy never changes a ledger row.
+
 Archival/restoration controls are added only with complete native log inspection and existing Host epoch invalidation. If that interface is unavailable, bootstrap truthfully reports the limitation and keeps the saved identity; unsupported restore must not create a replacement Bot or erase held UNKNOWN work.
 
 ## Validation
