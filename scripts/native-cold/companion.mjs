@@ -85,6 +85,9 @@ const finalize=()=>{
 process.on('exit',()=>{try{finalize();}catch{/* Missing final trace remains UNKNOWN in the parent. */}});
 try{
  checkpoint('C_BOUNDARY_PREFLIGHT');
+ // A single-child, value-free macOS probe confirmed this OS-injected key.
+ // Remove it rather than widening the permitted parent environment.
+ if(process.platform==='darwin')delete process.env.__CF_USER_TEXT_ENCODING;
  const allowed=new Set(['DSH_HOME','DSH_BOT_TEST_ROOT','TMPDIR','TZ','LANG','NODE_TEST_CONTEXT']);
  state.environmentRestricted=Object.keys(process.env).every(key=>allowed.has(key));
  const permissionReady=guardOnly?process.execArgv.includes('--permission')&&!process.execArgv.includes('--allow-addons'):state.explicitApprovedAddonFlag;

@@ -12,7 +12,7 @@ function exercise(change={}){
  const caseName=change.caseName??'builtin-dual',state={explicitApprovedAddonFlag:process.execArgv.includes('--permission')&&process.execArgv.includes('--allow-addons'),
   bindingConfig:change.bindingConfig??{status:'READ_MATCHED',pinsPlatform:'darwin',pinsArch:'arm64'}};const saves=[];let refusal=null;
  try{Function('checkpoint','process','state','caseName','guardOnly','pins','refused','save',body)(()=>{},process,state,caseName,caseName==='builtin-dual',{platform:'darwin',arch:'arm64'},reason=>{refusal=reason;throw Error('SYNTHETIC_STOP');},()=>saves.push(JSON.parse(JSON.stringify(state))));}catch(error){assert.equal(error.message,'SYNTHETIC_STOP');}
- return {state,saves,refusal};
+ return {state,saves,refusal,environment:process.env};
 }
 test('actual preflight records checked strict booleans before each single refusal',()=>{
  const faults=[
@@ -45,4 +45,28 @@ test('actual preflight refuses mismatched or unknown config binding before nativ
   const result=exercise({bindingConfig});assert.equal(result.refusal,'BINDING_CONFIG_HASH_REFUSED');
   assert.deepEqual(result.saves.at(-1).bindingConfig,bindingConfig);
  }
+});
+test('Darwin removes only the diagnosed CoreFoundation key before strict environment checking',()=>{
+ const result=exercise({process:{env:{DSH_HOME:'UNTRUSTED_VALUE_MUST_NOT_PERSIST',__CF_USER_TEXT_ENCODING:'UNTRUSTED_CF_VALUE_MUST_NOT_PERSIST'}}});
+ assert.equal(result.refusal,null);
+ assert.equal(result.state.environmentRestricted,true);
+ assert.deepEqual(Object.keys(result.environment),['DSH_HOME']);
+ assert.ok(!JSON.stringify(result.state).includes('UNTRUSTED_'));
+ const unknown=exercise({process:{env:{__CF_USER_TEXT_ENCODING:'UNTRUSTED_CF_VALUE_MUST_NOT_PERSIST',UNTRUSTED_EXTRA_KEY:'UNTRUSTED_EXTRA_VALUE'}}});
+ assert.equal(unknown.refusal,'PREFLIGHT_BOUNDARY_REFUSED');
+ assert.equal(unknown.state.environmentRestricted,false);
+ assert.deepEqual(Object.keys(unknown.environment),['UNTRUSTED_EXTRA_KEY']);
+ const linux=exercise({process:{platform:'linux',env:{__CF_USER_TEXT_ENCODING:'UNTRUSTED_CF_VALUE_MUST_NOT_PERSIST'}}});
+ assert.equal(linux.state.environmentRestricted,false);
+ assert.deepEqual(Object.keys(linux.environment),['__CF_USER_TEXT_ENCODING']);
+});
+test('Darwin environment normalization never reads values or removes another key',()=>{
+ const removed=[],environment=new Proxy({DSH_HOME:'synthetic',__CF_USER_TEXT_ENCODING:'synthetic'}, {
+  get(){throw Error('ENVIRONMENT_VALUE_READ_FORBIDDEN');},
+  deleteProperty(target,key){removed.push(key);return Reflect.deleteProperty(target,key);},
+ });
+ const result=exercise({process:{env:environment}});
+ assert.equal(result.refusal,null);
+ assert.deepEqual(removed,['__CF_USER_TEXT_ENCODING']);
+ assert.equal(result.state.environmentRestricted,true);
 });
