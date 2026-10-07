@@ -79,7 +79,8 @@ window.__ModuleLoader__.load({id:'dsh-bot',factory:require=>{
  function apply(ctx,config={}){let closed=false;const pending=new Set();ctx.effect(()=>()=>{closed=true;for(const controller of pending)controller.abort();pending.clear();},'dsh-bot: RPC calls');
   async function rpc(channel,endpoint,payload,signal){if(closed||signal.aborted)throw cancelledRead;const controller=new AbortController(),abort=()=>controller.abort();pending.add(controller);signal.addEventListener('abort',abort,{once:true});try{const result=await ctx.connection.rpc.call(channel,endpoint,payload,controller.signal);if(closed||controller.signal.aborted)throw cancelledRead;return result;}finally{signal.removeEventListener('abort',abort);pending.delete(controller);}}
   const read=signal=>rpc('/dsh-bot','snapshot',{},signal),ownerCall=(endpoint,botId,payload,signal)=>rpc('/dsh-bot-owner',endpoint,{command:endpoint,botId,payload},signal);
-  const guiCall=config.guiOwner===true?(endpoint,payload,signal)=>rpc('/dsh-bot-gui',endpoint,payload,signal):undefined;
+  const guiMode=config.guiOwner===true||globalThis.__DSH_BOOT__?.entries?.some(entry=>entry.id==='dsh-bot-gui-surface')===true;
+  const guiCall=guiMode?(endpoint,payload,signal)=>rpc('/dsh-bot-gui',endpoint,payload,signal):undefined;
   if(guiCall){
    const absent=Object.freeze({key:undefined,hooks:Object.freeze({session:undefined}),keyedHooks:Object.freeze({projection:undefined}),props:Object.freeze({sessionId:undefined})});
    const source=Object.freeze({getSnapshot:()=>absent,subscribe:()=>()=>{}});

@@ -41,6 +41,13 @@ export async function installBotGuiProfile({directory, productRoot, runtimeRoot,
   await mkdir(join(dir,'node_modules'), {recursive:true,mode:0o700});
   const packageInstallation = await installProductPackage({directory:join(dir,'node_modules','dsh-bot'),
     productRoot:product, packagePlacement, packageSnapshot:packageSnapshot && Object.freeze({...packageSnapshot})});
+  const surfaceDir=join(dir,'node_modules','dsh-bot-gui-surface');
+  await mkdir(surfaceDir,{mode:0o700});
+  await writeFile(join(surfaceDir,'package.json'),JSON.stringify({name:'dsh-bot-gui-surface',private:true,type:'module',
+    exports:{'.':'./host.mjs','./client':'./client.js','./package.json':'./package.json'},
+    dsh:{client:{platform:'web',inject:['dsh-bot']}}},null,2)+'\n',{flag:'wx',mode:0o600});
+  await writeFile(join(surfaceDir,'host.mjs'),'export function apply() {}\n',{flag:'wx',mode:0o600});
+  await writeFile(join(surfaceDir,'client.js'),"window.__ModuleLoader__.load({id:'dsh-bot-gui-surface',factory:()=>({apply(){}})});\n",{flag:'wx',mode:0o600});
   const patch = [
     ...disabled.map(id => ({id,disabled:true})),
     {id:'agent-preset-registry',config:{default:'dsh-bot/empty'}},
@@ -58,6 +65,7 @@ export async function installBotGuiProfile({directory, productRoot, runtimeRoot,
       {id:'bot-gui-closed-intake',name:'dsh-bot/bot-chain-intake',config:{}},
       {id:'bot-gui-owner',name:'dsh-bot/bot-gui-owner-app',config:{homeDirectory:home,cwd:work,agentPreset:'dsh-bot/empty'}},
       {id:'dsh-bot',name:'dsh-bot',config:{guiOwner:true}},
+      {id:'bot-gui-surface',name:'dsh-bot-gui-surface',config:{}},
     ]},
   ];
   await writeFile(join(dir,'package.json'),JSON.stringify({name:'private-dsh-bot-gui-profile',private:true,type:'module',

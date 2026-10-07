@@ -37,6 +37,11 @@ test('fresh GUI profile installs packed owner with real BrowserAuth and an empty
   assert.deepEqual(added.find(p => p.id === 'bot-gui-preset').config, {id:'dsh-bot/empty',plugins:[]});
   assert.equal(added.find(p => p.id === 'bot-gui-owner').name, 'dsh-bot/bot-gui-owner-app');
   assert.equal(added.find(p => p.id === 'dsh-bot').name, 'dsh-bot');
+  assert.equal(added.find(p => p.id === 'bot-gui-surface')?.name,'dsh-bot-gui-surface');
+  const surface=JSON.parse(await readFile(join(profileDir,'node_modules','dsh-bot-gui-surface','package.json'),'utf8'));
+  assert.equal(surface.private,true);
+  assert.deepEqual(surface.dsh.client,{platform:'web',inject:['dsh-bot']});
+  assert.ok((await readFile(join(profileDir,'node_modules','dsh-bot-gui-surface','client.js'),'utf8')).includes("id:'dsh-bot-gui-surface'"));
   assert.equal(added.find(p => p.id === 'bot-gui-owner').config.homeDirectory, r.home);
   assert.equal(added.find(p => p.id === 'bot-gui-owner').config.cwd, r.cwd);
   assert.equal(patch.find(p => p.id === 'llm-deepseek').config.apiKeyEnv, 'DEEPSEEK_API_KEY');

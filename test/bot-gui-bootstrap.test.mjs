@@ -12,7 +12,10 @@ test('initial owner panel is selected after a delayed main slot registration',as
     connection:{state:{},generation:{},rpc:{call(){throw Error('no browser calls before mount');}}},
     layout:{selectPanel(id){assert.equal(registered,true,'main slot must exist before selection');selections.push(id);}},
     slots:{installScope(name,adapter){scopes.set(name,adapter);},inject(name,fn){if(name==='main'){mainReady=fn;return()=>{};}return()=>{};},register(){registered=true;return()=>{};}}};
-  plugin.apply(ctx,{guiOwner:true});await tick();
+  const priorBoot=globalThis.__DSH_BOOT__;
+  globalThis.__DSH_BOOT__={rev:'actual-shaped',entries:[{id:'dsh-bot-gui-surface',url:'plugins/dsh-bot-gui-surface/client.js',rev:'surface'}],batches:[]};
+  try{plugin.apply(ctx);}finally{if(priorBoot===undefined)delete globalThis.__DSH_BOOT__;else globalThis.__DSH_BOOT__=priorBoot;}
+  await tick();
   const adapter=scopes.get('session');assert.ok(adapter,'stock renderer needs a truthful absent Session UI binding');
   const absent=adapter.current.getSnapshot();assert.equal(absent.key,undefined);assert.equal(absent.props.sessionId,undefined);assert.equal(absent.hooks.session,undefined);
   assert.equal(adapter.bindingSource(undefined).getSnapshot(),absent);
