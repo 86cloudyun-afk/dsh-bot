@@ -1,10 +1,56 @@
 """Synthetic files and bytes only. No SDK/Node children or network."""
-import copy,hashlib,importlib.util,json,os,stat,tempfile,unittest
+import copy,hashlib,importlib.util,json,os,stat,tempfile,types,unittest
 from contextlib import contextmanager
 from pathlib import Path,PosixPath
 from unittest.mock import patch
 import installed_identity as I
 import supervisor as R
+
+# Fixed, safe and files_under are verbatim from c93f9e0d9e21863cd05d5d0bc528b53d12549918.
+# Full original source SHA256: 06de85065993d5493e363a0989243d3dbfa0af82cb360ab317d20d2c08a65951.
+# This reference executes the current runtime's real Path APIs and file reads.
+_C93_HELPERS_SHA256="ee4893863391aea76915e805f7ff474b9056af42d902c1c488b4b5f2c6012fe7"
+_C93_HELPERS_SOURCE=r'''"""Pure read-only public SDK/current-installation identity. Never launch Node or SDK."""
+import hashlib,json,os,re,stat
+from pathlib import Path,PosixPath
+import supervisor as R
+
+def fixed(path,maximum=512*1024*1024):
+    path=Path(path);before=path.lstat()
+    R.require(stat.S_ISREG(before.st_mode) and before.st_nlink==1 and before.st_size<=maximum and path.resolve(strict=True)==path,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    with os.fdopen(fd,'rb') as file:
+        opened=os.fstat(file.fileno());R.require((opened.st_dev,opened.st_ino,opened.st_size)==(before.st_dev,before.st_ino,before.st_size),'INSTALLED_CONTENT_IDENTITY_REFUSED')
+        data=file.read(before.st_size+1);after=os.fstat(file.fileno());last=path.lstat()
+    R.require(len(data)==before.st_size and (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns)==(before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns) and (last.st_dev,last.st_ino,last.st_size)==(before.st_dev,before.st_ino,before.st_size),'INSTALLED_CONTENT_IDENTITY_REFUSED')
+    return data,stat.S_IMODE(before.st_mode),hashlib.sha256(data).hexdigest()
+
+def safe(path):
+    return type(path) is str and 0<len(path)<1024 and not re.search(r'[\\\t\r\n\x00]',path) and not path.startswith('/') and all(p not in {'','.', '..'} for p in path.split('/'))
+
+def files_under(root,sdk=False):
+    rows=[];inspected=0;total=0
+    def walk(directory,prefix=None):
+        nonlocal inspected,total
+        R.require(directory.is_dir() and not directory.is_symlink() and directory.resolve(strict=True)==directory,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+        for path in sorted(directory.iterdir(),key=lambda p:p.name.encode()):
+            inspected+=1;R.require(inspected<=100000,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+            if sdk and path.name=='.bin':continue
+            direct=prefix is not None and type(path) is PosixPath and path.parent==directory
+            rel=(prefix+'/' if prefix else '')+path.name if direct else path.relative_to(root).as_posix()
+            R.require(safe(rel) and not path.is_symlink(),'INSTALLED_CONTENT_IDENTITY_REFUSED')
+            if path.is_dir():walk(path,rel if direct else None)
+            else:
+                R.require(path.is_file(),'INSTALLED_CONTENT_IDENTITY_REFUSED')
+                if not sdk or re.search(r'\.(js|mjs|cjs|json|wasm)$',rel):
+                    data,mode,digest=fixed(path);total+=len(data);R.require(total<=2*1024**3 and len(rows)<50000,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+                    rows.append({'path':rel,'bytes':len(data),'sha256':digest,'mode':mode})
+    walk(root,'' if type(root) is PosixPath else None);return sorted(rows,key=lambda r:r['path'].encode())
+
+'''
+_C93=types.ModuleType('c93_identity_reference')
+exec(_C93_HELPERS_SOURCE,_C93.__dict__)
+
 
 class InstalledTests(unittest.TestCase):
     def metadata_checks(self,path):
@@ -176,6 +222,16 @@ class PrefixPathTests(unittest.TestCase):
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         return module
 
+    def outcome(self,callback):
+        try:return {'result':callback()}
+        except Exception as error:
+            return {'error':type(error).__name__,'errno':getattr(error,'errno',None),'filename':getattr(error,'filename',None),
+                    'code':getattr(error,'code',None),'message':str(error),'cause':type(error.__cause__).__name__ if error.__cause__ is not None else None,
+                    'suppressContext':error.__suppress_context__}
+
+    def test_c93_reference_helpers_retain_verified_source_pin(self):
+        self.assertEqual(hashlib.sha256(_C93_HELPERS_SOURCE.encode()).hexdigest(),_C93_HELPERS_SHA256)
+
     def test_preimport_iterator_replacements_keep_empty_and_outside_results(self):
         for outside in (False,True):
             with self.subTest(outside=outside),self.owned() as parent:
@@ -195,34 +251,48 @@ class PrefixPathTests(unittest.TestCase):
         for outside in (False,True):
             with self.subTest(outside=outside),self.owned() as parent:
                 root=parent/'tree';nested=root/'nested';self.write(nested/'inside.js',b'owned inside');path=parent/'outside.js';self.write(path,b'owned outside')
-                module=self.identity_copy();original_iter=PosixPath.iterdir;original_list=os.listdir;calls=[]
+                module=self.identity_copy();original_iter=PosixPath.iterdir;original_list=os.listdir;original_scan=os.scandir;calls=[];listings=[]
                 def injected(directory):
                     if directory==nested:calls.append(directory);return iter([path] if outside else [])
                     return original_iter(directory)
                 def listing(directory):
                     names=original_list(directory)
-                    if Path(directory)==root:PosixPath.iterdir=injected
+                    if Path(directory)==root:listings.append('listdir');PosixPath.iterdir=injected
                     return names
-                with patch.object(PosixPath,'iterdir',original_iter),patch.object(os,'listdir',listing):
+                def scanning(directory):
+                    entries=original_scan(directory)
+                    if Path(directory)==root:listings.append('scandir');PosixPath.iterdir=injected
+                    return entries
+                with patch.object(PosixPath,'iterdir',original_iter),patch.object(os,'listdir',listing),patch.object(os,'scandir',scanning):
                     if outside:
                         with self.assertRaises(ValueError):module.files_under(root)
                     else:self.assertEqual(module.files_under(root),[])
                 self.assertEqual(calls,[nested])
                 self.assertIs(type(calls[0]),PosixPath)
+                self.assertEqual(len(listings),1)
 
     def test_preimport_and_current_stat_replacements_receive_actual_paths(self):
         for before_import in (False,True):
             with self.subTest(beforeImport=before_import),self.owned() as root:
-                path=root/'inside.js';self.write(path,b'owned stat hook');original=PosixPath.stat;calls=[]
-                module=None if before_import else self.identity_copy()
-                def injected(value,*args,**kwargs):
-                    if value==path:
-                        calls.append(value);raise PermissionError(13,'SYNTHETIC_HOOK_DENIED',str(value))
-                    return original(value,*args,**kwargs)
-                with patch.object(PosixPath,'stat',injected):
-                    if module is None:module=self.identity_copy()
-                    with self.assertRaises(PermissionError):module.files_under(root)
-                self.assertEqual(calls,[path]);self.assertIs(type(calls[0]),PosixPath)
+                path=root/'inside.js';self.write(path,b'owned stat hook');original=PosixPath.stat;observed=[]
+                for reference in (True,False):
+                    calls=[];module=_C93 if reference else None if before_import else self.identity_copy()
+                    def injected(value,*args,**kwargs):
+                        if value==path:
+                            calls.append(value);raise PermissionError(13,'SYNTHETIC_HOOK_DENIED',str(value))
+                        return original(value,*args,**kwargs)
+                    with patch.object(PosixPath,'stat',injected):
+                        if module is None:module=self.identity_copy()
+                        result=self.outcome(lambda:module.files_under(root))
+                        observed.append((result,calls.copy()))
+                        # Prove the hook is installed even when runtime predicates
+                        # and lstat do not consult Path.stat (as on Python 3.14).
+                        with self.assertRaises(PermissionError):path.stat()
+                    self.assertTrue(all(type(value) is PosixPath for value in calls))
+                self.assertEqual(observed[1],observed[0])
+                if observed[0][1]:
+                    self.assertEqual(observed[0][0]['error'],'PermissionError');self.assertEqual(observed[0][1],[path])
+                else:self.assertEqual([row['path'] for row in observed[0][0]['result']],['inside.js'])
 
     def test_current_predicate_and_lstat_replacements_keep_original_refusals(self):
         for name,error in (('lstat',PermissionError),('is_file',R.SafetyError),('is_symlink',R.SafetyError),('is_dir',NotADirectoryError)):
@@ -262,16 +332,21 @@ class PrefixPathTests(unittest.TestCase):
 
     def test_predicate_replacement_between_entry_observations_is_used(self):
         with self.owned() as root:
-            path=root/'inside.js';self.write(path,b'owned between-observation hook');module=self.identity_copy();original_stat=os.stat;original_file=PosixPath.is_file;calls=[]
+            path=root/'inside.js';self.write(path,b'owned between-observation hook');module=self.identity_copy();original_stat=os.stat;original_lstat=os.lstat;original_file=PosixPath.is_file;calls=[];changed=[]
             def injected(value):
                 if value==path:calls.append(value);return False
                 return original_file(value)
             def observed(value,*args,**kwargs):
                 result=original_stat(value,*args,**kwargs)
-                if Path(value)==path and kwargs.get('follow_symlinks') is False:PosixPath.is_file=injected
+                if Path(value)==path and kwargs.get('follow_symlinks') is False:changed.append('stat');PosixPath.is_file=injected
                 return result
-            with patch.object(PosixPath,'is_file',original_file),patch.object(os,'stat',observed),self.assertRaises(R.SafetyError):module.files_under(root)
+            def observed_lstat(value,*args,**kwargs):
+                result=original_lstat(value,*args,**kwargs)
+                if Path(value)==path:changed.append('lstat');PosixPath.is_file=injected
+                return result
+            with patch.object(PosixPath,'is_file',original_file),patch.object(os,'stat',observed),patch.object(os,'lstat',observed_lstat),self.assertRaises(R.SafetyError):module.files_under(root)
             self.assertEqual(calls,[path]);self.assertIs(type(calls[0]),PosixPath)
+            self.assertEqual(len(changed),1)
 
     def test_unknown_class_and_static_predicates_use_actual_descriptor_binding(self):
         for before_import in (False,True):
@@ -419,30 +494,41 @@ class PrefixPathTests(unittest.TestCase):
         with self.owned() as root:
             values={'a.js':b'owned binary\x00\xff','nested/b.js':b'owned other'}
             for path,data in values.items():self.write(root/path,data)
-            originals=(os.lstat,os.open,os.fstat,hashlib.sha256);resolved=[];opened=[];fstats=[];hashed=[]
-            def resolve(path,*args,**kwargs):resolved.append(os.fspath(path));return originals[0](path,*args,**kwargs)
-            def open_file(path,flags,*args,**kwargs):opened.append((path,flags));return originals[1](path,flags,*args,**kwargs)
-            def fstat(fd):fstats.append(fd);return originals[2](fd)
-            def digest(data=b'',*args,**kwargs):hashed.append(data);return originals[3](data,*args,**kwargs)
-            with patch.object(os,'lstat',resolve),patch.object(os,'open',open_file),patch.object(os,'fstat',fstat),patch.object(hashlib,'sha256',digest):I.files_under(root)
-            expected=[]
-            for path in (root,root/'a.js',root/'nested',root/'nested/b.js'):
-                parent=Path('/')
-                for part in path.parts[1:]:parent=parent/part;expected.append(str(parent))
-            self.assertEqual(resolved,expected);self.assertEqual(len(opened),2);self.assertEqual(len(fstats),4)
+            originals=(os.lstat,os.open,os.fstat,hashlib.sha256);observed=[]
+            for module in (_C93,I):
+                resolved=[];opened=[];fstats=[];hashed=[]
+                def resolve(path,*args,**kwargs):resolved.append(os.fspath(path));return originals[0](path,*args,**kwargs)
+                def open_file(path,flags,*args,**kwargs):opened.append((os.fspath(path),flags));return originals[1](path,flags,*args,**kwargs)
+                def fstat(fd):fstats.append(fd);return originals[2](fd)
+                def digest(data=b'',*args,**kwargs):hashed.append(data);return originals[3](data,*args,**kwargs)
+                with patch.object(os,'lstat',resolve),patch.object(os,'open',open_file),patch.object(os,'fstat',fstat),patch.object(hashlib,'sha256',digest):rows=module.files_under(root)
+                observed.append((rows,resolved,opened,len(fstats),hashed))
+            self.assertEqual(observed[1],observed[0]);self.assertEqual(len(opened),2);self.assertEqual(len(fstats),4)
             self.assertTrue(all(flags & os.O_NOFOLLOW and flags & os.O_NONBLOCK for _,flags in opened))
             self.assertEqual(hashed,[values['a.js'],values['nested/b.js']])
+            if I._FAST_POSIX and I._STANDARD_METHODS['resolve'] is not None:
+                expected=[]
+                for path in (root,root/'a.js',root/'nested',root/'nested/b.js'):
+                    parent=Path('/')
+                    for part in path.parts[1:]:parent=parent/part;expected.append(str(parent))
+                self.assertEqual(resolved,expected)
 
     def test_canonical_fresh_calls_observe_each_ancestor_again(self):
         with self.owned() as root:
             path=root/'nested/file.js';self.write(path,b'owned fresh canonical')
-            original=os.lstat;observed=[]
-            def lstat(value,*args,**kwargs):observed.append(os.fspath(value));return original(value,*args,**kwargs)
-            with patch.object(os,'lstat',lstat):
-                I.fixed(path);first=observed.copy();observed.clear();I.fixed(path)
-            self.assertEqual(observed,first)
+            original=os.lstat;sequences=[]
+            for module in (_C93,I):
+                observed=[]
+                def lstat(value,*args,**kwargs):observed.append(os.fspath(value));return original(value,*args,**kwargs)
+                with patch.object(os,'lstat',lstat):
+                    first_read=module.fixed(path);first=observed.copy();observed.clear();second_read=module.fixed(path)
+                self.assertEqual(observed,first);self.assertEqual(first_read,second_read);sequences.append(first)
+            self.assertEqual(sequences[1],sequences[0])
             self.assertEqual(first[-1],str(path))
-            self.assertEqual(len(first),len(path.parts)-1)
+            parent=Path('/');expected=[]
+            for part in path.parts[1:]:parent=parent/part;expected.append(str(parent))
+            self.assertTrue(set(expected)<=set(first))
+            if I._FAST_POSIX and I._STANDARD_METHODS['resolve'] is not None:self.assertEqual(first,expected)
 
     def test_directory_alias_after_confirmation_is_refused_before_file_open(self):
         with self.owned() as parent:
