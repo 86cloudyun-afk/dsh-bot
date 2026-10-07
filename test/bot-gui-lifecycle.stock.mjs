@@ -98,6 +98,9 @@ test('known GUI main, parent and zero-tool child restore their original native i
  assert.equal((await f.ownerCall('requestContactStop',botId,{operationId:'gui-old-contact-stop-denied',nonce:'gui-old-contact-stop-denied',contactOperationId:originalContact.operationId})).ok,false);
  assert.equal(f.requests(),beforeQuery);
  const parent=after.work.find(work=>work.task_id==='lifecycle-parent'),child=after.work.find(work=>work.task_id==='lifecycle-child');
+ const restoredControls=(await f.call('bootstrap')).value.controls;
+ assert.equal(parent.stop.state,'accepted');
+ assert.equal(restoredControls.work.find(work=>work.taskId===parent.taskId&&work.sessionId===parent.sessionId&&work.generation===parent.generation)?.canContinue,true);
  assert.deepEqual(f.ctx.tools.schemas(f.ctx.agents.get(parent.sessionId)).map(tool=>tool.name),['dsh_bot_delegate']);assert.equal(f.ctx.tools.schemas(f.ctx.agents.get(child.sessionId)).length,0);
  assert.equal(f.ctx.agents.get(child.sessionId).session.header.parentSession,parent.sessionId);
  const request={operationId:'known-tree-parent-continue',nonce:'known-tree-parent-continue',botId,taskId:parent.taskId,sessionId:parent.sessionId,generation:1};
