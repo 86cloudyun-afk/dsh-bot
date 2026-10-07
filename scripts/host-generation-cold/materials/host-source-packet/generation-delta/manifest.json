@@ -1,0 +1,84 @@
+{
+  "format": 1,
+  "publicBaseCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "parentSourceIdentitySha256": "298948c3b5c83684eaacd9db2bf201e4d69e1137c21c17ccacc8742fb25bc170",
+  "parentFrozenOverlaySha256": "67f10c14ba778924a5d60481d97f01035612611397ad6eb994aee22364a2d7bc",
+  "classification": "PRIVATE_OWNED_NATIVE_GENERATION_M0_NEW_SOURCE_DELTA",
+  "localPatchRights": "UNKNOWN",
+  "historicalResumeSupported": false,
+  "modelsRequested": false,
+  "files": [
+    {
+      "path": "packages/core/agent-loop/src/agent.ts",
+      "sha256": "ad3a2b50e587d9122d65069b38b7d3fc22e4ac3df3c74c23586c1a14e8c51498",
+      "bytes": 34496,
+      "previousSha256": "1b14ad31528782f02e6e187c0647436b2114e9bbf326bb25647d26e9f1675620"
+    },
+    {
+      "path": "packages/core/agent-loop/src/index.ts",
+      "sha256": "008db1391e70bee489858178fe443625743fb680f568b54d5e2ea2831ed3680a",
+      "bytes": 40037,
+      "previousSha256": "5c3345e741b8bb0b06b5802397add3eed9eb75ae2c0c899b0084981f1d9bf6c5"
+    },
+    {
+      "path": "packages/core/agent-loop/src/native-activity.ts",
+      "sha256": "c4965680546219de5c84b4c16a327db3f386070fb3793ad34360afc7f4b7bb7d",
+      "bytes": 1509,
+      "previousSha256": null
+    },
+    {
+      "path": "packages/experimental/native-run/src/index.ts",
+      "sha256": "a4d009c4e62cbae0ecb8c6bb3555a6fb559db8d08b489d6590dfeace7d9084ab",
+      "bytes": 575,
+      "previousSha256": "8fc97398d3d9e91ecd09c1eeda0061ce4105b3086304774d9b4cbc2fa88dd0a3"
+    },
+    {
+      "path": "packages/experimental/native-run/src/generation-source.ts",
+      "sha256": "49b0ac8c252cb74a023fe9b210d8d4586c3657b0174ddc71e0b1e9177923f9fc",
+      "bytes": 22939,
+      "previousSha256": null
+    },
+    {
+      "path": "packages/experimental/native-run/tests/generation-source.spec.ts",
+      "sha256": "e71006f7825c35108f5738f9630ae16731f296c527bc0bfcd71352d8b818a38a",
+      "bytes": 17102,
+      "previousSha256": null
+    },
+    {
+      "path": "packages/experimental/native-run/README.md",
+      "sha256": "bd822048307e93faada23aeadf2dfb8cb26beeb1f539c1b4c5d1c84f01e181c9",
+      "bytes": 3129,
+      "previousSha256": null
+    },
+    {
+      "path": "packages/experimental/native-run/README.zh.md",
+      "sha256": "f8e05599c08a80fced7f9346194b3ca81f8c49efb4136b10b2f5b7586beb52a5",
+      "bytes": 2737,
+      "previousSha256": null
+    },
+    {
+      "path": "packages/core/agent-loop/README.md",
+      "sha256": "71fdce9bb4e3ccc7e970881a400af4bbd71407e492c07b5f9c416d7b93d0b287",
+      "bytes": 22966,
+      "previousSha256": "7e85b7d46c17e5351455821e70441080214e249c2bf19ea356239bb09749e033"
+    },
+    {
+      "path": "packages/core/agent-loop/README.zh.md",
+      "sha256": "621d979946e8e657c59e05d2c133766f6277ecef992c705705929cd5bff192ee",
+      "bytes": 21769,
+      "previousSha256": "b2df762bb642f23a6fd8e378aa498f31f9c76bfd3f8c93087f9c88fc171ccef3"
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "974c327ff84317d1302d9ccda46c6a002e0cb9c5338c4069de3dc8a50236b589",
+      "bytes": 19191,
+      "previousSha256": "cf5728e0b907b8c770b637f779feb785ceefe5017b59aa2e160d488ae376fc0f"
+    },
+    {
+      "path": "docs/architecture.zh.md",
+      "sha256": "3b6bb202a63ea304da977470922a0d035258665b0a720ecee35eb575c9529c8b",
+      "bytes": 18806,
+      "previousSha256": "1bd164bc5cd857a9c46e97d7927f40b6fac0217cefbbb35a5945610126b88048"
+    }
+  ]
+}

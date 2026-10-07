@@ -1,0 +1,987 @@
+{
+  "format": 1,
+  "milestone": "M2",
+  "publicBaseCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "sourceOnly": true,
+  "localPatchRights": "UNKNOWN",
+  "declaredLocalHeadIsBuiltIdentity": false,
+  "supportedNativeTargets": [
+    "linux-x64",
+    "darwin-arm64"
+  ],
+  "qualifiedTargetEvidenceSeparate": true,
+  "sourcePosixModesClaimed": false,
+  "sourceIdentityLinuxLocalSha256": "714b741c1fb60d2ce6ef1d7bcf7d2a9f5059c6422613290a5eae570ea75376c4",
+  "sourceIndexLinuxLocalSha256": "9c789c12d710da0253cbc486c4d8135b41b19f5c9e76526b52146b54d0ab421e",
+  "overlayLinuxLocalManifestSha256": "dc29d12b1cb17c62ca9e73efb718d08a6406175729b1f953d960b760fc67d6b8",
+  "finalSourceTransportSha256": "459c9fbb18b04fb39e69c08f09b06e73bff41f2805f4f446c4f8360f2947e0c4",
+  "finalLayerDeltaSha256": "ca60c5189f54a3444765c6dd949dd9a393d3f571514df07740226d298e4ab5cb",
+  "cumulativeDeltaSha256": "4f6b45e510c4b23bc48622ce35e529a4970f4c557a53daa89edef233b2ce39ea",
+  "dependencyLockSha256": "1ab8a87180402f185db8fe354c0764976365c7ffefecebc80f30c7464574d7f9",
+  "bootstrapLockSha256": "681fe4ad8fa0c4603ef4771243f33af9387db5d0e4e624b6478a95ee5cd70ad8",
+  "sourceMaterialCommit": "616b511b4358dd7c173601816fc1f79f92f2a010",
+  "nativeJournalFormat": 2,
+  "modelsRequested": false,
+  "files": [
+    {
+      "path": "materials/host-source-packet/SOURCE-EVALUATION-PLAN.md",
+      "bytes": 3087,
+      "sha256": "98345439a35a4926dd6fb2b34643943e4d55c3aadebff9674234ac6f59f7bfae"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/LICENSE",
+      "bytes": 1065,
+      "sha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/package.json",
+      "bytes": 17200,
+      "sha256": "a303ffb8994be8e7a874bc887db1abd47a77a6e08872e65f1d65281f43eab91b"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent/package.json",
+      "bytes": 2178,
+      "sha256": "5a1933ae764443b0f725af0a069d810e55cb83857f0a99eaf78fe70b0ee1d01b"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent/src/index.ts",
+      "bytes": 31944,
+      "sha256": "d8bdc597f58072874f8c44a9e081859d74d4edd669e5f0e3ebf12e9d35a55591"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent/tsconfig.json",
+      "bytes": 706,
+      "sha256": "e678cc902d616e77180181ad571e5b81dce72bd1454c6b19357a82b0e2cf0dbf"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent/tsdown.config.ts",
+      "bytes": 523,
+      "sha256": "19be8a9312b07efd853b6b7b0baaaaf743b2d4dcf1a7cdfccd74c0829c96e8b3"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/package.json",
+      "bytes": 2195,
+      "sha256": "f7ffa7f0e765b94960fd1a2f6709bb86850ed26cfb648f6b1c200100282bcb0b"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/src/agent.ts",
+      "bytes": 29944,
+      "sha256": "1b14ad31528782f02e6e187c0647436b2114e9bbf326bb25647d26e9f1675620"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/src/assistant-stream.ts",
+      "bytes": 4263,
+      "sha256": "120d2bec5efeec2aa54bf0e4261a45282936272d610dbbab21eee36b902629de"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/src/constants.ts",
+      "bytes": 202,
+      "sha256": "435d31d3c8740f5ebaefa5c12f22d7cda8ea8c6d018e6fcda459161174ecc971"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/src/inbox.ts",
+      "bytes": 9327,
+      "sha256": "70c07ea75ebcf18df353bbccf7c2aa3ecf6cb0d687b96e3520b675680c29f662"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/src/index.ts",
+      "bytes": 38882,
+      "sha256": "5c3345e741b8bb0b06b5802397add3eed9eb75ae2c0c899b0084981f1d9bf6c5"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/src/invariant.ts",
+      "bytes": 3251,
+      "sha256": "109c89b44b3449b92c10a7116b00af0e49a8a80ff2be3d79a22c7d48992a08b5"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/src/runtime-context.ts",
+      "bytes": 7184,
+      "sha256": "4944ee5cbbc24f21c27f1f0be54af7601da280b7fd2354e48fcc0ef6beeea839"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/src/tool-calls.ts",
+      "bytes": 11591,
+      "sha256": "5c7e8d8ff0028b436efdd13e5dffa4801d2311c211c3af039e7dab705f87b303"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/tsconfig.json",
+      "bytes": 812,
+      "sha256": "cc79023734032635686d44736222ede837b360e8c8a490df664dfbc397e7253e"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/core/agent-loop/tsdown.config.ts",
+      "bytes": 541,
+      "sha256": "6d284c7f7e842f0eb93b0bbef7eb1f558e30a59e2f9f347a8655137f6ec04ebb"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/package.json",
+      "bytes": 1653,
+      "sha256": "f16d65c45b0d210d17e90c25964e101eabda00d770231c69e7d68f5e784d42b4"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/src/driver.ts",
+      "bytes": 8622,
+      "sha256": "570c21fe28aa1e7166521d5b93c39343bfb7c8d01f7b55aa3531e11bf3a32f96"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/src/ids.ts",
+      "bytes": 1346,
+      "sha256": "0de5c41d63a10fcfde943d2955d7f54a6675191cb5ca4635317cf9c61979387f"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/src/index.ts",
+      "bytes": 348,
+      "sha256": "8fc97398d3d9e91ecd09c1eeda0061ce4105b3086304774d9b4cbc2fa88dd0a3"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/src/journal.ts",
+      "bytes": 29663,
+      "sha256": "ad2d720d61ee10b2cb63c9024360c39ad291b4be9849d8734330909618cece70"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/src/session-driver.ts",
+      "bytes": 22182,
+      "sha256": "ae3e500fb1fbd46ceb2bad3bc3adfae3be28179fb5d42f1173cdd6306ebf57bb"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/src/types.ts",
+      "bytes": 4914,
+      "sha256": "192bad062feec50339d49a6e86a14d849f8c517a060113e5558a10c245d4db0a"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/src/values.ts",
+      "bytes": 12811,
+      "sha256": "30a0bbdcac80dbc8425c6666bd7e76bbc520582ab911cbf3e84dd3ba1e1af833"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/tsconfig.json",
+      "bytes": 908,
+      "sha256": "88c503725f86788f599d3faa5017f4ed17753d6c66d7444be739135f4d002203"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/experimental/native-run/tsdown.config.ts",
+      "bytes": 308,
+      "sha256": "a93ca56f519b8bdee26bfb7a2e6e43538a01d870fece0893ee29677ff65cfb0d"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/extensions/tool-cordis/package.json",
+      "bytes": 1636,
+      "sha256": "f5fbb0ce6ca8136db2c6812b7b219dd19ff54a743ddd2b7853a558e0865b004d"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/extensions/tool-cordis/src/api-catalog.ts",
+      "bytes": 576635,
+      "sha256": "50083de8b9aa863b02344b9c35cacd4bd09ad17f797918a04d91fc4c277ee7ed"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/extensions/tool-cordis/tsconfig.json",
+      "bytes": 731,
+      "sha256": "620e9b1d55d134ceff7b89a4b1b13482bd6612325b0a156e1d8aa2ed5cb91dec"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/package.json",
+      "bytes": 2243,
+      "sha256": "ed579a752bc9db66aaef70d647e1dae6d7e7dfbda8efd34d1650b69e8c3c88ee"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/adapter-failure.ts",
+      "bytes": 4183,
+      "sha256": "533507191d814fc7b3df5ae65076b2ebc4134bbb47a2bbd9bb7309d7e7f9241b"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/api-key.ts",
+      "bytes": 1766,
+      "sha256": "16bf926a82b0c0c1d4adbee78e2a1eebe260f100285795edb8330f3fe46141a4"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/assembler.ts",
+      "bytes": 7998,
+      "sha256": "a2d065645058a70195a504b101e9eed23df3eaced3def868d602f3a863b03887"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/assistant-stream.ts",
+      "bytes": 21368,
+      "sha256": "9ff074108132ef0ffeefffd8e7967d05db4c6bef1689242807ef7a1d2105dfeb"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/attribution.ts",
+      "bytes": 2717,
+      "sha256": "031f0a29b75498b9208ab2ede0a32b755c925f1a992562dd23970cff7caea075"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/brand.ts",
+      "bytes": 2574,
+      "sha256": "a3a3f22174353af8aea34a9a439986530bffcc6df6339e55612fd5a1fa4fb14c"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/call-config.ts",
+      "bytes": 2873,
+      "sha256": "c2ead88240db88af3199235389585d2ddc566312d8976d9648a5f5190d32e6c6"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/content.ts",
+      "bytes": 21501,
+      "sha256": "e679f0972cef3f6301c4a9f321ee288ef0a63223ec51c093349c186cdc81ff35"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/error.ts",
+      "bytes": 8267,
+      "sha256": "63df8344d49df8f90054852c1de81bc6e56c11de11179e37dcad882be5758035"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/index.ts",
+      "bytes": 58540,
+      "sha256": "543612ab20d6a041f4ec916b7dfa801a5fdf8d03a7822f9f7f72c20cb8ceb422"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/invariant.ts",
+      "bytes": 4331,
+      "sha256": "ba2fd65ba8a0d886b5f21810f5f5d008984ac64387b024de0237ff71a7e483bd"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/message.ts",
+      "bytes": 11275,
+      "sha256": "5826fb32bc3d6e2221a7a39cc8b4fecc57282540a332417bb9f2ac3522b5c7da"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/retry-policy.ts",
+      "bytes": 7612,
+      "sha256": "eee2423a0152096026446dd651f29678e0c504f0349a91758720f01f74efa871"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/src/types.ts",
+      "bytes": 22007,
+      "sha256": "f5206fd5daf18d3899202c96ca0edb6e7c1a10ddc535edead062ed28f2261b2d"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm/tsconfig.json",
+      "bytes": 643,
+      "sha256": "cd29b00935268e1d9ee2521bb1d1e2b4ab352a2d10dc190610546d8fdd07a865"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/package.json",
+      "bytes": 3129,
+      "sha256": "8032971c0ff8015e8f0175df5f2f7c7d1972e423b5116e6527d8b0c84495da7c"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/adapter.ts",
+      "bytes": 9600,
+      "sha256": "ce8ddb6ff5d511bb5c4bebc312cbfcc5fc78c7942c5d95c16c30ea6e74e5a692"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/config.ts",
+      "bytes": 18370,
+      "sha256": "73f802bf72663ace689782db8a4031791864e9a97c995de620ac4c9ce683a30b"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/defaults.ts",
+      "bytes": 1398,
+      "sha256": "f0c753f0d4188f615182d7d25eabed7bc24021ece255524ac5cb8089718b0520"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/file-id.ts",
+      "bytes": 976,
+      "sha256": "27aff248186c4e7230a6ddbd803bdee4eadb655607a859c350e77bb29cb9c269"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/file-store.ts",
+      "bytes": 12092,
+      "sha256": "3a361dcc47ab661a89f8a44e65e607f8d4e56a073cfce9cde8e4121e43bd109e"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/files-api.ts",
+      "bytes": 10880,
+      "sha256": "0f38622c30c85266bf17db38e0171a130bbee5ce0404327a1de949b1393eca26"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/host.ts",
+      "bytes": 6260,
+      "sha256": "7b2c11a02ea96e70cf2f5439f4e3939595bfcdfd7cf49f95b00e0d16bb8ed601"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/image-tokens.ts",
+      "bytes": 7065,
+      "sha256": "9a7e16b2fd451f99a99b36a39eda33aa1d26f0d3243545f0152ec7f802ec064a"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/images.ts",
+      "bytes": 5872,
+      "sha256": "bf72a07169a9db4ad9944d76f5f0788ad83ef627d4911e92e9273f565dfd0e1f"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/index.ts",
+      "bytes": 2306,
+      "sha256": "fd440fe02373ed4f05b5afec488ad946d4ae7072f88cbbaf39b62ee4930082fe"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/messages-api.ts",
+      "bytes": 808,
+      "sha256": "c4f2036fc3b561690f05426f308bbee525a4a5ae121e47ebf61b7bc3a7b8656c"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/model-info.ts",
+      "bytes": 3552,
+      "sha256": "b173d9dd4aa63405f7c30e3fe5844fc59b5117d3e1ed58476a09b72eb2fbff70"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/models.ts",
+      "bytes": 755,
+      "sha256": "fbd13439754e6eb9f81463b31cff26fded69d249ae8a768054a3236c5ff0c108"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/protected-providers.ts",
+      "bytes": 1736,
+      "sha256": "81a5b6f0b5a402f83e4f733429ab55eed45c66fa1c0469337d831314c78b6e95"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/replay.ts",
+      "bytes": 3587,
+      "sha256": "3edd01ffaedc422a148e1a66e8e93203ac07cb5aa558e35485501e564216f148"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/request-extensions.ts",
+      "bytes": 2468,
+      "sha256": "03607973027a1126869e43bbdb67653482a5196536ffa70d73ada9c123baa28d"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/request-files.ts",
+      "bytes": 6631,
+      "sha256": "ff78a42d27cefd8cb7f2f30fe95802d87d817af05df476ea0c4236c3c0678a22"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/request-pricing.ts",
+      "bytes": 5559,
+      "sha256": "8dcbb62ffcdb7f45eecc176c5219bc1dd424e36c4c9b469d5cb6223b1a503d8d"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/serialize.ts",
+      "bytes": 9656,
+      "sha256": "5468bea545731cf5e8057296559aa0b648174900ca86821d022ffe3b468cf29c"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/sse.ts",
+      "bytes": 1403,
+      "sha256": "7ffcba377583018aa1a7f86c6d757b7dd6c1955ad8252103e2f33a4ceb90a741"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/translate.ts",
+      "bytes": 8730,
+      "sha256": "303bdb48a1900b6e3585edd6be817984ec42230894bcdf9c3cc2423c23a3f563"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/transport.ts",
+      "bytes": 2924,
+      "sha256": "7d1f6ed8fe861ee71ba2d0c6a2a9e8512ddc1b6dc17d43a8795ab520a38746b6"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/types.ts",
+      "bytes": 7609,
+      "sha256": "13b1fa40657c0315eaafa86161896b812e6b7e6699f5ca7d73b5003c9bfabada"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/upload-index.ts",
+      "bytes": 9092,
+      "sha256": "d14e35054f7a034cabf3fbd87ac9f336f4af39585e30b45322d195b38bba1791"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/src/wire-types.ts",
+      "bytes": 1613,
+      "sha256": "38ea37c292c8ba4be2cf0f24f08e2cd62f70c3d437485293fa48909a5bea341d"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/packages/llm/llm-deepseek/tsconfig.json",
+      "bytes": 1014,
+      "sha256": "fe136bb48d0c71e7b0219b8b5fa9ac8ef8284479365e0e8300f07506e662d1ce"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/pnpm-lock.yaml",
+      "bytes": 1023280,
+      "sha256": "67e847e73f1f0a16d38d9c414babacae6817bd74622c7ff534e07cb0b1336455"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/pnpm-workspace.yaml",
+      "bytes": 5411,
+      "sha256": "8486cab8bfbba2b0f740eac3d5109132b18a3bd53d3b07aebf441e4f1462eb4e"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/scripts/build.ts",
+      "bytes": 2198,
+      "sha256": "6afb64c9045c90549ff8201a890d572f8f87dae3eebf9c14e5b6ebfc448b6056"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/scripts/client-build-environment.ts",
+      "bytes": 16577,
+      "sha256": "064ee73384745e7b327c8465fb31b0b99cce5b3824363cdac9eb455ff17b4bb8"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/scripts/pnpm-invocation.ts",
+      "bytes": 925,
+      "sha256": "5b920229966f29c156847e00904d82ef03039f3dc88398592a755f113f22813d"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/tsconfig.base.client.json",
+      "bytes": 472,
+      "sha256": "117086f80fc5558dd6d01d24cd7dfe7b495df8757dff402021218fa64605961e"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/tsconfig.base.json",
+      "bytes": 49365,
+      "sha256": "eb47be0de852184d2e9aec29228736dda45f8455e8744073c6b46c963abca93c"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/tsconfig.client.json",
+      "bytes": 7800,
+      "sha256": "eff33581ce82353dd0178ca0926605faf72141277804f8b3d0771dfae12d2d57"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/tsconfig.host.json",
+      "bytes": 23898,
+      "sha256": "f808187f394992f7653d29c5dfd1400a741777c7b89705fa6d71c4a3b4016839"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/tsconfig.json",
+      "bytes": 670,
+      "sha256": "9eb420010dfd10daaa1a5374ce018fd691b1ba56a4bea60f2ebd8d548ffdffa4"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/tsconfig.protected-tests.json",
+      "bytes": 16212,
+      "sha256": "37de27cc99e24428b51ab0ea2132fa59ba15e6031fb425dd346b9f358c1fec3c"
+    },
+    {
+      "path": "materials/host-source-packet/current-related-source/tsdown.config.ts",
+      "bytes": 1449,
+      "sha256": "af5cf6832716fce53f1443b9daa1f4434a8dd5ac90d9f8bf59aaae937b1904a4"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/manifest.json",
+      "bytes": 3383,
+      "sha256": "364d9eaadef1510361b75a8f75a9f5813d39b48eaba936a80b7ffbd48eb179e8"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/docs/architecture.md",
+      "bytes": 19191,
+      "sha256": "974c327ff84317d1302d9ccda46c6a002e0cb9c5338c4069de3dc8a50236b589"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/docs/architecture.zh.md",
+      "bytes": 18806,
+      "sha256": "3b6bb202a63ea304da977470922a0d035258665b0a720ecee35eb575c9529c8b"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/core/agent-loop/README.md",
+      "bytes": 22966,
+      "sha256": "71fdce9bb4e3ccc7e970881a400af4bbd71407e492c07b5f9c416d7b93d0b287"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/core/agent-loop/README.zh.md",
+      "bytes": 21769,
+      "sha256": "621d979946e8e657c59e05d2c133766f6277ecef992c705705929cd5bff192ee"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/core/agent-loop/src/agent.ts",
+      "bytes": 34496,
+      "sha256": "ad3a2b50e587d9122d65069b38b7d3fc22e4ac3df3c74c23586c1a14e8c51498"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/core/agent-loop/src/index.ts",
+      "bytes": 40037,
+      "sha256": "008db1391e70bee489858178fe443625743fb680f568b54d5e2ea2831ed3680a"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/core/agent-loop/src/native-activity.ts",
+      "bytes": 1509,
+      "sha256": "c4965680546219de5c84b4c16a327db3f386070fb3793ad34360afc7f4b7bb7d"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/experimental/native-run/README.md",
+      "bytes": 3129,
+      "sha256": "bd822048307e93faada23aeadf2dfb8cb26beeb1f539c1b4c5d1c84f01e181c9"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/experimental/native-run/README.zh.md",
+      "bytes": 2737,
+      "sha256": "f8e05599c08a80fced7f9346194b3ca81f8c49efb4136b10b2f5b7586beb52a5"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/experimental/native-run/src/generation-source.ts",
+      "bytes": 22939,
+      "sha256": "49b0ac8c252cb74a023fe9b210d8d4586c3657b0174ddc71e0b1e9177923f9fc"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/experimental/native-run/src/index.ts",
+      "bytes": 575,
+      "sha256": "a4d009c4e62cbae0ecb8c6bb3555a6fb559db8d08b489d6590dfeace7d9084ab"
+    },
+    {
+      "path": "materials/host-source-packet/generation-delta/source/packages/experimental/native-run/tests/generation-source.spec.ts",
+      "bytes": 17102,
+      "sha256": "e71006f7825c35108f5738f9630ae16731f296c527bc0bfcd71352d8b818a38a"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/manifest.json",
+      "bytes": 7278,
+      "sha256": "ea9d0f8c52adb43710f0b0655de4552cc1d17f2973db6441e5ba53072b630bb3"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/docs/architecture.i18n.yaml",
+      "bytes": 1335,
+      "sha256": "270686a3ebd50792964daf4ecaec3a166f2b24e9de881c4a99be1e0819b1621b"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/docs/architecture.md",
+      "bytes": 19238,
+      "sha256": "44ae3c96eb1518bd9a1a0b2b04f8e74f7a38351bafe7f3bd886242dce00df897"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/docs/architecture.zh.md",
+      "bytes": 18845,
+      "sha256": "6d4b0e7486fe8d300c63748f196f29ae8d1c39ed185f1fbccce6d36de254e34e"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/docs/subsystems/session-projection.i18n.yaml",
+      "bytes": 699,
+      "sha256": "1e37e7a367a5ac764c211d0e5fa254691369d4e7aad466694b99dea5969d33e8"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/docs/subsystems/session-projection.md",
+      "bytes": 22866,
+      "sha256": "810350301a11dfd0e3000d19fe1b64436eaa0f1eaf3ee7117302d78b3036626c"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/docs/subsystems/session-projection.zh.md",
+      "bytes": 22796,
+      "sha256": "93138ffbf59ea899bb30a45b7e6b54a8773484df7cc69f8c9130a4a5361fa986"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/core/agent-loop/README.i18n.yaml",
+      "bytes": 4684,
+      "sha256": "0492bd9c832a1ad20a72f0dda0a242ebb321c8ef4092d5845791dfae25aee28d"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/core/agent-loop/README.md",
+      "bytes": 23180,
+      "sha256": "2ae144d4c3de0f6d13ed2019a59735f11af6b43a3f41daf567b91da39e4782e3"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/core/agent-loop/README.zh.md",
+      "bytes": 21952,
+      "sha256": "890a3753a1ee5fe51d08e5b93cc19cf8215b8984289e83a5b9d49a6e08b49094"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/core/agent-loop/src/agent.ts",
+      "bytes": 34739,
+      "sha256": "7a5def8e4fcc9c580d536945aae1764b6e8dc33e2c6fce1c4b5ef1972b7cdc35"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/core/agent-loop/src/index.ts",
+      "bytes": 40355,
+      "sha256": "7d37bc40167845c86cc414ae6572f6dd500c3d56ed65088389873ef1a53e676a"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/core/agent-loop/src/native-activity.ts",
+      "bytes": 1538,
+      "sha256": "12ee143917438f868676839c7031da846d4640135a8c8645e15f5f430865c1f8"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/core/agent-loop/src/native-integrity.ts",
+      "bytes": 4384,
+      "sha256": "d86b49bcf85407fd30eb9f318fbb11896d705ffa1c534681f661aeb4adaad83e"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/README.i18n.yaml",
+      "bytes": 415,
+      "sha256": "eab8b8d5601ee6df091432d5785d8d51f4184fa5026b0217af877703766a2885"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/README.md",
+      "bytes": 5634,
+      "sha256": "d40e1af54603d1da72afbbbbc46013bb56b0b36d203d01be1ac66bee9c649255"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/README.zh.md",
+      "bytes": 4850,
+      "sha256": "f5c46036f7d067a8c104e8bfb9560e55c780d28af35db0581eccf6f04bb9dd91"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/src/generation-journal.ts",
+      "bytes": 27233,
+      "sha256": "f65e298b6833042a17704502bf38b2161f7d4c476e3a3ce00372d3ae5822fa6b"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/src/generation-source.ts",
+      "bytes": 36980,
+      "sha256": "9a797f5d824294b753df0fd26046467907d4cce16c3b4af5daf0f22a36f73a77"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/src/index.ts",
+      "bytes": 841,
+      "sha256": "4f1bf55a06faec7c9aa34cca494e11a8ea385fa9b0e003798e986e17b1fd5101"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/tests/generation-child.spec.ts",
+      "bytes": 11908,
+      "sha256": "dbd6a7bb90228e56f85d01b1c5634f3f6899891e966465bf1b756996f099048a"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/tests/generation-journal.spec.ts",
+      "bytes": 18097,
+      "sha256": "41d45ce7a09fa7c03f174e6c98bc5ee25439161ce22aab40a2665387e76f4d37"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/tests/generation-source.spec.ts",
+      "bytes": 17102,
+      "sha256": "e71006f7825c35108f5738f9630ae16731f296c527bc0bfcd71352d8b818a38a"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/experimental/native-run/tests/protected-fixture.ts",
+      "bytes": 5275,
+      "sha256": "99865873dbff2840e538d2c70c4596e5c03985f9c26fdc37422397e54c11f7cd"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/llm/llm-deepseek/src/adapter.ts",
+      "bytes": 9974,
+      "sha256": "db404b08fadcb22ecbd03eb972038e5812a185671b49bd2b996b786050beef1e"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/llm/llm-deepseek/src/host.ts",
+      "bytes": 6668,
+      "sha256": "48f7cccb3334b3d5ca3927215922c045cae521ab7cbec2ab85609c2fbdeee651"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m1-delta/source/packages/llm/llm-deepseek/src/types.ts",
+      "bytes": 7793,
+      "sha256": "8049d2cb3d695323ca7ec5f914827dfe5550c169a10df389f4575a8e0ca39616"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/manifest.json",
+      "bytes": 9134,
+      "sha256": "459c9fbb18b04fb39e69c08f09b06e73bff41f2805f4f446c4f8360f2947e0c4"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/api/session-controller/src/archived-session-gate.ts",
+      "bytes": 183,
+      "sha256": "f256bb5c611218e51bf78d95a535601a4a7bc92bb4982dd4337e09ff26320799"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/core/agent-loop/README.i18n.yaml",
+      "bytes": 4684,
+      "sha256": "4ecf05bd1adbefc081f93c5dd5865ebab7c636247ecf1d7e5c74adb6024aadb1"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/core/agent-loop/README.md",
+      "bytes": 23671,
+      "sha256": "986a18a3e432661c639bc71d591c4163c97e53b31bbf1393b060387b524ca555"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/core/agent-loop/README.zh.md",
+      "bytes": 22338,
+      "sha256": "2459e908d034d606bf6684b2fdd91412e1d743b1b1e81331738d665c270305d8"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/core/agent-loop/src/agent.ts",
+      "bytes": 36527,
+      "sha256": "50ec9b10402222f630d849828f6f195426506a51bb7ffb9cd2f45dd53d9e663b"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/core/agent-loop/src/index.ts",
+      "bytes": 40359,
+      "sha256": "b56cecc956e395984952c8571097b5ee891537332093e1f1ab417690e5fd2d7d"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/core/agent-loop/src/native-activity.ts",
+      "bytes": 2121,
+      "sha256": "7ed6a36912ad4da487677a489ea41ec6cb806417d96ff107a6fd9e5657368355"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/README.i18n.yaml",
+      "bytes": 415,
+      "sha256": "5dfee414287239c0c9021ece94a4f419978fb2329b89aad721a586114e44b9b3"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/README.md",
+      "bytes": 10815,
+      "sha256": "da8447d161f49b07cf310a0854489c621b5bc94b2808c3b66077e6de4d2bcc63"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/README.zh.md",
+      "bytes": 9206,
+      "sha256": "26a5f58aed5d645e07d294db98f565cdacafc0387acde0ddab4605dff8f64714"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/package.json",
+      "bytes": 1964,
+      "sha256": "6a951e35744e5ced737265f4d0e920f2cba8c6932c0cb3796f535f7ec34445f7"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/src/generation-authority.ts",
+      "bytes": 2066,
+      "sha256": "2742a3debe6cf5c0e8f2661ad2807f399a0cab5f7dc5989fbf3f08c55113be2e"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/src/generation-control.ts",
+      "bytes": 10676,
+      "sha256": "865f32882b899191930a90e74fbd32871cd28ccaff531ccc8ce08e036850c6b4"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/src/generation-journal.ts",
+      "bytes": 43475,
+      "sha256": "c0f351a4451181fdef203f52cf46f3fac7f315d2742dfbbae7ed828daaa37bb9"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/src/generation-source.ts",
+      "bytes": 54559,
+      "sha256": "4e70c8997c8eb50405857106ac0335cb847ecebf9dd84fdd67a90aac9d196028"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/src/generation-tool-policy.ts",
+      "bytes": 1140,
+      "sha256": "e809d74513e6fb86f292ecceb035d7651c3cc0ae7f0cb3943d1caf01e7150bc0"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/src/index.ts",
+      "bytes": 1476,
+      "sha256": "e396afc3b1cf0e1749366687b10b78bee26f6a47bc723d683203f2f67260b83f"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tests/generation-archive.spec.ts",
+      "bytes": 15375,
+      "sha256": "288d29ec798302c60bf4da3c3f9ab0ce220f1c8c1068a20ef2fa9b99f8b263dc"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tests/generation-child.spec.ts",
+      "bytes": 16143,
+      "sha256": "352523b50b46013ec73b040b151e69d091bc06cc2bb17319723cc44c3a18c4dd"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tests/generation-journal.spec.ts",
+      "bytes": 20041,
+      "sha256": "6b8a4e7f60acd8447d8997a178d7c3eb7b9ef072492baee7318534e8b024c172"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tests/generation-known-child.spec.ts",
+      "bytes": 11337,
+      "sha256": "e1f771ca86288bad96783537d7c19080494be7097fb4154e8691428442495f30"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tests/generation-runtime-context.spec.ts",
+      "bytes": 6929,
+      "sha256": "99a3f4a756989a5d0fa28f78d9ca12bec660572c966c7481579d82f239df1f84"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tests/generation-source.spec.ts",
+      "bytes": 17889,
+      "sha256": "71d95e8df104676fbeb237138a958799e5ddf3f020df0a0ec4ebfb93c85a2240"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tests/generation-tool-policy.spec.ts",
+      "bytes": 4821,
+      "sha256": "b5e2de9a192bec496d7f8345a196862d88b22907acdd8a17ba371772c5bf407b"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tests/protected-fixture.ts",
+      "bytes": 6150,
+      "sha256": "b1f2b6c152a4388b65c7a8622cc9400971e2d9f384bb47d91ca66364bbe2a912"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/experimental/native-run/tsconfig.json",
+      "bytes": 963,
+      "sha256": "8bc54a395a5ffa2f322071bc5dd77e02b4aa15f529c2d7fca110f55addb6ea94"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/workspace/workspace/README.i18n.yaml",
+      "bytes": 3509,
+      "sha256": "3d5bf6ec5c2499d35f5e65fa4b4a9e8617c10d3e0dfd179fba7db2ab402d923a"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/workspace/workspace/README.md",
+      "bytes": 17053,
+      "sha256": "0e6d9a7a1b6865c78a337d44edbbe3c789c8a3042bcf15db2a3026f676e64c27"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/workspace/workspace/README.zh.md",
+      "bytes": 15572,
+      "sha256": "a767caca0649c757008dcc685a6a0fd0dd43749c98e3c391a68c91bde816012f"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/workspace/workspace/src/archived-session-gate.ts",
+      "bytes": 2702,
+      "sha256": "59ac5ac20041d64419e630fc10301e162f52d37cf8cc00b6a1743e3558fd9f95"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/packages/workspace/workspace/src/index.ts",
+      "bytes": 39354,
+      "sha256": "4ecd729b75b71dd705c24a44301949fd4f8a9c8c33c40b610847bbb64614c9c8"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m2-delta/source/pnpm-lock.yaml",
+      "bytes": 1023999,
+      "sha256": "1ab8a87180402f185db8fe354c0764976365c7ffefecebc80f30c7464574d7f9"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/CONSUMPTION-PLAN.md",
+      "bytes": 3233,
+      "sha256": "c0c4004bc95aa1199561869e104a68c4584b795ad6f2c64d32cbaa501d663b5b"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/no-key-consumption-contract.json",
+      "bytes": 803,
+      "sha256": "2465a7aaad4fe86b275b4180857c65f8c433d70172b5d63a198ef5dd0034754c"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/packages/experimental/native-run/tests/expected/native-session.json",
+      "bytes": 320,
+      "sha256": "06eb3ed9d7367b40814817b73b1741b248d58dd88fbf11c96db58ce41ddea144"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/packages/experimental/native-run/tests/loopback-only.ts",
+      "bytes": 2261,
+      "sha256": "9a5aad989de4a200f56a3da5b291f0ca5e99d9920699e003a469a70a1480082e"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/packages/experimental/native-run/tests/native-session.spec.ts",
+      "bytes": 20113,
+      "sha256": "51d0ad8c3be6d62de02387e7d86758612d3eadda8299a1362d32d6efc19687b3"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/packages/experimental/native-run/tests/no-io.ts",
+      "bytes": 1595,
+      "sha256": "c5053c61d61958841178393a723e066a989a733952916dbe2eedd3f0a228914e"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/packages/experimental/native-run/tests/protected-factory.spec.ts",
+      "bytes": 9331,
+      "sha256": "d57c5264fe7f8c56c3655a9b479debec785eb775bcefc69d8edc48da4d5c36f9"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/packages/experimental/native-run/tests/protected-fixture.ts",
+      "bytes": 5226,
+      "sha256": "66396578036b08613f9bae887ef50a0e093cc0f9c828045dfcd1bb3c4fb7567f"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/vitest.protected-loopback.config.ts",
+      "bytes": 391,
+      "sha256": "ac8a60b61b9d7ffc7e10ab24850ffca56d26416718c8c37305a416d3f9b2bf48"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/vitest.protected.config.ts",
+      "bytes": 564,
+      "sha256": "629337cd9c278179a59bd6278fa4c7a475d92ce14af296e4d466b7f223ae153f"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source/vitest.shared.ts",
+      "bytes": 1482,
+      "sha256": "3e8900b7471bffab582974b3a0a6413140d8143d41f62f19a348c41ad3a316a0"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/source-history-license-facts.json",
+      "bytes": 2493,
+      "sha256": "2e5b31a504a1541771866286ac40801da172061becd97c463a5f010ed5348865"
+    },
+    {
+      "path": "materials/host-source-packet/host-consumption-supplement/supplement-manifest.json",
+      "bytes": 6479,
+      "sha256": "28fe01491789ef9fab69bb8ecc3d30e32401a2819345030582c3062ffc52ef07"
+    },
+    {
+      "path": "materials/host-source-packet/host-source-transfer-manifest.json",
+      "bytes": 38633,
+      "sha256": "870b4c97065ba07b08a0712d4fe93cf0e2c928830a833f80edac6c0c65697e38"
+    },
+    {
+      "path": "recipes/README.md",
+      "bytes": 5919,
+      "sha256": "93a7fbe804fd118d9aeb3c53c9d382c12784fa8b8b80ca849a717f6c1b41ca59"
+    },
+    {
+      "path": "recipes/bootstrap/package-lock.json",
+      "bytes": 84879,
+      "sha256": "681fe4ad8fa0c4603ef4771243f33af9387db5d0e4e624b6478a95ee5cd70ad8"
+    },
+    {
+      "path": "recipes/bootstrap/package.json",
+      "bytes": 242,
+      "sha256": "f41802f77c8142a2b202f2c58548f806a08809da0a6d550fc91f5776d25067cb"
+    },
+    {
+      "path": "recipes/cold-build.mjs",
+      "bytes": 6441,
+      "sha256": "48bb39d5d7a9033f30435cc6401e6f89fb0ed4da0a4ea3c31c34cba526a2b031"
+    },
+    {
+      "path": "recipes/export-tool/cli.mjs",
+      "bytes": 5855,
+      "sha256": "1b8631e0e6b2dfcd8909d4c7e25abea8ff76d230fc23567c4eca1bcba36828c0"
+    },
+    {
+      "path": "recipes/export-tool/contracts/scripts__assemble-owner-runtime.mjs",
+      "bytes": 6013,
+      "sha256": "8bd5a84631a6011d2c3b594c5427a7625b3c56a2129f06c7a8004ef624eca4a8"
+    },
+    {
+      "path": "recipes/export-tool/export.mjs",
+      "bytes": 24978,
+      "sha256": "e8df6afff057207110e2469d81d46052f24c648568271a491460cd0eb3fdcb93"
+    },
+    {
+      "path": "recipes/export-tool/export.test.mjs",
+      "bytes": 36916,
+      "sha256": "9b2816f77ca1c148a53f3c62cec95cd885a4b6ec44ac57c2453352e5cf890abb"
+    },
+    {
+      "path": "recipes/export-tool/offline-guard.mjs",
+      "bytes": 821,
+      "sha256": "aeca0bb56daaec8fb0f5c7662b71d57182d9604217ceee0786819f3b399eb728"
+    },
+    {
+      "path": "recipes/export-tool/package.json",
+      "bytes": 173,
+      "sha256": "81058c8a26a3a05696cc446fd80eeaf3c7eac4cf6913df5a3b6b98daab52a734"
+    },
+    {
+      "path": "recipes/generation-delta.json",
+      "bytes": 8504,
+      "sha256": "4f6b45e510c4b23bc48622ce35e529a4970f4c557a53daa89edef233b2ce39ea"
+    },
+    {
+      "path": "recipes/historical-packages-projection.json",
+      "bytes": 29486,
+      "sha256": "418c4c9b563f31e52dc44421545c9bc1dddc1cd0d8d2adde6be4bb64ca4d64a9"
+    },
+    {
+      "path": "recipes/host-build-typert.mjs",
+      "bytes": 1235,
+      "sha256": "5d496d1a3aacfaa635192158edb1a98fceaeb65a44993f786b8ee25fd977afd0"
+    },
+    {
+      "path": "recipes/host-build.config.mjs",
+      "bytes": 2665,
+      "sha256": "5f284ec26ec224e8b60dcd440ec001f45da16e205bcf7be59981ca7b1169e92a"
+    },
+    {
+      "path": "recipes/index-materials.py",
+      "bytes": 2517,
+      "sha256": "dc0634e11a97e6e7b8c7dca944ad7f53ae95d284adb0fca314812b86eff260ea"
+    },
+    {
+      "path": "recipes/offline-tests.py",
+      "bytes": 4133,
+      "sha256": "0c8e61ad56b6b5461663b89d3317566b59598fdbc7398d4a87c5fd4899cfbc81"
+    },
+    {
+      "path": "recipes/overlay-receipt.json",
+      "bytes": 20545,
+      "sha256": "374bc25be13bde12f02e0d09cfd5ac12c32e87091ac384543f45485c90c84a7b"
+    },
+    {
+      "path": "recipes/prepare-cold.py",
+      "bytes": 15543,
+      "sha256": "9a09a1af6445c0977b876a73f098c591619743e0dbe8e701052a202135fd4ad8"
+    },
+    {
+      "path": "recipes/source-identity.mjs",
+      "bytes": 5737,
+      "sha256": "24b90f116fe1adf0ec3b2585fee096570a39bad87eda74e0ecfd165d34aff6b4"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+# Private native execution
+
+This package supplies two independent owner-only execution interfaces. `NativeSessionDriver` retains its protected text-only journal and rejects tools. `prepareOwnedGenerationSource` binds a real native activity to one immutable product binding without widening that driver.
+
+The owner prepares strict model calls before `ownerCtx.agents.create`, passes `protectedModelCalls` to creation, retains the returned actual handle, and attaches it once. `isPreparedOwnedGenerationSource` verifies the exact owner, session and role before creation effects. A bare Agent, copied handle, structural provider or JSON preparation cannot supply that authority. A work source has no tools; a main source retains exactly one actual `dsh_bot_delegate` definition. Main attachment may precede registration so creation can verify a blank tool registry; every start and request requires the exact registered definition.
+
+Attachment accepts a blank log or the exact declared initialization prefix: `permission/preset`, `sandbox/mode`, then `approval/policy`, with identical values and no other events. The owner supplies that policy snapshot before creation. Any prior input, turn, model call or tool history rejects attachment. Historical resume requires a separate durable source journal; this interface refuses it.
+
+`start(binding, input)` synchronously returns an opaque generation. Bindings retain the exact UUID string `configVersion` and positive integer generation and epoch fields. The source owns the exact native input, original activity counter, driver promise, cancellation controller, request objects and observed assistant streams. A synchronous inbox failure still retains an inspectable UNKNOWN generation. An UNKNOWN generation cannot be reused or replayed.
+
+`inspect` reports local return independently from remote settlement. A receipt requires the original activity to return, complete actual response finish and usage for every dispatched request, and readback of the exact flushed input/turn/assistant window. Default assembler finish, missing provider usage, idle, a turn ending and cancellation alone provide no receipt. Explicit observed zero counts are valid. Only `isOwnedGenerationReceipt(receipt, source, exactBinding)` verifies receipt identity; serialized or copied receipts fail.
+
+`isCurrent` checks receipt authority and exact product lifetime. `canDispatch` separately fences requests, including after asynchronous authentication. `cancel` fences that generation before its first await and aborts its captured original controller; it cannot stop a replacement activity. A fully observed response can settle after cancellation only when its original activity returns and the durable window agrees. Otherwise remote execution remains UNKNOWN. Settlement reports model response and accounting evidence, not completion of a product goal.
+
+The keyless tests mount the real Loader, AgentLoop, persistence, tools and strict provider with an offline SSE transport. They verify native ownership and settlement mechanics; they do not establish real model behavior or remote service cancellation.

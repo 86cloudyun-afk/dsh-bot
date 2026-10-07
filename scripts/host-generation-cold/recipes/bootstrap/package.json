@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "@types/node": "^22.20.0",
+    "js-yaml": "^4.2.0",
+    "pnpm": "^11.7.0",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.8"
+  }
+}

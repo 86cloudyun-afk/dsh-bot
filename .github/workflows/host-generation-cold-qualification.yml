@@ -1,0 +1,87 @@
+name: Private final generation Host cold qualification
+on:
+  push:
+    branches: [ci/host-generation-cold-20261007]
+permissions:
+  contents: read
+jobs:
+  source-built-host:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/ci/host-generation-cold-20261007' &&
+      github.event.repository.private == true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            arch: x64
+          - os: macos-15
+            platform: darwin
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Bind the final source and complete recipe packet to this private commit
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          python3 -B scripts/host-generation-cold/verify-packet.py scripts/host-generation-cold
+          python3 -B scripts/host-generation-packet.test.py
+          cc --version
+          make --version
+          python3 --version
+      - name: Build the pinned public base and verified final generation delta in a new Home
+        run: |
+          python3 -B scripts/host-generation-cold/recipes/prepare-cold.py \
+            --target "${{ matrix.platform }}-${{ matrix.arch }}" \
+            --source "$RUNNER_TEMP/host-source" \
+            --evidence "$RUNNER_TEMP/host-evidence" \
+            --source-packet "$GITHUB_WORKSPACE/scripts/host-generation-cold/materials/host-source-packet"
+      - name: Verify the final generation journal and actual native contracts
+        run: |
+          python3 -B scripts/host-generation-cold/recipes/offline-tests.py \
+            --target "${{ matrix.platform }}-${{ matrix.arch }}" \
+            --source "$RUNNER_TEMP/host-source" \
+            --evidence "$RUNNER_TEMP/host-evidence"
+      - name: Archive the exact output with hidden files and executable permissions
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import gzip, hashlib, json, os, tarfile
+          evidence = Path(os.environ['RUNNER_TEMP']) / 'host-evidence'
+          core = evidence / 'core-overlay'
+          manifest = core / 'artifact-manifest.json'
+          if manifest.is_file():
+              assert core.resolve(strict=True) == core and not core.is_symlink()
+              archive = evidence / 'core-overlay.tar.gz'
+              with archive.open('xb') as raw:
+                  with gzip.GzipFile(fileobj=raw, mode='wb', filename='', mtime=0) as compressed:
+                      with tarfile.open(fileobj=compressed, mode='w|') as output:
+                          output.add(core, arcname='core-overlay', recursive=True)
+              receipt = {'archive': archive.name, 'bytes': archive.stat().st_size,
+                         'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
+                         'manifestSHA256': hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                         'hiddenFilesRetained': True, 'originalModesRetained': True,
+                         'differentCompilerByteEqualityClaimed': False}
+              (evidence / 'core-overlay-archive.json').write_text(json.dumps(receipt, indent=2) + '\n')
+              print(json.dumps(receipt))
+          else:
+              print('NO_COMPLETED_CORE_OVERLAY_ARCHIVE')
+          PY
+      - name: Retain the exact source-built output and scoped native evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: host-generation-cold-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/host-evidence/*.json
+            ${{ runner.temp }}/host-evidence/*.log
+            ${{ runner.temp }}/host-evidence/core-overlay.tar.gz
+          if-no-files-found: error
+          retention-days: 7
