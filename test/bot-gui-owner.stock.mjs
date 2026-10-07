@@ -90,7 +90,7 @@ test('private GUI composer exposes no ledger to a forged gateway peer and create
     let r = await f.call('bootstrap');
     assert.equal(r.ok,true); assert.equal(r.value.selectedBotId,null); assert.equal(r.value.modelRequestsEnabled,false);
     assert.equal(r.value.version,1); assert.equal(typeof r.value.ledgerId,'string');
-    assert.deepEqual(Object.keys(r.value).sort(),['version','status','ledgerId','selectedBotId','contactSessionId','modelRequestsEnabled','creation','nativeGenerationTerminalSupported'].sort());
+    assert.deepEqual(Object.keys(r.value).sort(),['version','status','ledgerId','selectedBotId','contactSessionId','modelRequestsEnabled','modelDispatchStatus','creation','nativeGenerationTerminalSupported'].sort());
     r = await f.call('createBot',create,{...f.connection.operator});
     assert.equal(r.ok,false);
     assert.equal((await f.call('bootstrap')).value.selectedBotId,null);
@@ -158,4 +158,20 @@ test('owner actions fail after actual operator replacement and disposed app', as
     app.dispose();
     assert.equal((await f.call('bootstrap',{},original)).ok,false);
   } finally {f.connection.operator=original;app.dispose();await f.dispose();}
+});
+
+test('GUI model-enable flag cannot grant sends to an unprotected main and advertises truthful read-only continuation',async()=>{
+  const install=await installer(),directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-readonly-'));
+  const f=await runtime(directory),app=await install({...f.options,modelRequestsEnabled:true}),before=globalThis.__offlineIO.model;
+  try{
+    const created=await f.call('createBot',create);assert.equal(created.value.state,'created');
+    const boot=(await f.call('bootstrap')).value;
+    assert.equal(boot.modelRequestsEnabled,false);assert.equal(boot.modelDispatchStatus,'unconfirmed');
+    const denied=await f.handlers.get('/dsh-bot-owner')('sendContactText',{command:'sendContactText',botId:created.value.botId,
+      payload:{operationId:'unprotected-original',nonce:'unprotected-nonce',text:'Do not queue this unprotected goal'}},new AbortController().signal,f.connection.operator);
+    assert.equal(denied.ok,false);
+    const ledger=new Ledger(join(directory,'bot-gui.sqlite'));
+    try{assert.equal(ledger.list('contactOwnerOperation').length,0);}finally{ledger.close();}
+    assert.equal(f.ctx.agents.get(created.value.sessionId).session.seq,0);assert.equal(globalThis.__offlineIO.model,before);
+  }finally{app.dispose();await f.dispose();}
 });

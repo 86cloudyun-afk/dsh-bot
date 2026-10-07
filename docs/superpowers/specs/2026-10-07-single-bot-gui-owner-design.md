@@ -20,6 +20,8 @@ The official initial permission hooks remain mounted. This fresh profile binds `
 
 Model requests require the explicit process flag `--enable-model-requests`; this app's zero-model validation does not use the provider. A main goal uses the actual Agent/Session inbox and confirms durable queueing. The private producer routes observed work responses to the main's next turn. Replies and `turn/end` events are evidence of output only. Stop requests are accepted fences; held work generations remain UNKNOWN and held until authoritative Host terminal evidence is available. This GUI must not manufacture native settlement from Agent idle or a reply.
 
+The enable flag expresses operator intent, not native execution authority. This GUI always requires an owned generation source for main sends. Without an exact private source, bootstrap reports effective sending disabled with unconfirmed continuation, the Agent model gate refuses, and the selected owner RPC refuses before allocating a message/operation or waking a bare Agent. Reads and original Bot/main identities remain available. The forthcoming protected creation/history journal bridge must create or resume through the native capability before it can enable sending; an old bare or unsealed Agent is never retrofitted.
+
 Archival/restoration controls are added only with complete native log inspection and existing Host epoch invalidation. If that interface is unavailable, bootstrap truthfully reports the limitation and keeps the saved identity; unsupported restore must not create a replacement Bot or erase held UNKNOWN work.
 
 ## Validation

@@ -39,7 +39,9 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   const host=new Host({ledger,ownerHumanId:'this-home-authenticated-gui-owner',ownerCapability:owner,adapter:new DshAdapter(ownerCtx)});
   const authorityEpoch=ledger.get('grant','native-owner')?.epoch;
   const generation=Object.freeze({activation:randomUUID()});
-  let closed=false,selected=null,contactOwner=null,producer=null,creationTail=Promise.resolve(),readBinding=null;
+  let closed=false,selected=null,contactOwner=null,producer=null,creationTail=Promise.resolve(),readBinding=null,mainGenerationSource=null;
+  // Only an exact SDK-minted, privately retained source may enable this main dialog.
+  const modelStatus=()=>!modelRequestsEnabled?'disabled':mainGenerationSource===null?'unconfirmed':'available';
   const currentGeneration=()=>!closed && identity(ownerCtx.get('connection')) === connection && connection.operator === peer ? generation : null;
   function current(actualPeer=peer,signal) {
     requireValue(!closed && active(owner) && active(peer.ctx.fiber) && actualPeer === peer && currentGeneration() === generation,'gui_owner_stale');
@@ -70,7 +72,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   }
   const modelGate=ownerCtx.on('agent/pre-step', event => {
     current();
-    requireValue(modelRequestsEnabled,'gui_model_requests_disabled');
+    requireValue(modelStatus()==='available','gui_model_requests_disabled');
     const id=event.agent?.id;
     requireValue(selected && (id === selected.sessionId || ledger.list('workTask').some(w => w.botId === selected.botId && w.sessionId === id)),'gui_agent_scope_denied');
     requireValue(ownerCtx.tools.schemas().length === 0,'gui_global_tools_denied');
@@ -101,7 +103,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     producer=installOwnedBotProducer({ownerCtx,host,caller:owner,originAgent:agent,botId:bot.botId,botEpoch:bot.epoch,
       authorityEpoch,cwd,rootInstructionRef:'authenticated-single-bot-main-goal',execution:{beforeExecute:async()=>{current();}}});
     contactOwner=installSelectedBotContactOwner({ownerCtx,expectedHost:host,connection,peer,connectionGeneration:generation,
-      getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent});
+      getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,requireOwnedGeneration:true});
     selectRead(bot.botId);
     ledger.put('guiOwner','selected',{botId:bot.botId,sessionId:agent.id,configVersion:bot.configVersion,botEpoch:bot.epoch});
   }
@@ -148,7 +150,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     const rows=ledger.list('guiCreationOperation');
     requireValue(rows.length <= 1 && ledger.list('bot').length <= 1,'gui_single_bot_required');
     return {version:1,status:'ready',ledgerId:host.ledgerInstanceId,selectedBotId:selected?.botId ?? null,
-      contactSessionId:selected?.sessionId ?? null,modelRequestsEnabled,creation:creationView(rows[0]),nativeGenerationTerminalSupported:false};
+      contactSessionId:selected?.sessionId ?? null,modelRequestsEnabled:modelStatus()==='available',modelDispatchStatus:modelStatus(),creation:creationView(rows[0]),nativeGenerationTerminalSupported:false};
   }
   const handler=async(endpoint,payload,signal,actualPeer)=>{
     const checkpoint=()=>current(actualPeer,signal);
