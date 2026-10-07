@@ -77,6 +77,13 @@ for(const initialMode of [initialization,null])test(`UNKNOWN native history keep
   assert.equal(recovered.ledgerId,boot.ledgerId);assert.equal(recovered.selectedBotId,created.value.botId);assert.equal(recovered.contactSessionId,created.value.sessionId);
   assert.equal(recovered.modelDispatchStatus,'unconfirmed');assert.equal(recovered.modelRequestsEnabled,false);assert.equal(recovered.nativeGenerationTerminalSupported,false);
   assert.equal(restarted.ctx.agents.get(created.value.sessionId),undefined);assert.equal(restarted.ctx.sessions.get(created.value.sessionId),undefined);assert.equal(restarted.requests(),0);
+  const cold=await restarted.ownerCall('selectedView',created.value.botId);assert.equal(cold.ok,true);assert.equal(cold.value.readOnly,true);
+  assert.equal(cold.value.contact.status,'unknown');assert.equal(cold.value.contact.generation,1);assert.equal(cold.value.contact.preciseNativeSettlementVerified,false);
+  const observed=await restarted.ownerCall('inspectContactReceipt',created.value.botId,{operationId:first.operationId,nonce:first.nonce});
+  assert.equal(observed.ok,true);assert.equal(observed.value.state,'durably-queued');assert.equal(observed.value.preciseNativeSettlementVerified,false);
+  assert.equal(observed.value.generationObservation.remote,'UNKNOWN');
+  assert.equal((await restarted.ownerCall('sendContactText',created.value.botId,input(2))).ok,false);
+  assert.equal(restarted.requests(),0);assert.equal(restarted.ctx.agents.list().length,0);assert.equal(restarted.ctx.sessions.list().length,0);
   const ledger=new Ledger(join(f.directory,'bot-gui.sqlite'));try{assert.equal(ledger.list('bot').length,1);assert.equal(ledger.list('creation').length,1);
     assert.equal(ledger.list('ownedMainGeneration').length,1);assert.equal(ledger.list('contactOwnerOperation').length,1);}finally{ledger.close();}
 });

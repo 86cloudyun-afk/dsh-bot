@@ -35,4 +35,6 @@
 
 `/dsh-bot-owner` 使用 `{command:endpoint,botId,payload}`，支持 `selectedView`、`sendContactText`、`inspectContactReceipt`、`requestContactStop`、`requestWorkStop`。`selectedView` 的 `contact` 和每个 `work` 返回原 `generationObservation` 与各自的 `preciseNativeSettlementVerified`；顶层该字段始终 false。只有当前实际原生收据能使某个原代次的证明为 true，持久 JSON、Agent 空闲或普通回复不能使它为 true。
 
+未封存或 UNKNOWN 历史的冷启动使用官方 SessionQuery 只读原会话，不激活 Agent。此时 `selectedView.readOnly:true`、`contact.status:'unknown'`，全部原生证明字段为 false。它仅提供 `selectedView` 与 `inspectContactReceipt`，发送和停止入口拒绝；界面保持详情可读，并可查询已保存的原回执。Bot 恢复仍由单独的私有生命周期能力决定。
+
 正式验收需分别记录真实浏览器认证、实际原生组件执行、外部模型输出来源。M1 的严格空初始化诊断与本地合成 SSE 不代表正式 profile 或真实 provider 通过。正式 profile 保留官方三项初始权限事件；同 ID 接续、完整已知历史恢复、原生归档和整棵工作树停止需在最终 M2 运行时另行验证。

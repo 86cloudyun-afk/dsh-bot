@@ -48,6 +48,8 @@ async function runtime(directory,{initialMode}={}) {
   return {ctx,connection,handlers,options:{ownerCtx:ctx,homeDirectory:directory,cwd,
     agentPreset:preset,route:{provider:'deepseek-official',model:'deepseek-flash',reasoning:'off'},modelRequestsEnabled:false,initialMode},
     call(endpoint,payload={},peer=connection.operator) {return handlers.get('/dsh-bot-gui')(endpoint,payload,new AbortController().signal,peer);},
+    ownerCall(endpoint,botId,payload={},peer=connection.operator){const handler=handlers.get('/dsh-bot-owner');assert.equal(typeof handler,'function','missing authenticated cold owner read binding');
+      return handler(endpoint,{command:endpoint,botId,payload},new AbortController().signal,peer);},
     async dispose(){connection.register=register;await ctx.fiber.dispose();}};
 }
 const create = {operationId:'gui-create-original',nonce:'gui-create-original-nonce',name:'One Bot'};
@@ -174,6 +176,20 @@ for(const archived of [false,true])test(`unsealed legacy GUI ${archived?'archive
     assert.equal(second.ctx.agents.get(historical.sessionId),undefined);
     assert.equal(second.ctx.agents.get(created.sessionId),undefined);assert.equal(rawActivations,0);
     assert.equal(resumed.modelRequestsEnabled,false);assert.equal(resumed.nativeGenerationTerminalSupported,false);
+    const cold=await second.ownerCall('selectedView',bot.botId);assert.equal(cold.ok,true);assert.equal(cold.value.readOnly,true);
+    assert.equal(cold.value.contact.sessionId,created.sessionId);assert.equal(cold.value.contact.status,'unknown');
+    assert.equal(cold.value.contact.preciseNativeSettlementVerified,false);assert.equal(cold.value.held,1);
+    assert.equal(cold.value.work[0].sessionId,historical.sessionId);assert.equal(cold.value.work[0].held,true);
+    assert.equal(cold.value.work[0].generationObservation.remote,'UNKNOWN');assert.equal(cold.value.work[0].preciseNativeSettlementVerified,false);
+    assert.equal((await second.ownerCall('selectedView',bot.botId,{}, {...second.connection.operator})).ok,false);
+    assert.equal((await second.ownerCall('selectedView','another-bot')).ok,false);
+    assert.equal((await second.ownerCall('requestWorkStop',bot.botId,{operationId:'cold-must-not-stop',nonce:'cold-must-not-stop',taskId:historical.taskId,generation:1})).ok,false);
+    assert.equal(second.ctx.agents.list().length,0);assert.equal(second.ctx.sessions.list().length,0);assert.equal(rawActivations,0);
+    const query=second.ctx.sessionQuery,read=query.readSession,entered=Promise.withResolvers(),released=Promise.withResolvers(),operator=second.connection.operator;
+    query.readSession=async function(id){const result=await read.call(this,id);if(id===created.sessionId){entered.resolve();await released.promise;}return result;};
+    try{const pending=second.ownerCall('selectedView',bot.botId);await entered.promise;second.connection.operator={...operator};released.resolve();
+      assert.equal((await pending).ok,false,'a late cold read cannot publish after actual operator replacement');}
+    finally{released.resolve();second.connection.operator=operator;query.readSession=read;}
     assert.deepEqual(resumed.controls,{version:1,botId:bot.botId,botEpoch:archived?2:1,lifecycle:archived?'archived':'active',canArchive:false,canRestore:false,
       work:[{taskId:historical.taskId,sessionId:historical.sessionId,generation:1,canContinue:false}]});
     assert.equal((await second.call('continueWork',{operationId:'no-new-native-input',nonce:'no-new-native-input',botId:bot.botId,taskId:historical.taskId,sessionId:historical.sessionId,generation:1})).ok,false);
