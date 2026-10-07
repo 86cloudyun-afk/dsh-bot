@@ -4,6 +4,9 @@ import type { AgentPresetCatalog,CreationIntent,OwnedCreationPort,OwnedGeneratio
 import type {ToolDefinition} from '@deepseek-ai/dsh-tools';
 import type {InitialSessionModeSnapshot} from './initial-session-blank.mjs';
 export declare const REQUIRED_NATIVE:readonly ['session_model','dispatch_freeze','operation_lookup','run_fence','resource_settlement','producer','scope_enforce','interaction_capacity'];
+/** Private lookups require the exact retained port and immutable creation coordinates. */
+export declare function ownedGenerationSourceFor(port:OwnedCreationPort,intent:CreationIntent):object|null;
+export declare function ownedGenerationCreationIntentFor(port:OwnedCreationPort,intent:CreationIntent):Readonly<{binding:CreationIntent;operationId:string;nonce:string}>|null;
 export type RequiredNativeCapability = typeof REQUIRED_NATIVE[number];
 export interface AdapterSessionRecord {readonly sessionId?:string;readonly id?:string}
 export interface AdapterSession {readonly id:string;readonly seq:number;readonly snapshotEvents?:()=>readonly unknown[]}

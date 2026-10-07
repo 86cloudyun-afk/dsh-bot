@@ -272,7 +272,7 @@ export class Host {
       requireValue(!b.creationIntentId && b.contactSessionId===null,'contact_creation_exists');
       const cfg=this.ledger.get('config',b.configVersion),request=prepareSessionCreate({cwd:p.cwd,agentPreset:cfg.agentPreset ?? null},this.adapter.sessionModeCatalog()).request;
       const grant=this.ledger.get('grant',e.authorizationRef);
-      const intent={operationId:e.operationId,sessionId:`session-${randomUUID()}`,botId:b.botId,botEpoch:b.epoch,configVersion:b.configVersion,authorizationRef:e.authorizationRef,authorityEpoch:grant.epoch,rootHumanInstructionRef:e.rootHumanInstructionRef,deadline:e.deadline,...request,state:'prepared'};
+      const intent={operationId:e.operationId,nonce:e.nonce,sessionId:`session-${randomUUID()}`,botId:b.botId,botEpoch:b.epoch,configVersion:b.configVersion,authorizationRef:e.authorizationRef,authorityEpoch:grant.epoch,rootHumanInstructionRef:e.rootHumanInstructionRef,deadline:e.deadline,...request,state:'prepared'};
       this.ledger.put('creation',e.operationId,intent);this.save('bot',{...b,creationIntentId:e.operationId,revision:b.revision+1});return intent;
     },
     stopContactCreation(p) {

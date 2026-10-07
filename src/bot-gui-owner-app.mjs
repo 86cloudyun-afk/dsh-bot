@@ -43,25 +43,29 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   const host=new Host({ledger,ownerHumanId:'this-home-authenticated-gui-owner',ownerCapability:owner,adapter:new DshAdapter(ownerCtx)});
   const authorityEpoch=ledger.get('grant','native-owner')?.epoch;
   const generation=Object.freeze({activation:randomUUID()});
-  let closed=false,selected=null,contactOwner=null,producer=null,creationTail=Promise.resolve(),readBinding=null,mainGenerationSource=null,generationSdk=null,closePromise=null;
-  const mainPorts=new Map();
+  let closed=false,selected=null,contactOwner=null,producer=null,creationTail=Promise.resolve(),readBinding=null,mainGenerationSource=null,generationSdk=null,closePromise=null,lifecyclePort=null;
+  const mainPorts=new Map(),pendingActions=new Set();
   // Only an exact SDK-minted, privately retained source may enable this main dialog.
   const nativeSourceAvailable=()=>mainGenerationSource!==null&&generationSdk?.isOwnedGenerationSource(mainGenerationSource,ownerCtx)===true;
   const delegationConfirmed=()=>selected!==null&&ledger.list('guiCreationOperation').some(row=>row.botId===selected.botId
     &&row.sessionId===selected.sessionId&&canonical(row.initialDelegationPolicy??null)===canonical(delegation));
-  const modelStatus=()=>!modelRequestsEnabled?'disabled':nativeSourceAvailable()&&delegationConfirmed()?'available':'unconfirmed';
+  const modelStatus=()=>!modelRequestsEnabled?'disabled':nativeSourceAvailable()&&delegationConfirmed()&&dispatchCurrent()?'available':'unconfirmed';
   const currentGeneration=()=>!closed && identity(ownerCtx.get('connection')) === connection && connection.operator === peer ? generation : null;
-  function current(actualPeer=peer,signal) {
+  function lifetime(actualPeer=peer,signal) {
     requireValue(!closed && active(owner) && active(peer.ctx.fiber) && actualPeer === peer && currentGeneration() === generation,'gui_owner_stale');
     requireValue(!signal?.aborted,'gui_cancelled');
     const grant=ledger.get('grant','native-owner');
     requireValue(grant?.active && grant.epoch === authorityEpoch && grant.actor?.id === host.ledgerInstanceId,'gui_authority_changed');
+  }
+  function current(actualPeer=peer,signal) {
+    lifetime(actualPeer,signal);
     if(selected) {
       const bot=host.object('bot',selected.botId);
       requireValue(bot.epoch === selected.botEpoch && bot.configVersion === selected.configVersion
         && bot.contactSessionId === selected.sessionId && bot.lifecycle === 'active','gui_binding_changed');
     }
   }
+  function dispatchCurrent(){try{current();return true;}catch{return false;}}
   const generationPreparation=createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,agentPreset,route:modelRoute,initialization,
     isOwnerCurrent:()=>{try{current();return true;}catch{return false;}},canModelDispatch:()=>modelStatus()==='available'});
   function envelope(command,payload,row,revision=null,epochs={}) {
@@ -72,7 +76,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   function execute(command,payload,row,revision=null,epochs={}) {
     current();return host.executeOwned(owner,envelope(command,payload,row,revision,epochs),payload).result;
   }
-  const readPort=host.createOwnedBotTaskReadPort(owner,{isCurrent:()=>{try{current();return true;}catch{return false;}}});
+  const readPort=host.createOwnedBotTaskReadPort(owner,{isCurrent:()=>{try{lifetime();return true;}catch{return false;}}});
   readBinding=installExplicitOperatorReadBinding({ownerCtx,expectedHost:host,readPort});
   const selectRead=botId=>readBinding.select({audience:'this-host-authenticated-operator',botIds:botId?[botId]:[],taskIds:[]});
   selectRead(null);
@@ -100,7 +104,8 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     requireValue(selected && (id === selected.sessionId || ledger.list('workTask').some(w => w.botId === selected.botId && w.sessionId === id)),'gui_agent_scope_denied');
     requireValue(ownerCtx.tools.schemas().length === 0,'gui_global_tools_denied');
     const tools=ownerCtx.tools.schemas(event.agent).map(t=>t.name);
-    requireValue(id === selected.sessionId ? canonical(tools) === canonical(['dsh_bot_delegate']) : tools.length === 0,'gui_agent_tools_denied');
+    requireValue(id === selected.sessionId ? canonical(tools) === canonical(['dsh_bot_delegate'])
+      :producer?.assertWorkAgentTools(event.agent)===true,'gui_agent_tools_denied');
     return next();
   });
   async function bindMain(bot,checkpoint,{fresh=false}={}) {
@@ -121,9 +126,12 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     if(fresh) requireValue(isBlankInitialSessionEvents(log.events,mode),'gui_main_not_blank');
     const port=mainPort(intent,original);
     const preparedProducer=prepareOwnedBotProducer({ownerCtx,host,caller:owner,originSessionId:intent.sessionId,botId:bot.botId,botEpoch:bot.epoch,
-      authorityEpoch,cwd,rootInstructionRef:'authenticated-single-bot-main-goal',execution:{isCurrent:()=>{try{current();return true;}catch{return false;}},
+      authorityEpoch,cwd,rootInstructionRef:'authenticated-single-bot-main-goal',execution:{isCurrent:dispatchCurrent,canExecute:()=>dispatchCurrent()&&modelStatus()==='available',
         beforeExecute:async()=>{current();},generationControl:{initialization:mode,
-          prepareWorkGeneration:(work,options)=>generationPreparation.prepare(work,{role:'work',create:options.mode==='create',mainSessionId:intent.sessionId}),
+          prepareWorkGeneration:(work,options)=>generationPreparation.prepare(work,{role:'work',create:options.mode==='create',mainSessionId:intent.sessionId,
+            ...(options.delegateTool?{delegateTool:options.delegateTool}:{}),...(options.plannedBinding?{plannedBinding:options.plannedBinding}:{})}),
+          prepareChildGeneration:(work,options)=>generationPreparation.prepareChild(work,{create:options.mode==='create',mainSessionId:intent.sessionId,
+            parentSource:options.parentSource,parentGeneration:options.parentGeneration,parentBinding:options.parentBinding,plannedBinding:options.plannedBinding}),
           bindMainDelegateTool:definition=>{current();const source=host.adapter.bindOwnedMainGeneration(port,intent,definition);
             requireValue(generationSdk?.isOwnedGenerationSource(source,ownerCtx)===true,'gui_owned_source_required');mainGenerationSource=source;return source;}}}});
     if(!fresh) {
@@ -146,6 +154,8 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     contactOwner=installSelectedBotContactOwner({ownerCtx,expectedHost:host,connection,peer,connectionGeneration:generation,
       getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,requireOwnedGeneration:true,generationSource:mainGenerationSource,
       canSend:()=>{current();return modelStatus()==='available';}});
+    if(typeof host.openOwnedBotLifecyclePort==='function')lifecyclePort=host.openOwnedBotLifecyclePort(owner,{botId:bot.botId,botEpoch:bot.epoch,authorityEpoch,
+      isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}},mainCreationPort:port,mainCreationIntent:intent});
     selectRead(bot.botId);
     ledger.put('guiOwner','selected',{botId:bot.botId,sessionId:agent.id,configVersion:bot.configVersion,botEpoch:bot.epoch});
   }
@@ -189,17 +199,61 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     return creationView(row);
   }
   function bootstrap() {
-    current();
+    lifetime();
     const rows=ledger.list('guiCreationOperation');
     requireValue(rows.length <= 1 && ledger.list('bot').length <= 1,'gui_single_bot_required');
     return {version:1,status:'ready',ledgerId:host.ledgerInstanceId,selectedBotId:selected?.botId ?? null,
-      contactSessionId:selected?.sessionId ?? null,modelRequestsEnabled:modelStatus()==='available',modelDispatchStatus:modelStatus(),creation:creationView(rows[0]),nativeGenerationTerminalSupported:nativeSourceAvailable()};
+      contactSessionId:selected?.sessionId ?? null,modelRequestsEnabled:modelStatus()==='available',modelDispatchStatus:modelStatus(),creation:creationView(rows[0]),nativeGenerationTerminalSupported:nativeSourceAvailable(),controls:controlsView()};
+  }
+  const syncTrue=fn=>{try{const result=fn();if(result&&typeof result.then==='function')Promise.resolve(result).catch(()=>{});return result===true;}catch{return false;}};
+  function controlsView(){
+    lifetime();if(!selected)return null;const bot=host.object('bot',selected.botId);
+    let native={botEpoch:bot.epoch,lifecycle:bot.lifecycle,canArchive:false,canRestore:false};
+    if(lifecyclePort)try{const query=lifecyclePort.query();lifetime();requireValue(query?.botEpoch===bot.epoch&&query.lifecycle===bot.lifecycle
+      &&typeof query.canArchive==='boolean'&&typeof query.canRestore==='boolean','gui_lifecycle_unconfirmed');native=query;}catch{lifetime();}
+    const work=ledger.list('workTask').filter(row=>row.botId===selected.botId);requireValue(work.length<=500,'gui_read_scope_exceeded');
+    return{version:1,botId:bot.botId,botEpoch:bot.epoch,lifecycle:bot.lifecycle,
+      canArchive:bot.lifecycle==='active'&&native.canArchive===true,canRestore:bot.lifecycle==='archived'&&native.canRestore===true,
+      work:work.map(row=>({taskId:row.taskId,sessionId:row.sessionId,generation:row.generation,
+        canContinue:modelStatus()==='available'&&syncTrue(()=>producer?.canContinueOriginalWork({taskId:row.taskId,sessionId:row.sessionId,generation:row.generation}))}))};
+  }
+  async function controlAction(endpoint,payload,signal,checkpoint){
+    requireValue(selected&&payload.botId===selected.botId,'gui_control_scope_denied');
+    if(['continueWork','inspectWorkContinuation'].includes(endpoint)){
+      exact(payload,['operationId','nonce','botId','taskId','sessionId','generation']);operationId(payload.operationId);operationId(payload.nonce);
+      text(payload.taskId,'taskId',200);text(payload.sessionId,'sessionId',200);requireValue(Number.isSafeInteger(payload.generation)&&payload.generation>0,'gui_payload_invalid');
+      const request={operationId:payload.operationId,nonce:payload.nonce,taskId:payload.taskId,sessionId:payload.sessionId,generation:payload.generation};
+      const method=endpoint==='continueWork'?'continueOriginalWork':'inspectOriginalWorkContinuation';
+      requireValue(producer&&typeof producer[method]==='function','gui_control_unavailable');
+      if(endpoint==='continueWork')requireValue(modelStatus()==='available','gui_model_requests_disabled');
+      checkpoint();const value=await producer[method](Object.freeze(request),signal);checkpoint();
+      requireValue(value?.botId===selected.botId&&value.operationId===request.operationId&&value.nonce===request.nonce
+        &&value.taskId===request.taskId&&value.sessionId===request.sessionId&&value.originalGeneration===request.generation,'gui_control_unconfirmed');
+      return{version:1,operationId:value.operationId,nonce:value.nonce,botId:value.botId,taskId:value.taskId,sessionId:value.sessionId,
+        originalGeneration:value.originalGeneration,generation:value.generation,state:value.state,generationObservation:value.generationObservation,
+        preciseNativeSettlementVerified:value.preciseNativeSettlementVerified};
+    }
+    const inspect=endpoint==='inspectBotLifecycle';
+    exact(payload,inspect?['operationId','nonce','botId']:['operationId','nonce','botId','botEpoch']);operationId(payload.operationId);operationId(payload.nonce);
+    if(!inspect)requireValue(Number.isSafeInteger(payload.botEpoch)&&payload.botEpoch>0,'gui_payload_invalid');
+    const method=inspect?'inspectOriginalBotLifecycle':endpoint==='archiveBot'?'archiveOriginalBot':'restoreOriginalBot';
+    requireValue(lifecyclePort&&typeof lifecyclePort[method]==='function','gui_control_unavailable');
+    checkpoint();const value=await lifecyclePort[method](Object.freeze({...payload}),signal);checkpoint();
+    requireValue(value?.operationId===payload.operationId&&value.nonce===payload.nonce&&value.botId===selected.botId,'gui_control_unconfirmed');
+    const bot=host.object('bot',selected.botId);
+    return{version:1,operationId:payload.operationId,nonce:payload.nonce,botId:bot.botId,botEpoch:bot.epoch,lifecycle:bot.lifecycle,
+      state:value.state==='accepted'?'accepted':'unknown',preciseNativeSettlementVerified:false};
   }
   const handler=async(endpoint,payload,signal,actualPeer)=>{
-    const checkpoint=()=>current(actualPeer,signal);
+    const lifecycle=['archiveBot','restoreBot','inspectBotLifecycle'].includes(endpoint);
+    const checkpoint=()=>endpoint==='bootstrap'||lifecycle?lifetime(actualPeer,signal):current(actualPeer,signal);
     try {
       checkpoint();
       if(endpoint === 'bootstrap') {exact(payload,[]);return {ok:true,value:bootstrap()};}
+      if(['continueWork','inspectWorkContinuation','archiveBot','restoreBot','inspectBotLifecycle'].includes(endpoint)){
+        const action=controlAction(endpoint,payload,signal,checkpoint);pendingActions.add(action);
+        try{return{ok:true,value:await action};}finally{pendingActions.delete(action);}
+      }
       requireValue(['createBot','reconcileCreate'].includes(endpoint),'gui_endpoint_unsupported');
       if(endpoint === 'createBot') {exact(payload,['operationId','nonce','name']);text(payload.name,'name',100);}
       else exact(payload,['operationId','nonce']);
@@ -229,9 +283,9 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   const unregister=ownerCtx.get('connection').rpc.handle('/dsh-bot-gui',handler);
   const dispose=()=>{
     if(closePromise)return closePromise;closed=true;
-    contactOwner?.dispose();producer?.dispose();readBinding?.close();modelGate();void unregister?.();
+    contactOwner?.dispose();producer?.dispose();lifecyclePort?.dispose();readBinding?.close();modelGate();void unregister?.();
     // In-flight native operations observe closed before touching the database again.
-    closePromise=creationTail.finally(async()=>{await generationPreparation.close();ledger.close();});return closePromise;
+    closePromise=Promise.allSettled([creationTail,...pendingActions]).then(async()=>{await generationPreparation.close();ledger.close();});return closePromise;
   };
   ownerCtx.effect(()=>()=>dispose());
   try {
@@ -241,9 +295,16 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     if(saved) {
       const bot=host.object('bot',saved.botId);
       requireValue(saved.sessionId === bot.contactSessionId && saved.configVersion === bot.configVersion
-        && saved.botEpoch === bot.epoch,'gui_saved_identity_changed');
-      try {await bindMain(bot,()=>current());current();}
-      catch {current();selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:bot.contactSessionId});selectRead(bot.botId);}
+        && Number.isSafeInteger(saved.botEpoch)&&saved.botEpoch>0&&saved.botEpoch<=bot.epoch,'gui_saved_identity_changed');
+      const coldRead=()=>{
+        lifetime();contactOwner?.dispose();producer?.dispose();lifecyclePort?.dispose();
+        contactOwner=null;producer=null;lifecyclePort=null;mainGenerationSource=null;
+        selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:bot.contactSessionId});selectRead(bot.botId);
+      };
+      if(bot.lifecycle==='active'&&saved.botEpoch===bot.epoch){
+        try {await bindMain(bot,()=>current());current();}
+        catch {coldRead();}
+      }else coldRead();
     }
     bootstrap();
     return Object.freeze({dispose});

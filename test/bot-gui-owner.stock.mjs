@@ -122,7 +122,7 @@ test('private GUI composer rejects a forged gateway peer and retains only one or
     let r = await f.call('bootstrap');
     assert.equal(r.ok,true); assert.equal(r.value.selectedBotId,null); assert.equal(r.value.modelRequestsEnabled,false);
     assert.equal(r.value.version,1); assert.equal(typeof r.value.ledgerId,'string');
-    assert.deepEqual(Object.keys(r.value).sort(),['version','status','ledgerId','selectedBotId','contactSessionId','modelRequestsEnabled','modelDispatchStatus','creation','nativeGenerationTerminalSupported'].sort());
+    assert.deepEqual(Object.keys(r.value).sort(),['version','status','ledgerId','selectedBotId','contactSessionId','modelRequestsEnabled','modelDispatchStatus','creation','nativeGenerationTerminalSupported','controls'].sort());
     r = await f.call('createBot',create,{...f.connection.operator});
     assert.equal(r.ok,false);
     assert.equal((await f.call('bootstrap')).value.selectedBotId,null);
@@ -142,7 +142,7 @@ test('private GUI composer rejects a forged gateway peer and retains only one or
   } finally {app.dispose();await f.dispose();}
 });
 
-test('unsealed legacy GUI restart preserves original ledger/Bot/main identity without activating any bare main or held work', async () => {
+for(const archived of [false,true])test(`unsealed legacy GUI ${archived?'archived':'active'} restart preserves original identity without activating bare main or held work`, async () => {
   const install = await installer(), directory = await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-restart-'));
   const first = await runtime(directory);
   const ledger = new Ledger(join(directory,'bot-gui.sqlite'));
@@ -162,6 +162,7 @@ test('unsealed legacy GUI restart preserves original ledger/Bot/main identity wi
   const key=JSON.stringify([created.botId,historical.taskId,1]),held=ledger.get('workGeneration',key);
   ledger.put('workGeneration',key,{...held,state:'unknown',held:true});
   port.dispose();
+  if(archived){const current=fixtureHost.object('bot',bot.botId);command('archive',{kind:'bot',id:bot.botId},current.revision);}
   ledger.close();
   await first.dispose();
   const second = await runtime(directory);
@@ -173,6 +174,10 @@ test('unsealed legacy GUI restart preserves original ledger/Bot/main identity wi
     assert.equal(second.ctx.agents.get(historical.sessionId),undefined);
     assert.equal(second.ctx.agents.get(created.sessionId),undefined);assert.equal(rawActivations,0);
     assert.equal(resumed.modelRequestsEnabled,false);assert.equal(resumed.nativeGenerationTerminalSupported,false);
+    assert.deepEqual(resumed.controls,{version:1,botId:bot.botId,botEpoch:archived?2:1,lifecycle:archived?'archived':'active',canArchive:false,canRestore:false,
+      work:[{taskId:historical.taskId,sessionId:historical.sessionId,generation:1,canContinue:false}]});
+    assert.equal((await second.call('continueWork',{operationId:'no-new-native-input',nonce:'no-new-native-input',botId:bot.botId,taskId:historical.taskId,sessionId:historical.sessionId,generation:1})).ok,false);
+    assert.equal((await second.call('restoreBot',{operationId:'no-native-restore',nonce:'no-native-restore',botId:bot.botId,botEpoch:archived?2:1})).ok,false);
     assert.equal((await second.call('reconcileCreate',{operationId:create.operationId,nonce:create.nonce})).ok,false);
     assert.equal((await second.call('bootstrap')).value.creation.sessionId,created.sessionId);
   } finally {recovered.dispose();await second.dispose();}
