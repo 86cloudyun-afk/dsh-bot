@@ -115,15 +115,21 @@ class SupervisorBudgetTests(unittest.TestCase):
   self.assertIn('TIMEOUT',capture['errorCategories']);self.assertTrue(any(k=='terminate' for k,v in calls))
 class CaseBudgetIntegrationTests(unittest.TestCase):
  def setUp(self):self.assertIsNotNone(CaseBudget,'CASE_TOTAL_BUDGET_MISSING');self.clock=Clock()
- def exercise(self,slow_identity=0,slow_receipt=0,slow_cleanup=0,slow_terminal=0,slow_cleanup_receipt=0,slow_return_hash=0):
+ def exercise(self,slow_identity=0,slow_receipt=0,slow_cleanup=0,slow_terminal=0,slow_cleanup_receipt=0,slow_return_hash=0,late_snapshot=False,terminal_hash_failure=False,cleanup_reseal_failure=False):
   with tempfile.TemporaryDirectory() as d:
    temp=Path(d).resolve();evidence=temp/'evidence';evidence.mkdir()
    ctx={'temp':temp,'evidence':evidence,'head':'a'*40,'tree':'b'*40,'node':Path('/synthetic/node')}
    b=CaseBudget(5,clock=self.clock,alarms=False);ctx['builtinBudget']=b
    child=R.Capture(childCreated=True,childPID=999,returncode=74,processStopped=True,outputComplete=True,errorCategories=[])
-   writer=R.atomic_create;remover=R.shutil.rmtree;hasher=R.sha
+   writer=R.atomic_create;remover=R.shutil.rmtree;hasher=R.sha;snapshot=b.snapshot;injected=[]
+   def timed_snapshot():
+    value=snapshot()
+    if late_snapshot and (evidence/'builtin-dual-terminal.json').exists() and not b.stack and not injected:
+     injected.append(True);self.clock.advance(6)
+    return value
    def check(context):self.clock.advance(slow_identity)
    def write(path,value,**kwargs):
+    if cleanup_reseal_failure and path.name=='builtin-dual-cleanup.json' and value.get('safeToRunOtherApprovedCase') is False:raise OSError('SYNTHETIC_RESEAL_FAILURE')
     if path.name=='builtin-dual-receipt.json':self.clock.advance(slow_receipt)
     if path.name=='builtin-dual-cleanup.json' and value.get('safeToRunOtherApprovedCase'):self.clock.advance(slow_cleanup_receipt)
     if path.name=='builtin-dual-terminal.json' and value.get('evaluatedOutcome')=='PASS':self.clock.advance(slow_terminal)
@@ -131,8 +137,10 @@ class CaseBudgetIntegrationTests(unittest.TestCase):
    def remove(path):self.assertTrue((evidence/'builtin-dual-receipt.json').is_file());self.clock.advance(slow_cleanup);return remover(path)
    def digest(path):
     if path.name=='builtin-dual-cleanup.json':self.clock.advance(slow_return_hash)
+    if terminal_hash_failure and path.name=='builtin-dual-terminal.json' and not injected:
+     injected.append(True);raise OSError('SYNTHETIC_HASH_FAILURE')
     return hasher(path)
-   with patch.object(run,'check_context',side_effect=check),patch.object(run,'prepare'),patch.object(R,'supervise_bounded',return_value=child) as launch,patch.object(run,'builtin_observation',return_value=({'stage':'NATIVE_ADMISSION_REFUSED'},{})),patch.object(R,'atomic_create',side_effect=write),patch.object(R.shutil,'rmtree',side_effect=remove),patch.object(R,'sha',side_effect=digest),patch.dict(run.WITNESSES,{},clear=True):
+   with patch.object(run,'check_context',side_effect=check),patch.object(run,'prepare'),patch.object(R,'supervise_bounded',return_value=child) as launch,patch.object(run,'builtin_observation',return_value=({'stage':'NATIVE_ADMISSION_REFUSED'},{})),patch.object(R,'atomic_create',side_effect=write),patch.object(R.shutil,'rmtree',side_effect=remove),patch.object(R,'sha',side_effect=digest),patch.object(b,'snapshot',side_effect=timed_snapshot),patch.dict(run.WITNESSES,{},clear=True):
     outcome=run.run_case('builtin-dual',ctx)
     witness='builtin-dual' in run.WITNESSES
    files={p.name:json.loads(p.read_text()) for p in evidence.glob('*.json')}
@@ -159,6 +167,22 @@ class CaseBudgetIntegrationTests(unittest.TestCase):
   outcome,files,launch,witness=self.exercise(slow_terminal=6)
   self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL');self.assertFalse(witness)
   self.assertEqual(files['builtin-dual-terminal.json']['evaluatedOutcome'],'BLOCKED_OR_FAIL')
+ def test_expiration_after_terminal_phase_revokes_stale_snapshot_and_witness(self):
+  outcome,files,launch,witness=self.exercise(late_snapshot=True)
+  self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL');self.assertFalse(witness)
+  self.assertFalse(outcome['timing']['withinBudget'])
+  self.assertEqual(files['builtin-dual-terminal.json']['evaluatedOutcome'],'BLOCKED_OR_FAIL')
+  self.assertFalse(files['builtin-dual-cleanup.json']['safeToRunOtherApprovedCase'])
+ def test_terminal_hash_failure_revokes_the_already_written_pass(self):
+  outcome,files,launch,witness=self.exercise(terminal_hash_failure=True)
+  self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL');self.assertFalse(witness)
+  self.assertEqual(files['builtin-dual-terminal.json']['evaluatedOutcome'],'BLOCKED_OR_FAIL')
+  self.assertFalse(files['builtin-dual-cleanup.json']['safeToRunOtherApprovedCase'])
+ def test_failed_cleanup_reseal_removes_former_terminal_pass_first(self):
+  outcome,files,launch,witness=self.exercise(slow_terminal=6,cleanup_reseal_failure=True)
+  self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL');self.assertFalse(witness)
+  self.assertNotIn('builtin-dual-terminal.json',files)
+  self.assertIn('TERMINAL_REVOCATION_OR_RESEAL_FAILED',outcome['errors'])
  def test_initial_context_work_and_case_share_one_builtin_allowance(self):
   with tempfile.TemporaryDirectory() as d:
    temp=Path(d).resolve();evidence=temp/'evidence';evidence.mkdir();b=CaseBudget(5,clock=self.clock,alarms=False);self.clock.advance(4)
@@ -191,4 +215,93 @@ class CaseBudgetIntegrationTests(unittest.TestCase):
    self.assertTrue((evidence/'preflight-receipt.json').is_file())
    sealed=json.loads((evidence/'preflight-cleanup.json').read_text())
    self.assertTrue(sealed['diagnosticPersisted']);self.assertTrue(sealed['temporaryDirectoryRemoved'])
+ def test_actual_context_registers_owned_installation_before_slow_node_hash(self):
+  with tempfile.TemporaryDirectory() as d:
+   temp=Path(d).resolve();current=temp/'current';current.mkdir();evidence=temp/'evidence';node=temp/'synthetic-node';node.write_bytes(b'fixture')
+   args=SimpleNamespace(temp_dir=str(temp),evidence_dir=str(evidence),current_dir=str(current),expected_sha='a'*40,node=str(node))
+   b=CaseBudget(5,clock=self.clock,alarms=False)
+   env={'GITHUB_ACTIONS':'true','GITHUB_REPOSITORY':run.REPOSITORY,'GITHUB_EVENT_NAME':'push','GITHUB_REF':'refs/heads/'+run.BRANCH,'GITHUB_SHA':args.expected_sha}
+   with patch.object(run,'CaseBudget',return_value=b),patch.object(run.argparse.ArgumentParser,'parse_args',return_value=args),patch.dict(run.os.environ,env,clear=True),patch.object(R,'NODE',None),patch.object(R,'NODE_SHA',None),patch.object(R,'NATIVE_SHA',None,create=True),patch.object(R,'checked_node',side_effect=lambda:self.clock.advance(6)),patch.object(R,'supervise_bounded') as launch,redirect_stdout(io.StringIO()):
+    exitcode=run.main()
+   launch.assert_not_called();self.assertEqual(exitcode,2);self.assertFalse(current.exists())
+   self.assertTrue((evidence/'preflight-receipt.json').is_file());self.assertTrue((evidence/'preflight-cleanup.json').is_file())
+ def test_expired_child_journal_is_projected_before_cleanup(self):
+  with tempfile.TemporaryDirectory() as d:
+   temp=Path(d).resolve();evidence=temp/'evidence';evidence.mkdir();b=CaseBudget(5,clock=self.clock,alarms=False)
+   ctx={'temp':temp,'evidence':evidence,'head':'a'*40,'tree':'b'*40,'node':Path('/synthetic/node'),'builtinBudget':b}
+   child=R.Capture(childCreated=True,childPID=999,returncode=74,processStopped=True,outputComplete=True,errorCategories=[])
+   def prepare(root,context):
+    directory=root/'builtin-observation-TRACE-0001';directory.mkdir()
+    payload={'pid':999,'stage':'NATIVE_ADMISSION_REFUSED','terminalRefusalCategory':'PREFLIGHT_BOUNDARY_REFUSED','preflightBoundary':{'status':'CHECKED',**{name:name!='permissionReady' for name in run.B.PREFLIGHT_KEYS}},'untrusted':'UNTRUSTED_TEXT_MUST_NOT_PERSIST'}
+    envelope={'schemaVersion':1,'scope':'ISOLATED_NATIVE_TEST_ONLY','durability':'NON_DURABLE','pid':999,'case':'builtin-dual','role':'TRACE','sequence':1,'payload':payload}
+    (directory/'record.json').write_text(json.dumps(envelope))
+   def supervise(*a,**k):self.clock.advance(6);return child
+   with patch.object(run,'check_context'),patch.object(run,'prepare',side_effect=prepare),patch.object(run.B,'BUNDLE_PINS',{},create=True),patch.object(R,'supervise_bounded',side_effect=supervise),patch.dict(run.WITNESSES,{},clear=True):outcome=run.run_case('builtin-dual',ctx)
+   sealed=json.loads((evidence/'builtin-dual-receipt.json').read_text());diagnostic=sealed['builtinObservationDiagnostic']
+   self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL');self.assertTrue(outcome['completion']['temporaryDirectoryRemoved'])
+   self.assertEqual(diagnostic['preflightBoundary']['status'],'CHECKED');self.assertIs(diagnostic['preflightBoundary']['permissionReady'],False)
+   self.assertEqual(diagnostic['trace']['terminalRefusalCategory'],'PREFLIGHT_BOUNDARY_REFUSED')
+   self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(sealed))
+ def test_expired_cold_journal_retains_only_safe_fixed_predicates(self):
+  with tempfile.TemporaryDirectory() as d:
+   temp=Path(d).resolve();evidence=temp/'evidence';evidence.mkdir();current=temp/'current';(current/'product').mkdir(parents=True)
+   ctx={'temp':temp,'evidence':evidence,'current':current,'head':'a'*40,'tree':'b'*40,'node':Path('/synthetic/node'),'helpers':{}}
+   b=CaseBudget(20,clock=self.clock,alarms=False)
+   child=R.Capture(childCreated=True,childPID=999,returncode=0,processStopped=True,outputComplete=True,errorCategories=[])
+   def prepare(root,context):
+    directory=root/'builtin-observation-TRACE-0001';directory.mkdir()
+    payload={'pid':999,'stage':'NATIVE_ADMISSION_REFUSED','preflightBoundary':{'status':'CHECKED',**{name:name!='architectureMatches' for name in run.B.PREFLIGHT_KEYS}},'untrusted':'UNTRUSTED_TEXT_MUST_NOT_PERSIST'}
+    (directory/'record.json').write_text(json.dumps({'schemaVersion':1,'scope':'ISOLATED_NATIVE_TEST_ONLY','durability':'NON_DURABLE','pid':999,'case':'cold1','role':'TRACE','sequence':1,'payload':payload}))
+   def supervise(*a,**k):self.clock.advance(21);return child
+   with patch.object(run,'CaseBudget',return_value=b),patch.object(run,'verify_prior'),patch.object(run,'check_context'),patch.object(run,'prepare',side_effect=prepare),patch.object(R,'supervise_bounded',side_effect=supervise),patch.dict(run.WITNESSES,{},clear=True):outcome=run.run_case('cold1',ctx)
+   sealed=json.loads((evidence/'cold1-receipt.json').read_text());diagnostic=sealed['coldObservationDiagnostic']
+   self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL');self.assertTrue(outcome['completion']['temporaryDirectoryRemoved'])
+   self.assertIs(diagnostic['preflightBoundary']['architectureMatches'],False);self.assertEqual(diagnostic['scope'],'COLD_OBSERVATION_DIAGNOSTIC_ONLY')
+   self.assertIsNone(sealed['runtimeTrace']);self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(sealed))
+
+class MainBudgetIntegrationTests(unittest.TestCase):
+ def exercise(self,slow_installation=0,slow_summary=0,slow_output=0,slow_cleanup=0):
+  clock=Clock()
+  with tempfile.TemporaryDirectory() as d:
+   temp=Path(d).resolve();evidence=temp/'evidence';evidence.mkdir();current=temp/'current';current.mkdir()
+   ctx={'temp':temp,'evidence':evidence,'current':current,'head':'a'*40,'tree':'b'*40,'installation':{},'installationRecordSHA256':'c'*64,'partition':{'legacyNativeNotIncluded':[]}}
+   args=SimpleNamespace(temp_dir=str(temp),evidence_dir=str(evidence),current_dir=str(current),expected_sha='a'*40,node='/synthetic/node')
+   budgets=[];writer=R.atomic_create;remover=R.shutil.rmtree;calls=[]
+   def make_budget(limit):b=CaseBudget(limit,clock=clock,alarms=False);budgets.append(b);return b
+   def case(name,context,prior):
+    calls.append(name);b=context['builtinBudget'] if name=='builtin-dual' else make_budget(20);context['caseBudget']=b
+    completion={'status':'CLEANUP_OK','diagnosticPersisted':True,'temporaryDirectoryRemoved':True,'safeToRunOtherApprovedCase':True}
+    result={'case':name,'status':'PASS','errors':[],'pid':999,'processStopped':True,'completion':completion,'timing':b.snapshot()}
+    for suffix,value in [('receipt',{}),('cleanup',completion),('terminal',{'case':name,'evaluatedOutcome':'PASS'})]:writer(evidence/(name+'-'+suffix+'.json'),value)
+    run.WITNESSES[name]={'result':result,'hashes':{}}
+    return result
+   def write(path,value,**kwargs):
+    if path.name=='installation-receipt.json':clock.advance(slow_installation)
+    if path.name=='summary.json' and value.get('status')=='PASS':clock.advance(slow_summary)
+    return writer(path,value,**kwargs)
+   def remove(path):clock.advance(slow_cleanup);return remover(path)
+   class Output(io.StringIO):
+    charged=False
+    def write(output,value):
+     if slow_output and not output.charged and 'builtin-dual' in value:clock.advance(slow_output);output.charged=True
+     return super().write(value)
+   with patch.object(run,'CaseBudget',side_effect=make_budget),patch.object(run.argparse.ArgumentParser,'parse_args',return_value=args),patch.object(run,'context',return_value=ctx),patch.object(run,'run_case',side_effect=case),patch.object(R,'atomic_create',side_effect=write),patch.object(R.shutil,'rmtree',side_effect=remove),patch.dict(run.WITNESSES,{},clear=True),redirect_stdout(Output()):
+    code=run.main();witnesses=set(run.WITNESSES)
+   files={p.name:json.loads(p.read_text()) for p in evidence.glob('*.json')}
+   return code,files,calls,budgets,witnesses,current.exists()
+ def test_final_installation_receipt_is_charged_to_last_case(self):
+  code,files,calls,budgets,witnesses,exists=self.exercise(slow_installation=21)
+  self.assertEqual(code,2);self.assertFalse(exists);self.assertFalse(budgets[-1].snapshot()['withinBudget'])
+  self.assertEqual(files['summary.json']['status'],'BLOCKED_OR_FAIL');self.assertNotIn('cold2',witnesses)
+ def test_final_summary_write_cannot_leave_a_pass_after_expiration(self):
+  code,files,calls,budgets,witnesses,exists=self.exercise(slow_summary=21)
+  self.assertEqual(code,2);self.assertEqual(files['summary.json']['status'],'BLOCKED_OR_FAIL');self.assertNotIn('cold2',witnesses)
+ def test_slow_result_output_blocks_the_next_case(self):
+  code,files,calls,budgets,witnesses,exists=self.exercise(slow_output=6)
+  self.assertEqual(code,2);self.assertEqual(calls,['builtin-dual']);self.assertEqual(files['summary.json']['status'],'BLOCKED_OR_FAIL')
+  self.assertNotIn('builtin-dual',witnesses)
+ def test_installation_cleanup_is_completed_and_separately_measured(self):
+  code,files,calls,budgets,witnesses,exists=self.exercise(slow_cleanup=7)
+  self.assertEqual(code,0);self.assertFalse(exists);self.assertEqual(budgets[-1].snapshot()['cleanupSeconds'],7)
+  self.assertEqual(files['summary.json']['timing']['cleanupSeconds'],7)
 if __name__=='__main__':unittest.main()

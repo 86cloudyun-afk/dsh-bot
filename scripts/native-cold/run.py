@@ -78,6 +78,10 @@ def context(args,resources=None,budget=None):
     R.require(evidence.parent.resolve(strict=True)==temp and not evidence.exists() and not evidence.is_symlink(),'EVIDENCE_ROOT_REFUSED')
     evidence.mkdir(mode=0o700);evidence=evidence.resolve(strict=True)
     if resources is not None:resources['evidence']=evidence
+    # Register only a canonical, verified owned root before expensive identity I/O.
+    current=Path(args.current_dir)
+    R.require(current.parent.resolve(strict=True)==temp and current.is_dir() and not current.is_symlink() and current.resolve(strict=True)==current,'CURRENT_INSTALLATION_ROOT_REFUSED')
+    if resources is not None:resources['current']=current
     pins=select_platform(sys.platform,platform.machine())
     try:node=Path(args.node).resolve(strict=True)
     except (OSError,ValueError):raise R.SafetyError('NODE_PIN_REFUSED') from None
@@ -86,9 +90,6 @@ def context(args,resources=None,budget=None):
     with node.open('rb') as file:
         R.require(architecture(file.read(32),pins),'NODE_ARCHITECTURE_REFUSED')
     helpers=json.loads((HERE/'bundle-pins.json').read_text())
-    current=Path(args.current_dir)
-    R.require(current.parent.resolve(strict=True)==temp and current.is_dir() and not current.is_symlink() and current.resolve(strict=True)==current,'CURRENT_INSTALLATION_ROOT_REFUSED')
-    if resources is not None:resources['current']=current
     installation_bytes,_,installation_sha=I.fixed(current/'installation-record.json',1024*1024)
     installation=json.loads(installation_bytes)
     R.require(installation['schemaVersion']==1 and installation['scope']=='CURRENT_NATIVE_PRODUCT_AND_SDK','INSTALLATION_RECORD_REFUSED')
@@ -115,7 +116,7 @@ def prepare(root,ctx):
     (root/'binding-config.json').write_text(json.dumps({'source':str(SOURCE),'pins':ctx['pins'],'installed':installed}))
     (root/'binding-config.json').chmod(0o600)
 
-def collect_cold(root,pid,case,helpers):
+def collect_cold(root,pid,case,helpers,diagnostic=None):
     known=set(helpers)|{'binding-config.json','synthetic-empty-home','node-addon-native-custom-loader-'+str(os.getuid())}
     entries=list(root.iterdir());R.require(len(entries)<=208,'COLD_INVENTORY_REFUSED')
     records=[]
@@ -141,6 +142,10 @@ def collect_cold(root,pid,case,helpers):
         value=envelope['payload']
         R.require(type(value) is dict and type(value.get('pid')) is int and value['pid']==pid,'COLD_ENVELOPE_REFUSED')
         R.require(sequence==len(records) or value.get('stage')!='NATIVE_ADMISSION_REFUSED','COLD_TERMINAL_ORDER_REFUSED')
+    if diagnostic is not None:
+        diagnostic.update(B.observation_diagnostic({'TRACE':value},{'TRACE':'TRACE_PRESENT'},
+            {'inventoryValid':True,'recordCounts':{'TRACE':len(records)}},pid))
+        diagnostic['scope']='COLD_OBSERVATION_DIAGNOSTIC_ONLY'
     R.require(T.trace_valid(value,pid),'COLD_TRACE_REFUSED')
     return value,{'recordCount':len(records),'inventoryValid':True,'scope':'ISOLATED_NATIVE_TEST_ONLY','durability':'NON_DURABLE'}
 
@@ -166,17 +171,32 @@ def verify_prior(case,ctx,prior):
               prior['completion']['safeToRunOtherApprovedCase'] and not prior['errors'],'PRIOR_CLEANUP_REFUSED')
     R.require(prior.get('timing',{}).get('withinBudget') is True,'PRIOR_TOTAL_BUDGET_REFUSED')
 
-def block_budget_result(budget,result,completion,cleanup_path):
-    R.require(budget.failed,'CASE_BUDGET_FAILURE_EXPECTED')
+def revoke_case(ctx,result,budget,category):
+    """Revoke disk PASS before any fallible resealing; never restore a witness."""
+    case=result['case'];WITNESSES.pop(case,None)
+    paths={name:ctx['evidence']/(case+'-'+name+'.json') for name in ('receipt','cleanup','terminal')}
     result['status']='BLOCKED_OR_FAIL'
-    if budget.failure_category not in result['errors']:result['errors'].append(budget.failure_category)
-    if completion['safeToRunOtherApprovedCase']:
-        completion['safeToRunOtherApprovedCase']=False
+    if category not in result['errors']:result['errors'].append(category)
+    completion=result.setdefault('completion',{'status':'PREPARATION_INCOMPLETE','diagnosticPersisted':False,'temporaryDirectoryRemoved':False})
+    completion['safeToRunOtherApprovedCase']=False
+    try:
+        with budget.safety_phase('TERMINAL_RECEIPT'):
+            if paths['terminal'].exists():paths['terminal'].unlink()
         completion['budgetBeforeCompletionReceipt']=budget.snapshot()
         with budget.safety_phase('CLEANUP_RECEIPT'):
-            R.require(R.regular(cleanup_path),'BUDGET_COMPLETION_RECORD_REFUSED')
-            cleanup_path.unlink()
-            R.atomic_create(cleanup_path,completion,rollback_on_failure=True)
+            if paths['cleanup'].exists():paths['cleanup'].unlink()
+            R.atomic_create(paths['cleanup'],completion,rollback_on_failure=True)
+        with budget.safety_phase('RETURN_HASHES'):
+            terminal={'case':case,'evaluatedOutcome':'BLOCKED_OR_FAIL','supervisorSignal':result.get('supervisorSignal'),
+                'diagnosticSHA256':R.sha(paths['receipt']),'cleanupSHA256':R.sha(paths['cleanup'])}
+        with budget.safety_phase('TERMINAL_RECEIPT'):R.atomic_create(paths['terminal'],terminal,rollback_on_failure=True)
+    except BaseException:
+        result['errors'].append('TERMINAL_REVOCATION_OR_RESEAL_FAILED')
+        # An absent terminal blocks admission; do not leave a former PASS authoritative.
+        try:
+            if paths['terminal'].exists():paths['terminal'].unlink()
+        except BaseException:result['authoritativeTerminalState']='UNKNOWN_REVOCATION_FAILED'
+    result['timing']=budget.snapshot();result['elapsedSeconds']=result['timing']['wholeWallSeconds']
 
 def run_case(case,ctx,prior=None):
     R.require(case in CASES,'CASE_REFUSED')
@@ -189,6 +209,7 @@ def run_case(case,ctx,prior=None):
     R.require(not any(p.exists() or p.is_symlink() for p in paths.values()),'ONE_SHOT_REFUSED')
     root=None;errors=[];trace=None;counts={};diagnostics=[];observation=None;startup=None;eligible=False
     builtin_diagnostic=B.observation_diagnostic({}, {}, {}, None) if case=='builtin-dual' else None
+    cold_diagnostic=B.observation_diagnostic({}, {}, {}, None) if case!='builtin-dual' else None
     child=R.Capture(childCreated=False,childPID=None,returncode=None,processStopped=True,outputComplete=False,errorCategories=[])
     completion={'status':'PREPARATION_INCOMPLETE','diagnosticPersisted':False,'temporaryDirectoryRemoved':False,'safeToRunOtherApprovedCase':False}
     stop=R.SupervisorSignals();entered=False;start=budget.start
@@ -220,7 +241,7 @@ def run_case(case,ctx,prior=None):
             with budget.phase('OBSERVATION'):
                 if case=='builtin-dual':trace,observation=builtin_observation(root,child['childPID'],builtin_diagnostic)
                 else:
-                    trace,observation=collect_cold(root,child['childPID'],case,ctx['helpers'])
+                    trace,observation=collect_cold(root,child['childPID'],case,ctx['helpers'],cold_diagnostic)
                     counts,diagnostics=R.parse_output(child.stdout)
             with budget.phase('CONTEXT_AFTER'):
                 check_context(ctx)
@@ -242,6 +263,16 @@ def run_case(case,ctx,prior=None):
             errors.append('COLLECTION_OR_PREPARATION_FAILURE')
             if builtin_diagnostic is not None:builtin_diagnostic['validationFailureCategory']='COLLECTION_OR_PREPARATION_FAILURE'
         finally:stop.interruptible=False
+        if budget.failed and trace is None and root is not None and child['childCreated'] and child['processStopped']:
+            # Existing NON_DURABLE journals must be safely projected before removal.
+            # Failure finalization remains charged, and never makes this case eligible.
+            try:
+                with budget.safety_phase('OBSERVATION'):
+                    if case=='builtin-dual':trace,observation=builtin_observation(root,child['childPID'],builtin_diagnostic)
+                    else:trace,observation=collect_cold(root,child['childPID'],case,ctx['helpers'],cold_diagnostic)
+            except R.SafetyError as error:
+                if error.code not in errors:errors.append(error.code)
+            except BaseException:errors.append('FAILURE_JOURNAL_COLLECTION_FAILED')
         if stop.received is not None:errors.append('SUPERVISOR_SIGNAL');eligible=False
         if startup is None:
             try:
@@ -261,6 +292,7 @@ def run_case(case,ctx,prior=None):
             'process':dict(child),'errors':list(errors),'runtimeTrace':trace,'testCounts':counts,'safeColdDiagnostics':diagnostics,
             'startupDiagnostic':startup,'boundedCaptureMetadata':metadata,'observationContract':observation,'supervisorSignal':stop.received,
             'builtinObservationDiagnostic':builtin_diagnostic,
+            'coldObservationDiagnostic':cold_diagnostic,
             'timingAtCollection':budget.snapshot(),
             'rawOutputSavedOrPrinted':False,'childDurability':'NON_DURABLE','productionDurabilityEstablished':False,
             'modelObservation':'UNKNOWN_NOT_INSTRUMENTED' if case=='builtin-dual' else trace['modelAttempts'] if trace else 'UNKNOWN',
@@ -278,37 +310,22 @@ def run_case(case,ctx,prior=None):
             'model':record['modelObservation'],'elapsedSeconds':budget.snapshot()['wholeWallSeconds'],'productionDurabilityEstablished':False}
     try:
         hashes={}
-        try:
-            with budget.safety_phase('RETURN_HASHES') if budget.failed else budget.phase('RETURN_HASHES'):
-                for path in (paths['receipt'],paths['cleanup']):hashes[path.name]=R.sha(path)
-        except R.SafetyError:
-            if not budget.failed:raise
-            block_budget_result(budget,result,completion,paths['cleanup'])
-            with budget.safety_phase('RETURN_HASHES'):
-                for path in (paths['receipt'],paths['cleanup']):hashes[path.name]=R.sha(path)
+        with budget.safety_phase('RETURN_HASHES') if budget.failed else budget.phase('RETURN_HASHES'):
+            for path in (paths['receipt'],paths['cleanup']):hashes[path.name]=R.sha(path)
         terminal={'case':case,'evaluatedOutcome':result['status'],'supervisorSignal':stop.received,
             'diagnosticSHA256':hashes[paths['receipt'].name],'cleanupSHA256':hashes[paths['cleanup'].name]}
-        try:
-            with budget.safety_phase('TERMINAL_RECEIPT') if budget.failed else budget.phase('TERMINAL_RECEIPT'):
-                R.atomic_create(paths['terminal'],terminal,rollback_on_failure=True)
-                hashes[paths['terminal'].name]=R.sha(paths['terminal'])
-        except R.SafetyError:
-            if not budget.failed:raise
-            block_budget_result(budget,result,completion,paths['cleanup'])
-            terminal['evaluatedOutcome']='BLOCKED_OR_FAIL'
-            with budget.safety_phase('RETURN_HASHES'):
-                hashes[paths['cleanup'].name]=R.sha(paths['cleanup'])
-                terminal['cleanupSHA256']=hashes[paths['cleanup'].name]
-            if paths['terminal'].exists():paths['terminal'].unlink()
-            with budget.safety_phase('TERMINAL_RECEIPT'):
-                R.atomic_create(paths['terminal'],terminal,rollback_on_failure=True)
-                hashes[paths['terminal'].name]=R.sha(paths['terminal'])
+        with budget.safety_phase('TERMINAL_RECEIPT') if budget.failed else budget.phase('TERMINAL_RECEIPT'):
+            R.atomic_create(paths['terminal'],terminal,rollback_on_failure=True)
+            hashes[paths['terminal'].name]=R.sha(paths['terminal'])
         if budget.failed and budget.failure_category not in errors:errors.append(budget.failure_category)
         result['timing']=budget.snapshot();result['elapsedSeconds']=result['timing']['wholeWallSeconds']
-        if passed and result['status']=='PASS' and result['timing']['withinBudget']:WITNESSES[case]={'result':result,'hashes':hashes}
-    except BaseException:errors.append('TERMINAL_WRITE_FAILED');result['status']='BLOCKED_OR_FAIL';completion['safeToRunOtherApprovedCase']=False
-    result.setdefault('timing',budget.snapshot());result['elapsedSeconds']=result['timing']['wholeWallSeconds']
-    if not result['timing']['withinBudget']:result['status']='BLOCKED_OR_FAIL';completion['safeToRunOtherApprovedCase']=False
+        # Check after snapshot creation too: its work may have consumed the remainder.
+        if not budget.failed:
+            with budget.phase('CASE_RETURN'):pass
+        if passed and result['status']=='PASS' and not budget.failed:WITNESSES[case]={'result':result,'hashes':hashes}
+        elif budget.failed:revoke_case(ctx,result,budget,budget.failure_category)
+    except R.SafetyError as error:revoke_case(ctx,result,budget,error.code)
+    except BaseException:revoke_case(ctx,result,budget,'TERMINAL_WRITE_FAILED')
     return result
 
 def preflight_failure(args,category,budget=None,resources=None):
@@ -325,6 +342,22 @@ def preflight_failure(args,category,budget=None,resources=None):
     else:record['diagnosticPersisted']=True
     print(json.dumps(record),flush=True)
     return 2
+
+def revoke_parent(ctx,results,completion,budget,category):
+    """Remove a former summary PASS before fallible failure finalization."""
+    path=ctx['evidence']/'summary.json'
+    try:
+        if path.exists():path.unlink()
+    except BaseException:completion['summaryRevocationStatus']='UNKNOWN_REVOCATION_FAILED'
+    if results:revoke_case(ctx,results[-1],budget,category)
+    completion['safeToRunOtherApprovedCase']=False
+    completion['budgetBeforeCompletionReceipt']=budget.snapshot()
+    try:
+        with budget.safety_phase('CLEANUP_RECEIPT'):
+            path=ctx['evidence']/'installation-cleanup.json'
+            if path.exists():path.unlink()
+            R.atomic_create(path,completion,rollback_on_failure=True)
+    except BaseException:completion['status']='COMPLETION_RESEAL_FAILED'
 
 def main():
     budget=CaseBudget(5);resources={}
@@ -344,26 +377,53 @@ def main():
     try:
         for case in CASES:
             result=run_case(case,ctx,prior);results.append(result)
+            budget=ctx['caseBudget']
             # The first cold result is durably recorded and printed before the second can start.
-            print(json.dumps(result,sort_keys=True),flush=True)
+            try:
+                with budget.safety_phase('CASE_OUTPUT') if budget.failed else budget.phase('CASE_OUTPUT'):
+                    print(json.dumps({**result,'publication':'PROVISIONAL_UNTIL_PARENT_CHECKPOINT'},sort_keys=True),flush=True)
+                if not budget.failed:
+                    with budget.phase('CASE_RETURN'):result['timing']=budget.snapshot()
+            except R.SafetyError as error:revoke_case(ctx,result,budget,error.code)
+            except BaseException:revoke_case(ctx,result,budget,'CASE_OUTPUT_FAILED')
             if result['status']!='PASS':break
             prior=result
     except R.SafetyError as error:
         results.append({'case':case,'status':'BLOCKED_OR_FAIL','errors':[error.code],'pid':None})
     except BaseException:
         results.append({'case':case,'status':'BLOCKED_OR_FAIL','errors':['PARENT_COMPLETION_FAILURE'],'pid':None})
+    budget=ctx.get('caseBudget',budget)
     installation_record={'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'installedIdentity':ctx['installation'],
         'installationRecordSHA256':ctx['installationRecordSHA256'],'results':results,'actualSDKNativeExecutedByBuilder':False}
     stopped=all(r.get('processStopped',r.get('pid') is None) is True for r in results)
-    installation_completion=R.persist_and_cleanup(ctx['current'],ctx['evidence']/'installation-receipt.json',ctx['evidence']/'installation-cleanup.json',installation_record,stopped,len(results)==3 and all(r['status']=='PASS' for r in results))
+    installation_completion=R.persist_and_cleanup(ctx['current'],ctx['evidence']/'installation-receipt.json',ctx['evidence']/'installation-cleanup.json',installation_record,stopped,len(results)==3 and all(r['status']=='PASS' for r in results),budget=budget)
+    if budget.failed:revoke_parent(ctx,results,installation_completion,budget,budget.failure_category)
     summary={'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'status':'PASS' if len(results)==3 and all(r['status']=='PASS' for r in results) and installation_completion['safeToRunOtherApprovedCase'] else 'BLOCKED_OR_FAIL',
         'installationCompletion':installation_completion,
         'results':results,'actualChildren':sum(r['pid'] is not None for r in results),'maximumChildren':3,
         'unstartedCases':[c for c in CASES if c not in [r['case'] for r in results if r['pid'] is not None]],'noRetry':True,
-        'legacyNativeNotIncluded':ctx['partition']['legacyNativeNotIncluded'],'productionDurabilityEstablished':False}
-    try:R.atomic_create(ctx['evidence']/'summary.json',summary)
-    except BaseException:summary['status']='BLOCKED_OR_FAIL'
-    print(json.dumps({'status':summary['status'],'actualChildren':summary['actualChildren'],'unstartedCases':summary['unstartedCases']}),flush=True)
+        'legacyNativeNotIncluded':ctx['partition']['legacyNativeNotIncluded'],'productionDurabilityEstablished':False,
+        'timingMeasurementPoint':'BEFORE_SUMMARY_RECEIPT_WRITE','successBudgetCheckIncludesSummaryCommitAndReturn':True}
+    try:
+        with budget.safety_phase('SUMMARY_OUTPUT') if budget.failed else budget.phase('SUMMARY_OUTPUT'):
+            print(json.dumps({'status':summary['status'],'publication':'PROVISIONAL_UNTIL_PARENT_CHECKPOINT','actualChildren':summary['actualChildren'],'unstartedCases':summary['unstartedCases']}),flush=True)
+        with budget.safety_phase('SUMMARY_RECEIPT') if budget.failed else budget.phase('SUMMARY_RECEIPT'):
+            summary['timing']=budget.snapshot()
+            R.atomic_create(ctx['evidence']/'summary.json',summary,rollback_on_failure=True)
+        if not budget.failed:
+            with budget.phase('RUN_RETURN'):summary['timing']=budget.snapshot()
+    except R.SafetyError as error:
+        revoke_parent(ctx,results,installation_completion,budget,error.code);summary['status']='BLOCKED_OR_FAIL'
+    except BaseException:
+        revoke_parent(ctx,results,installation_completion,budget,'PARENT_COMPLETION_FAILURE');summary['status']='BLOCKED_OR_FAIL'
+    if summary['status']!='PASS':
+        summary['timing']=budget.snapshot()
+        try:
+            with budget.safety_phase('SUMMARY_RECEIPT'):
+                path=ctx['evidence']/'summary.json'
+                if path.exists():path.unlink()
+                R.atomic_create(path,summary,rollback_on_failure=True)
+        except BaseException:summary['diagnosticPersisted']=False
     return 0 if summary['status']=='PASS' else 2
 
 if __name__=='__main__':
