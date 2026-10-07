@@ -196,6 +196,10 @@ export interface OwnedWorkSessionPort {
  readonly resume:(envelope:CommandEnvelope,payload:WorkTarget)=>Receipt<WorkSessionView>;
  /** Safe private admission query; actual continuation still performs a fresh branded receipt check. */
  readonly canResumeOriginal:(target:WorkTarget)=>boolean;
+ /** Await only an exact original lookup, then freshly inspect it before new continuation effects. */
+ readonly collectContinuation:(target:WorkTarget,signal?:AbortSignal)=>Promise<WorkSessionView>;
+ /** Fresh exact latest-parent proof for a new restored-child input; no lineage replacement or model send. */
+ readonly verifyContinuationParent:(target:WorkTarget,signal?:AbortSignal)=>Promise<void>;
  readonly spawnChild:{(request:WorkChildRequest):Readonly<{status:'unsupported';code:'child_spawn_unsupported'}>;(envelope:CommandEnvelope,request:WorkChildRequest,signal?:AbortSignal):Promise<WorkSessionView>};
  readonly dispose:()=>void;
 }

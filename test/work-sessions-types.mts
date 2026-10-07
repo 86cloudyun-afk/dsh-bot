@@ -7,6 +7,9 @@ const h=new Host({ledger,ownerHumanId:'synthetic',ownerCapability:caller,workSes
 const p:OwnedWorkSessionPort=h.openOwnedWorkSessionPort(caller,{botId:'b',botEpoch:1,authorityEpoch:1});
 const v:WorkSessionView=p.delegate(e,{task_id:'t',goal:'g',completion_condition:'c'}).result;
 p.admit(e,{task_id:'t',generation:1});p.query({task_ids:['t']});await p.collect({task_id:'t',generation:1});p.dispose();
+const continuationCheck:Promise<void>=p.verifyContinuationParent({task_id:'t',generation:1},new AbortController().signal);
+// @ts-expect-error Original selectors cannot submit serialized parent proof.
+p.verifyContinuationParent({task_id:'t',generation:1,parentProof:{remote:'settled'}});
 // @ts-expect-error completion condition is mandatory
 p.delegate(e,{task_id:'t',goal:'g'});
 // @ts-expect-error generation is numeric

@@ -19,6 +19,7 @@ import {Ledger} from '../src/ledger.mjs';
 import {Host} from '../src/host.mjs';
 import {DshAdapter} from '../src/adapter.mjs';
 import {digest} from '../src/errors.mjs';
+import {freezeInitialSessionMode} from '../src/initial-session-blank.mjs';
 
 export const preset='synthetic/empty';
 export const route=Object.freeze({provider:'deepseek-official',model:'deepseek-flash',maxTokens:16,reasoningEffort:'off'});
@@ -48,10 +49,12 @@ export async function generationFixture(t,fetcher=()=>syntheticResponse(),option
  const plugins={llm:LlmRuntime,sessions:SessionStore,projections:Projections,persistence:Persistence,prompt:SystemPrompt,tools:Tools,agents:Agents,loop:AgentLoop,presets:Presets,preset:Preset,query:Query,protectedProviders:Provider.DeepSeekProtectedProviders,provider};if(options.realWorkspace){const [{default:storage},storageJson,storageDomain,{default:workspace}]=await Promise.all([import('@deepseek-ai/dsh-storage'),import('@deepseek-ai/dsh-storage-json'),import('@deepseek-ai/dsh-storage-domain'),import('@deepseek-ai/dsh-workspace')]);Object.assign(plugins,{storage,storageJson,storageDomain,workspace});}Object.assign(ctx.loader.builtins,plugins);
  const rows=Object.keys(plugins).map(id=>({id,name:`cordis:${id}`,config:id==='storageJson'?{root:join(directory,'workspace-storage')}:id==='storageDomain'?{backend:'json'}:id==='persistence'?{root:join(directory,'sessions'),compression:'none'}:id==='loop'?{agents:[]}:id==='presets'?{default:preset}:id==='preset'?{id:preset,plugins:[]}:id==='prompt'?{personaPrefix:'',includeHarnessIdentity:false}:{}}));
  await writeFile(join(directory,'fixture.json'),JSON.stringify(rows));await ctx.loader.root.update(rows);await ctx.loader.await();for(const entry of ctx.loader.entries())await entry.fiber?.await();
+ const initialization=options.initialization===undefined?undefined:freezeInitialSessionMode(options.initialization);
+ if(initialization){const [{default:SandboxPolicy},{default:Approval},{default:PermissionPresets}]=await Promise.all([import('@deepseek-ai/dsh-sandbox-policy'),import('@deepseek-ai/dsh-user-approval'),import('@deepseek-ai/dsh-permission-presets')]);await ctx.plugin(SandboxPolicy,{mode:initialization.sandboxMode,workspaceRoot:directory});await ctx.plugin(Approval,{policy:initialization.approvalPolicy});ctx.provide('shell',{sandboxMode:initialization.sandboxMode});await ctx.plugin(PermissionPresets,{defaultPreset:initialization.permissionPreset,presets:{[initialization.permissionPreset]:{sandbox:initialization.sandboxMode,approval:initialization.approvalPolicy}}});}
  const caller=ctx.fiber,host=new Host({ledger,ownerHumanId:'synthetic-sdk-loop-owner',ownerCapability:caller,adapter:new DshAdapter(ctx)});await host.adapter.refreshSessionModeCatalog();
  const command=(name,payload,revision=null,epochs={})=>host.executeOwned(caller,envelope(name,payload,revision,epochs),payload).result;
  const bot=options.botId===undefined?command('createBot',{name:'Synthetic Generation Bot',config:{contact:{provider:route.provider,model:route.model},agentPreset:preset}}):host.object('bot',options.botId);
- const prepareGeneration=(intent,role='work')=>({prepared:Native.prepareOwnedGenerationSource({ownerCtx:ctx,providerFactory:ctx.deepseekProtectedProviders.lookup(route.provider),sessionId:intent.sessionId,role,route,isCurrent:()=>true}),route});
+ const prepareGeneration=(intent,role='work')=>({prepared:Native.prepareOwnedGenerationSource({ownerCtx:ctx,providerFactory:ctx.deepseekProtectedProviders.lookup(route.provider),sessionId:intent.sessionId,role,route,isCurrent:()=>true,initialization}),route});
  const waitRequest=async(count=1)=>{if(requests>=count)return;const pending=Promise.withResolvers(),waiter={count,resolve:pending.resolve};requestWaiters.add(waiter);let timer;try{await Promise.race([pending.promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('SYNTHETIC_NATIVE_DISPATCH_TIMEOUT')),2000);})]);}finally{clearTimeout(timer);requestWaiters.delete(waiter);}};
  return {Native,ctx,ledger,host,caller,bot,directory,command,prepareGeneration,requests:()=>requests,waitRequest};
 }

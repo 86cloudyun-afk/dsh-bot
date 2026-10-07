@@ -123,3 +123,54 @@ test('connection replacement suppresses a late continuation while retaining the 
   assert.equal(f.calls.filter(c=>c.endpoint==='continueWork').length,1);assert.deepEqual(f.calls.find(c=>c.endpoint==='inspectWorkContinuation').frame,op);
  }finally{await f.dispose();}
 });
+
+test('refreshing records on the same connection and selected Bot preserves an in-flight continuation response',async()=>{
+ const f=fixture();let finish;
+ f.setResponder(async(original,channel,endpoint,frame,signal)=>{const result=await original(channel,endpoint,frame,signal);
+  if(endpoint==='continueWork')return new Promise(resolve=>{finish=()=>resolve(result);});return result;});
+ const refreshButton=tree=>{if(!tree||typeof tree!=='object')return null;if(tree.type==='button'&&tree.children?.includes('refresh'))return tree;
+  for(const child of tree.children??[]){const found=Array.isArray(child)?child.map(refreshButton).find(Boolean):refreshButton(child);if(found)return found;}return null;};
+ try{let tree=await f.settle();const pending=find(tree,'data-dsh-bot-work-continue').props.onClick();await tick();assert.equal(typeof finish,'function');
+  const call=f.calls.find(c=>c.endpoint==='continueWork'),original=structuredClone(f.server.continuation);assert.equal(call.signal.aborted,false);
+  refreshButton(tree).props.onClick();await f.settle();assert.equal(call.signal.aborted,false,'a data refresh must not revoke the unchanged owner connection');
+  finish();await pending;tree=await f.settle();
+  const retained=Object.values(JSON.parse(f.storage.get('dsh-bot/gui-controls/original-ledger/original-bot')).operations)[0];
+  assert.equal(retained.state,'accepted');assert.equal(retained.nextGeneration,2);
+  assert.equal(f.calls.filter(c=>c.endpoint==='continueWork').length,1);assert.deepEqual(f.server.continuation,original);
+  assert.equal(find(tree,'data-dsh-bot-select').props.value,'original-bot');
+ }finally{finish?.();await f.dispose();}
+});
+
+test('a pending status bootstrap does not replace the original ledger identity of an in-flight continuation',async()=>{
+ const f=fixture();let finish,readFinish,holdBootstrap=false;
+ f.setResponder(async(original,channel,endpoint,frame,signal)=>{const result=await original(channel,endpoint,frame,signal);
+  if(endpoint==='continueWork')return new Promise(resolve=>{finish=()=>resolve(result);});
+  if(endpoint==='bootstrap'&&holdBootstrap)return new Promise(resolve=>{readFinish=()=>resolve(result);});return result;});
+ const refreshButton=tree=>{if(!tree||typeof tree!=='object')return null;if(tree.type==='button'&&tree.children?.includes('refresh'))return tree;
+  for(const child of tree.children??[]){const found=Array.isArray(child)?child.map(refreshButton).find(Boolean):refreshButton(child);if(found)return found;}return null;};
+ try{const tree=await f.settle(),pending=find(tree,'data-dsh-bot-work-continue').props.onClick();await tick();assert.equal(typeof finish,'function');
+  holdBootstrap=true;refreshButton(tree).props.onClick();await f.settle();assert.equal(typeof readFinish,'function');
+  finish();await pending;holdBootstrap=false;readFinish();await f.settle();
+  const retained=Object.values(JSON.parse(f.storage.get('dsh-bot/gui-controls/original-ledger/original-bot')).operations)[0];
+  assert.equal(retained.state,'accepted','an unfinished read must not invalidate a response for the unchanged original ledger');
+  assert.equal(retained.nextGeneration,2);assert.equal(f.calls.filter(c=>c.endpoint==='continueWork').length,1);
+ }finally{finish?.();readFinish?.();await f.dispose();}
+});
+
+test('a changed authenticated ledger on the same connection cannot accept the old continuation or replace its original record',async()=>{
+ const f=fixture();let finish,changed=false;
+ f.setResponder(async(original,channel,endpoint,frame,signal)=>{const result=await original(channel,endpoint,frame,signal);
+  if(endpoint==='continueWork')return new Promise(resolve=>{finish=()=>resolve(result);});
+  if(endpoint==='bootstrap'&&changed)return{ok:true,value:{...result.value,ledgerId:'replacement-ledger'}};return result;});
+ const refreshButton=tree=>{if(!tree||typeof tree!=='object')return null;if(tree.type==='button'&&tree.children?.includes('refresh'))return tree;
+  for(const child of tree.children??[]){const found=Array.isArray(child)?child.map(refreshButton).find(Boolean):refreshButton(child);if(found)return found;}return null;};
+ try{const tree=await f.settle(),pending=find(tree,'data-dsh-bot-work-continue').props.onClick();await tick();assert.equal(typeof finish,'function');
+  const original=structuredClone(f.server.continuation);changed=true;refreshButton(tree).props.onClick();await f.settle();
+  finish();await pending;const next=await f.settle();
+  const retained=Object.values(JSON.parse(f.storage.get('dsh-bot/gui-controls/original-ledger/original-bot')).operations)[0];
+  assert.equal(retained.state,'unknown');assert.equal(retained.operationId,original.operationId);assert.equal(retained.nonce,original.nonce);
+  assert.equal(f.storage.has('dsh-bot/gui-controls/replacement-ledger/original-bot'),false);
+  assert.equal(f.storage.has('dsh-bot/gui-create/replacement-ledger'),false,'a contradictory ledger must not adopt another creation identity');
+  assert.equal(find(next,'data-dsh-bot-work-continue').props.disabled,true);assert.equal(f.calls.filter(c=>c.endpoint==='continueWork').length,1);
+ }finally{finish?.();await f.dispose();}
+});
