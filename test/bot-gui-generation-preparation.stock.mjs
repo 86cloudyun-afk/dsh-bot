@@ -105,12 +105,18 @@ test('copied parent capabilities and JSON child lineage cannot open a child jour
  const work=f.ledger.get('workTask',canonical([f.bot.botId,payload.task_id]));
  f.ledger.put('workTask',canonical([f.bot.botId,payload.task_id]),{...work,depth:1,parentTaskId:parentBinding.taskId,
   parentSessionId:parentBinding.sessionId,parentGeneration:parentBinding.generation});
+ const message=createUserMessage({source:{kind:'dsh-bot'},content:[{type:'text',text:'Synthetic child input'}]}),plannedBinding={...parentBinding,
+  taskId:work.taskId,sessionId:work.sessionId,operationId:'synthetic-child-original-input',nonce:'synthetic-child-original-nonce',inputMessageId:message.id,messageIdentity:digest(message),
+  slotLease:{taskId:work.taskId,sessionId:work.sessionId,generation:1,operationId:'synthetic-child-original-input'}};
+ const childKey=canonical([work.botId,work.taskId,1]);
+ f.ledger.put('workGeneration',childKey,{...f.ledger.get('workGeneration',childKey),binding:plannedBinding,slotLease:plannedBinding.slotLease});
+ f.ledger.put('workDelivery',childKey,{sessionId:work.sessionId,generation:1,operationId:plannedBinding.operationId,message});
  const intent={operationId:'synthetic-child-creation',sessionId:work.sessionId,kind:'execution',botId:work.botId,botEpoch:work.botEpoch,
   taskId:work.taskId,taskEpoch:work.taskEpoch,taskRevision:work.taskRevision,configVersion:work.configVersion,authorizationRef:'native-owner',authorityEpoch:work.authorityEpoch,
-  rootHumanInstructionRef:'synthetic-child-refusal',deadline:null,cwd:f.directory,agentPreset:preset,state:'prepared',workBinding:{task_id:payload.task_id,generation:1},workDepth:1,parentBinding};
+  rootHumanInstructionRef:'synthetic-child-refusal',deadline:null,cwd:f.directory,agentPreset:preset,state:'prepared',workBinding:{task_id:payload.task_id,generation:1},workDepth:1,parentBinding,plannedBinding};
  f.ledger.put('creation',intent.operationId,intent);
  assert.equal(typeof f.prepare.prepareChild,'function','missing private genuine-parent preparation callback');
- await assert.rejects(()=>f.prepare.prepareChild(intent,{create:true,mainSessionId:f.main.sessionId,parentSource:{...source},parentGeneration:{},parentBinding}),{code:'gui_child_source_required'});
+ await assert.rejects(()=>f.prepare.prepareChild(intent,{create:true,mainSessionId:f.main.sessionId,parentSource:{...source},parentGeneration:{},parentBinding,plannedBinding}),{code:'gui_child_source_required'});
  assert.equal(f.ctx.agents.get(work.sessionId),undefined);assert.equal(f.requests(),0);
  await assert.rejects(lstat(join(f.directory,'owned-generations',digest({botId:f.bot.botId,sessionId:work.sessionId,role:'work'}))),{code:'ENOENT'});
 });

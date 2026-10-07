@@ -10,6 +10,6 @@ export declare function createGuiGenerationPreparation(options:{
 }):Readonly<{
   prepare(intent:CreationIntent,options:{role:'main'|'work';create:boolean;mainSessionId:string;delegateTool?:unknown;plannedBinding?:OwnedGenerationBinding}):Promise<Readonly<OwnedGenerationPreparation>>;
   /** Genuine original parent capabilities are supplied only by the private product callback. */
-  prepareChild(intent:CreationIntent,options:{create:boolean;mainSessionId:string;parentSource:unknown;parentGeneration:unknown;parentBinding:OwnedGenerationBinding}):Promise<Readonly<OwnedGenerationPreparation>>;
+  prepareChild(intent:CreationIntent,options:{create:boolean;mainSessionId:string;parentSource:unknown;parentGeneration:unknown;parentBinding:OwnedGenerationBinding;plannedBinding:OwnedGenerationBinding}):Promise<Readonly<OwnedGenerationPreparation>>;
   close():Promise<void>;
 }>;

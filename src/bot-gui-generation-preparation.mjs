@@ -9,7 +9,7 @@ import {createGuiGenerationPolicy} from './bot-gui-generation-policy.mjs';
 
 const identity=value=>value?.[symbols.original]??value;
 const coordinates=intent=>canonical(['operationId','sessionId','cwd','agentPreset','kind','botId','botEpoch',
-  'configVersion','authorityEpoch','taskId','taskEpoch','taskRevision','workBinding','workDepth','parentBinding'].map(key=>intent?.[key]??null));
+  'configVersion','authorityEpoch','taskId','taskEpoch','taskRevision','workBinding','workDepth','parentBinding','plannedBinding'].map(key=>intent?.[key]??null));
 const positive=value=>Number.isSafeInteger(value)&&value>0;
 const same=(a,b)=>canonical(a??null)===canonical(b??null);
 const fullWorkBinding=binding=>binding&&Object.getPrototypeOf(binding)===Object.prototype
@@ -62,18 +62,24 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
       &&delivery?.sessionId===binding.sessionId&&delivery.generation===binding.generation&&delivery.operationId===binding.operationId
       &&delivery.message?.id===binding.inputMessageId&&digest(delivery.message)===binding.messageIdentity,'gui_parent_binding_required');
   }
-  function parentPlan(intent,options){
-    requireValue(options.role==='work'&&options.delegateTool?.name==='dsh_bot_delegate','gui_parent_delegate_required');
+  function workPlan(intent,options){
     originalInput(options.plannedBinding);
     const work=host.ledger.get('workTask',canonical([intent.botId,intent.workBinding?.task_id])),binding=options.plannedBinding;
-    requireValue(work.depth===0&&intent.workDepth!==1&&binding.botId===intent.botId&&binding.taskId===intent.taskId
+    requireValue((intent.plannedBinding===undefined||same(intent.plannedBinding,binding))&&binding.botId===intent.botId&&binding.taskId===intent.taskId
       &&binding.sessionId===intent.sessionId&&binding.generation===work.generation&&binding.botEpoch===intent.botEpoch
       &&binding.taskEpoch===intent.taskEpoch&&binding.taskRevision===intent.taskRevision&&binding.authorityEpoch===intent.authorityEpoch
       &&binding.configVersion===intent.configVersion,'gui_parent_binding_required');
+    return work;
+  }
+  function parentPlan(intent,options){
+    requireValue(options.role==='work'&&options.delegateTool?.name==='dsh_bot_delegate','gui_parent_delegate_required');
+    const work=workPlan(intent,options);
+    requireValue(work.depth===0&&intent.workDepth!==1,'gui_parent_binding_required');
   }
   function childPlan(intent,options,sdk){
-    requireValue(options.create===true&&options.delegateTool===undefined&&options.plannedBinding===undefined
+    requireValue(options.create===true&&options.delegateTool===undefined
       &&intent.workDepth===1&&same(intent.parentBinding,options.parentBinding),'gui_child_binding_required');
+    workPlan(intent,options);
     originalInput(options.parentBinding);
     const work=host.ledger.get('workTask',canonical([intent.botId,intent.workBinding?.task_id])),binding=options.parentBinding;
     const parent=host.ledger.list('workTask').find(row=>row.botId===intent.botId&&row.taskId===binding.taskId&&row.sessionId===binding.sessionId);
@@ -84,6 +90,7 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
   async function prepare(intent,options,child=false){
       original(intent,options);const consumedKey=canonical([options.role,intent.sessionId]);
       if(!child&&options.role==='work'&&options.delegateTool!==undefined)parentPlan(intent,options);
+      else if(!child&&options.role==='work'&&options.plannedBinding!==undefined)workPlan(intent,options);
       requireValue(!consumed.has(consumedKey),'gui_native_preparation_consumed');consumed.add(consumedKey);
       const sdk=await loadOwnedGenerationSdk();original(intent,options);
       if(child)childPlan(intent,options,sdk);
@@ -103,7 +110,8 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
           configVersion:intent.configVersion,authorityEpoch:intent.authorityEpoch,mainSessionId:options.mainSessionId,sessionId:intent.sessionId,
           role:options.role,isOwnerCurrent:()=>{try{current();return true;}catch{return false;}},canModelDispatch});
         const common={ownerCtx,providerFactory,sessionId:intent.sessionId,route:nativeRoute,initialization:mode,journal,
-          isCurrent:policy.isCurrent,canDispatch:policy.canDispatch};
+          isCurrent:policy.isCurrent,canDispatch:policy.canDispatch,
+          ...(options.role==='work'&&(!options.delegateTool||child)&&options.plannedBinding?{plannedBinding:options.plannedBinding}:{})};
         if(!child&&options.role==='work'&&options.delegateTool!==undefined)parentPlan(intent,options);
         if(child)childPlan(intent,options,sdk);
         const prepared=child?sdk.prepareOwnedChildGenerationSource(options.parentSource,options.parentGeneration,common)
