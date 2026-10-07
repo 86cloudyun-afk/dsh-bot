@@ -19,9 +19,9 @@ class ContractTests(unittest.TestCase):
         result = check_partition(ROOT)
         self.assertEqual(result['originalFiles'], 40)
         self.assertEqual(result['movedCases'], 2)
-        self.assertEqual(result['additionalPureFiles'], 7)
+        self.assertEqual(result['additionalPureFiles'], 9)
         self.assertEqual(result['extendedPureFiles'], 3)
-        self.assertEqual(result['currentPureFiles'], 47)
+        self.assertEqual(result['currentPureFiles'], 49)
         self.assertTrue(result['originalBodyUnionExact'])
         self.assertEqual(result['intersection'], [])
 
@@ -55,6 +55,7 @@ class CurrentPurePartitionTests(unittest.TestCase):
         'test/bot-gui-bootstrap.test.mjs','test/bot-gui-controls.test.mjs',
         'test/bot-gui-generation-policy.test.mjs','test/bot-gui-profile.test.mjs',
         'test/bot-gui-startup.test.mjs','test/initial-session-blank.test.mjs',
+        'test/owned-bot-lifecycle.test.mjs','test/owned-generation-input-window.test.mjs',
         'test/work-generation-bridge.test.mjs',
     )
     PREFIX_BYTES={'test/adapter.test.mjs':1265,'test/bot-client-owner.test.mjs':21431,'test/package-snapshot.test.mjs':6753}
@@ -105,7 +106,7 @@ class CurrentPurePartitionTests(unittest.TestCase):
     def test_explicit_current_partition_reports_historical_and_pure_extension_evidence(self):
         with self.owned() as (root,manifest):
             result=self.approved(root)
-            self.assertEqual((result['originalFiles'],result['movedCases'],result['additionalPureFiles'],result['extendedPureFiles'],result['currentPureFiles']),(40,2,7,3,47))
+            self.assertEqual((result['originalFiles'],result['movedCases'],result['additionalPureFiles'],result['extendedPureFiles'],result['currentPureFiles']),(40,2,9,3,49))
             self.assertEqual(result['additionalPureInventory'],manifest['additionalPureFiles'])
             self.assertEqual(set(result['extendedPureInventory']),set(self.PREFIX_BYTES))
             for name,row in result['extendedPureInventory'].items():

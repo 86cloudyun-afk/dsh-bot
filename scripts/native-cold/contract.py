@@ -10,6 +10,7 @@ ADDITIONAL_PURE_FILES = frozenset((
     'test/bot-gui-bootstrap.test.mjs','test/bot-gui-controls.test.mjs',
     'test/bot-gui-generation-policy.test.mjs','test/bot-gui-profile.test.mjs',
     'test/bot-gui-startup.test.mjs','test/initial-session-blank.test.mjs',
+    'test/owned-bot-lifecycle.test.mjs','test/owned-generation-input-window.test.mjs',
     'test/work-generation-bridge.test.mjs',
 ))
 EXTENDED_PURE_FILES = frozenset(('test/adapter.test.mjs','test/bot-client-owner.test.mjs','test/package-snapshot.test.mjs'))

@@ -15,7 +15,7 @@ legacy native filenames. The contract pins those historical metadata fields as
 one immutable digest. It continues to reconstruct each moved declaration into
 its original file and compare the complete historical SHA-256.
 
-The current pure inventory contains those 40 filenames plus seven explicitly
+The current pure inventory contains those 40 filenames plus nine explicitly
 approved additions, each with its full SHA-256. Three original pure files have
 approved extensions: `adapter.test.mjs`, `bot-client-owner.test.mjs` and
 `package-snapshot.test.mjs`. Each extension records its current full SHA-256,
@@ -31,7 +31,7 @@ original bytes. Other import changes are refused. The other two extensions
 retain their complete original byte prefixes without an import transform.
 
 The audit separately reports `originalFiles: 40`, `movedCases: 2`,
-`additionalPureFiles: 7` and `extendedPureFiles: 3`, with the addition hashes and
+`additionalPureFiles: 9` and `extendedPureFiles: 3`, with the addition hashes and
 extension reconstruction evidence. `originalBodyUnionExact` describes the
 historical bytes after those explicit reversals and two cold reinsertions.
 Unknown or removed pure/native test files, including nested additions, are

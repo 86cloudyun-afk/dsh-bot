@@ -83,7 +83,9 @@
     "test/bot-gui-profile.test.mjs": "acabf1aa591c10170a234299aa9cd419a5a0e531296fb2a7fcaceecf3cebd0e9",
     "test/bot-gui-startup.test.mjs": "bd643a64a469b3498b2f7e43c0f38556ad4689d1889c9b05edf4387f146c0933",
     "test/initial-session-blank.test.mjs": "315e2857ce0e2fb7801411f46bf4cbfe5fdfc6d09998cb3c646854c67b0142d0",
-    "test/work-generation-bridge.test.mjs": "0ba751f360658532e4c241b8a4a6804bd4763320b4d6ca3c99a95b083ece80f9"
+    "test/work-generation-bridge.test.mjs": "0ba751f360658532e4c241b8a4a6804bd4763320b4d6ca3c99a95b083ece80f9",
+    "test/owned-bot-lifecycle.test.mjs": "2088bc56155b19ee762b921473191dbf76e3cd8bcf8c9f77dc083b5a7524904e",
+    "test/owned-generation-input-window.test.mjs": "bddae4c3d9316bb498225eea6875378afa1cf75806003b535d487fc10d2a663b"
   },
   "extendedPureFiles": {
     "test/adapter.test.mjs": {
