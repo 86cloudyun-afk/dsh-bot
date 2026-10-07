@@ -160,6 +160,9 @@ export interface WorkMessageBinding {readonly botId:string;readonly taskId:strin
 export interface WorkProducerMessage {readonly id:string;readonly role:'user';readonly content:readonly unknown[];readonly source:WorkProducerProvenance&WorkMessageBinding&{readonly kind:'dsh-bot'}}
 /** Owner-only capability, captured synchronously once per original creation intent. */
 export type OwnedWorkCreationOptions = Readonly<{cwd:string}> & (Readonly<{port:OwnedCreationPort;portFor?:never}>|Readonly<{port?:never;portFor:(intent:CreationIntent)=>OwnedCreationPort}>);
+/** Configuration travels separately from the native preparation; runtime branding is mandatory. */
+export interface OwnedGenerationRoute {readonly provider:string;readonly model:string;readonly maxTokens:number;readonly reasoningEffort:string}
+export interface OwnedGenerationPreparation {readonly prepared:unknown;readonly route:OwnedGenerationRoute}
 /** Private open-time transport. Never accept these methods from tool or RPC arguments. */
 export interface OwnedWorkProducerOptions {readonly execution?:boolean;readonly provenance:WorkProducerProvenance;readonly isCurrent:()=>boolean;readonly createMessage:(binding:WorkMessageBinding,provenance:WorkProducerProvenance,content:string)=>WorkProducerMessage;readonly send:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<void>;readonly inspect:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<boolean>}
 export interface OwnedWorkSessionOptions {readonly botId:string;readonly botEpoch:number;readonly authorityEpoch:number;readonly isCurrent?:()=>boolean;readonly creation?:OwnedWorkCreationOptions;readonly producer?:OwnedWorkProducerOptions}
