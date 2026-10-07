@@ -87,6 +87,8 @@ Verification detects missing, extra, changed or remoded files, changed links, li
 
 Existing caller output is refused before assembly. A failed newly created output is retained; the consumer never recursively removes output directories. Captured owner-only verification views are also retained on success and failure, outside the runtime file inventory. They may occupy space until explicitly removed after inspecting the paths. An asynchronous inode/device check cannot make a later pathname removal atomic, so it is not used to authorize cleanup. Source-built core packages are selected before copying, which also avoids copying and deleting their public counterparts. These rules do not provide a general guarantee against hostile concurrent filesystem writers.
 
+The product snapshot installer also retains a newly created partial package directory on failure and returns the original error with `failureOutputPolicy: RETAINED_NO_AUTOMATIC_REMOVAL`. Existing caller directories are refused. Inspect a retained failed installation and choose a fresh output path before retrying; failure does not authorize recursive deletion of an inspected pathname.
+
 ## Verification commands
 
 ```sh

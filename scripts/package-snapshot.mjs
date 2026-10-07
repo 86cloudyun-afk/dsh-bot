@@ -1,4 +1,4 @@
-import {readFile,lstat,realpath,readdir,mkdir,writeFile,symlink,rm,chmod} from 'node:fs/promises';
+import {readFile,lstat,realpath,readdir,mkdir,writeFile,symlink,chmod} from 'node:fs/promises';
 import {join,dirname,isAbsolute,resolve} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
@@ -72,5 +72,11 @@ export async function installProductPackage({directory,productRoot,packagePlacem
   if(JSON.stringify(await currentPackageIndex(root,files))!==JSON.stringify(index))fail('package_snapshot_source_changed');
   const installed=await currentPackageIndex(directory,files);if(JSON.stringify(installed)!==JSON.stringify(index))fail('package_snapshot_install_changed');
   return Object.freeze({packagePlacement,packageSourceMode,recordedSourceRoot:manifest.sourceRoot,...(packageSourceMode==='verified-export'?{verifiedExportRoot:root}:{}),sourceHead:manifest.sourceHead,sourceTree:manifest.sourceTree,sourceWorktreeClean:manifest.sourceWorktreeClean,packageSHA256:manifest.packageSHA256,fileIndexSHA256:sha(JSON.stringify(index)),buildId:manifest.buildId,installationId:randomUUID(),fileCount:index.length});
- }catch(error){const now=await lstat(directory).catch(()=>null);if(claimed&&now?.ino===claimed.ino&&now?.dev===claimed.dev&&now.isDirectory())await rm(directory,{recursive:true,force:true});throw error;}
+ }catch(error){
+  // A checked pathname can be replaced before recursive removal. Keep partial
+  // output for inspection and preserve the original failure instead of deleting.
+  error.failureOutputPolicy='RETAINED_NO_AUTOMATIC_REMOVAL';
+  if(claimed)error.observedOutputIdentity=Object.freeze({ino:claimed.ino,dev:claimed.dev});
+  throw error;
+ }
 }
