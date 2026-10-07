@@ -56,7 +56,7 @@ export async function installBotGuiProfile({directory, productRoot, runtimeRoot,
       {id:'bot-gui-preset',name:'@deepseek-ai/dsh-agent-preset',config:{id:'dsh-bot/empty',plugins:[]}},
       {id:'bot-gui-closed-intake',name:'dsh-bot/bot-chain-intake',config:{}},
       {id:'bot-gui-owner',name:'dsh-bot/bot-gui-owner-app',config:{homeDirectory:home,cwd:work,agentPreset:'dsh-bot/empty'}},
-      {id:'dsh-bot',name:'dsh-bot',config:{}},
+      {id:'dsh-bot',name:'dsh-bot',config:{guiOwner:true}},
     ]},
   ];
   await writeFile(join(dir,'package.json'),JSON.stringify({name:'private-dsh-bot-gui-profile',private:true,type:'module',

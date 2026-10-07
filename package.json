@@ -84,6 +84,14 @@
     "./bot-chain-native-owner-app": {
       "types": "./src/bot-chain-native-owner-app.d.ts",
       "default": "./src/bot-chain-native-owner-app.mjs"
+    },
+    "./bot-gui-owner-app": {
+      "types": "./src/bot-gui-owner-app.d.ts",
+      "default": "./src/bot-gui-owner-app.mjs"
+    },
+    "./bot-gui-startup": {
+      "types": "./src/bot-gui-startup.d.ts",
+      "default": "./src/bot-gui-startup.mjs"
     }
   },
   "types": "./src/plugin.d.ts",
