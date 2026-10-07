@@ -25,3 +25,6 @@ export interface OwnedBotProducer {
  readonly dispose:()=>void;
 }
 export declare function installOwnedBotProducer(options:OwnedBotProducerOptions):OwnedBotProducer;
+/** Private exact ToolDefinition exists before known-history resume; attach registers the same object once. */
+export interface OwnedBotProducerPreparation {readonly delegateTool:ToolDefinition;readonly attach:(originAgent:Agent)=>OwnedBotProducer}
+export declare function prepareOwnedBotProducer(options:Omit<OwnedBotProducerOptions,'originAgent'>&{readonly originSessionId:string}):OwnedBotProducerPreparation;

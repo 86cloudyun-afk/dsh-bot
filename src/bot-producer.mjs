@@ -10,25 +10,42 @@ import {loadOwnedGenerationSdk} from './owned-generation-bridge.mjs';
 import {createOwnedMainGenerationBridge} from './owned-main-generation.mjs';
 import {freezeInitialSessionMode} from './initial-session-blank.mjs';
 
-export function installOwnedBotProducer({ownerCtx,host,caller,originAgent,botId,botEpoch,authorityEpoch,cwd,rootInstructionRef,execution}){
+const delegatePreparations=new WeakMap();
+function mainDelegateDefinition(entry,execution){return defineTool({name:'dsh_bot_delegate',description:execution?'Create and start one harmless work Session for this owner-bound Bot. Returns pending; observed result arrives later.':'Create a harmless work Session for this owner-bound Bot. Does not execute a model.',
+ parameters:{task_id:{type:'string',required:true},goal:{type:'string',required:true},completion_condition:{type:'string',required:true}},
+ output:{schema:{type:'object',additionalProperties:true},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
+ async execute(args,exec){requireValue(entry.dispatch,'producer_preparation_unattached');return entry.dispatch(args,exec);}
+});}
+/** Definition exists before protected resume; no registration or Agent/model authority is returned. */
+export function prepareOwnedBotProducer(options){
+ const {ownerCtx,host,caller,originSessionId,botId,botEpoch,authorityEpoch}=options;
+ requireValue(ownerCtx instanceof Context&&caller===ownerCtx.fiber&&host?.adapter?.context===ownerCtx,'unsupported_host_identity');text(originSessionId,'originSessionId',200);
+ const check=host.openOwnedWorkSessionPort(caller,{botId,botEpoch,authorityEpoch});check.dispose();const bot=host.object('bot',botId),intent=host.ledger.get('creation',bot.creationIntentId);
+ requireValue(bot.contactSessionId===originSessionId||bot.contactSessionId===null&&intent?.sessionId===originSessionId&&intent.botEpoch===botEpoch&&intent.configVersion===bot.configVersion,'producer_binding_changed');
+ const execution=options.execution===undefined?undefined:Object.freeze({...options.execution,generationControl:options.execution.generationControl===undefined?undefined:Object.freeze({...options.execution.generationControl})});
+ const retained=Object.freeze({...options,execution}),entry={dispatch:null,definition:null,used:false,options:retained};entry.definition=mainDelegateDefinition(entry,execution);
+ const preparation=Object.freeze({delegateTool:entry.definition,attach(originAgent){requireValue(!entry.used,'producer_preparation_consumed');requireValue(originAgent?.id===originSessionId,'producer_origin_changed');return installOwnedBotProducer({...retained,originAgent,delegatePreparation:preparation});}});delegatePreparations.set(preparation,entry);return preparation;
+}
+
+export function installOwnedBotProducer({ownerCtx,host,caller,originAgent,botId,botEpoch,authorityEpoch,cwd,rootInstructionRef,execution,delegatePreparation}){
  requireValue(ownerCtx instanceof Context && caller===ownerCtx.fiber && host?.adapter?.context===ownerCtx,'unsupported_host_identity');
  text(rootInstructionRef,'rootInstructionRef',250);text(cwd,'cwd');
  requireValue(execution===undefined||execution&&typeof execution.beforeExecute==='function','invalid_execution_options');
  const control=execution?.generationControl;
  requireValue(control===undefined||control&&typeof control.prepareWorkGeneration==='function'&&typeof control.bindMainDelegateTool==='function','invalid_generation_control');
  const generationControl=control===undefined?null:Object.freeze({prepareWorkGeneration:control.prepareWorkGeneration.bind(control),bindMainDelegateTool:control.bindMainDelegateTool.bind(control),initialization:control.initialization===undefined?undefined:freezeInitialSessionMode(control.initialization)});
- const beforeExecute=execution?.beforeExecute,onObserved=execution?.onObserved,authorizeDelegation=execution?.authorizeDelegation,beforeRoute=execution?.beforeRoute,onFailure=execution?.onFailure;let closed=false,disposeTool=()=>{},mainGenerationSource=null,mainBridge=null;const ports=new Set(),envelopes=new Map(),targets=new Map(),executionRows=new Map(),retryTimers=new Set(),producerId=randomUUID();
+ const executionCurrent=execution?.isCurrent,assertTargetTools=execution?.assertTargetTools,concludeDelegation=execution?.concludeDelegation===true,beforeExecute=execution?.beforeExecute,onObserved=execution?.onObserved,authorizeDelegation=execution?.authorizeDelegation,beforeRoute=execution?.beforeRoute,onFailure=execution?.onFailure;let closed=false,disposeTool=()=>{},mainGenerationSource=null,mainBridge=null;const ports=new Set(),envelopes=new Map(),targets=new Map(),executionRows=new Map(),retryTimers=new Set(),producerId=randomUUID();
  // Host exact-capability check precedes reading or binding the Bot.
  const initial=host.openOwnedWorkSessionPort(caller,{botId,botEpoch,authorityEpoch});initial.dispose();
  const bot=host.object('bot',botId),originSession=originAgent?.session,configVersion=bot.configVersion;
- function live(){requireValue((execution?.isCurrent?.()??true)&&!closed && ownerCtx.fiber===caller && caller.state===2 && caller.uid!==null,'work_port_disposed');
+ function live(){requireValue((executionCurrent?.()??true)&&!closed && ownerCtx.fiber===caller && caller.state===2 && caller.uid!==null,'work_port_disposed');
   const b=host.object('bot',botId);requireValue(b.contactSessionId===originSession?.id && b.configVersion===configVersion && b.epoch===botEpoch && b.lifecycle==='active','producer_binding_changed');
   requireValue(originAgent && originSession && ownerCtx.agents.get(originSession.id)===originAgent && ownerCtx.sessions.get(originSession.id)===originSession && originAgent.session===originSession && scopeOf(originAgent.ctx)===originAgent,'producer_origin_changed');return true;}
  live();
  async function ownedMain(){live();requireValue(mainGenerationSource,'unsupported_owned_generation_source');const sdk=await loadOwnedGenerationSdk();live();requireValue(sdk.isOwnedGenerationSource(mainGenerationSource,ownerCtx)===true,'unsupported_owned_generation_source');mainBridge??=createOwnedMainGenerationBridge({host,ownerCtx,source:mainGenerationSource,botId,botEpoch,authorityEpoch,sessionId:originSession.id,configVersion});return mainBridge;}
  function target(binding,idle=false){live();let row=targets.get(binding.sessionId);if(!row){const agent=ownerCtx.agents.get(binding.sessionId),session=ownerCtx.sessions.get(binding.sessionId);requireValue(agent && session && agent.session===session && agent.id===binding.sessionId && scopeOf(agent.ctx)===agent,'producer_target_changed');row={agent,session,send:agent.send};targets.set(binding.sessionId,row);}
   requireValue(ownerCtx.agents.get(binding.sessionId)===row.agent && ownerCtx.sessions.get(binding.sessionId)===row.session && row.agent.session===row.session && row.agent.send===row.send && scopeOf(row.agent.ctx)===row.agent,'producer_target_changed');
-  requireValue((!idle||row.agent.status==='idle') && ownerCtx.tools.schemas().length===0 && (execution?.assertTargetTools?execution.assertTargetTools(binding,row.agent)===true:ownerCtx.tools.schemas(row.agent).length===0),'producer_target_not_idle_tool_free');return row;}
+  requireValue((!idle||row.agent.status==='idle') && ownerCtx.tools.schemas().length===0 && (assertTargetTools?assertTargetTools(binding,row.agent)===true:ownerCtx.tools.schemas(row.agent).length===0),'producer_target_not_idle_tool_free');return row;}
  const retainCreatedTarget=binding=>target(binding,true);
  const transport={isCurrent:live,execution:execution!==undefined,requireOwnedGeneration:generationControl!==null,
   createMessage(binding,provenance,content){target(binding,true);return createUserMessage({content:[{type:'text',text:content}],source:{kind:'dsh-bot',...provenance,...binding}});},
@@ -79,13 +96,12 @@ export function installOwnedBotProducer({ownerCtx,host,caller,originAgent,botId,
   const result=await row.port.executeMessage(makeEnvelope('prepareWorkSessionExecution',p,row.port),p,signal);live();target(result);void observe(row);return result;}
  const detach=ownerCtx.on('session/event',(session,event)=>{if(event.type!=='turn/end')return;for(const row of executionRows.values()){if(session.id===row.sessionId)void observe(row);else if(generationControl&&session.id===originSession.id)void reconcileMain(row);}});
  const api=Object.freeze({delegate:(r,s)=>delegate(r,s),execute:(p,s)=>execute(p,s),acknowledged:p=>{live();const row=executionRows.get(p.task_id);if(row?.target.generation!==p.generation||!row?.resultInputMessageId)return null;try{currentWork(row);}catch{return null;}return deriveMainAcknowledgment(originSession.snapshotEvents(),row.resultInputMessageId,{source:{kind:'dsh-bot-work-result',botId,taskId:row.taskId,sessionId:row.sessionId,generation:row.target.generation,producerId,originSessionId:originSession.id,task_id:p.task_id},task_id:p.task_id,inputText:row.resultInputText,expectedMarker:row.expectedMarker,forbiddenMarkers:row.forbiddenMarkers});},query:selection=>{live();return primary.query(selection);},queue:async(p,signal)=>{live();requireValue(!signal?.aborted,'cancelled');return primary.queueMessage(makeEnvelope('prepareWorkSessionDelivery',p,primary),p,signal);},dispose(){if(closed)return;closed=true;disposeTool();detach();for(const timer of retryTimers)clearTimeout(timer);retryTimers.clear();for(const p of ports)p.dispose();ports.clear();}});
- try{const delegateTool=defineTool({name:'dsh_bot_delegate',description:execution?'Create and start one harmless work Session for this owner-bound Bot. Returns pending; observed result arrives later.':'Create a harmless work Session for this owner-bound Bot. Does not execute a model.',
-  parameters:{task_id:{type:'string',required:true},goal:{type:'string',required:true},completion_condition:{type:'string',required:true}},
-  output:{schema:{type:'object',additionalProperties:true},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
-  async execute(args,exec){try{live();requireValue(exec.agent===originAgent && !exec.signal.aborted,'unauthorized');requireValue(typeof exec.callId==='string' && typeof exec.rootCallId==='string' && exec.token,'invalid_tool_provenance');
+ const entry=delegatePreparation===undefined?{dispatch:null,definition:null,used:false}:delegatePreparations.get(delegatePreparation);
+ requireValue(entry&&!entry.used,'producer_preparation_consumed');if(delegatePreparation!==undefined){const o=entry.options;requireValue(o.ownerCtx===ownerCtx&&o.host===host&&o.caller===caller&&o.originSessionId===originSession.id&&o.botId===botId&&o.botEpoch===botEpoch&&o.authorityEpoch===authorityEpoch&&o.cwd===cwd&&o.rootInstructionRef===rootInstructionRef&&o.execution===execution,'producer_preparation_binding_changed');}
+ const delegateExecute=async(args,exec)=>{try{live();requireValue(exec.agent===originAgent && !exec.signal.aborted,'unauthorized');requireValue(typeof exec.callId==='string' && typeof exec.rootCallId==='string' && exec.token,'invalid_tool_provenance');
    const provenance={producerId,ingress:'bot-tool',originSessionId:originSession.id,callId:exec.callId,rootCallId:exec.rootCallId},port=open(provenance),id=`bot-tool-${digest({producerId,callId:exec.callId})}`;
-   const created=await delegate({...args,operationId:id,nonce:id},exec.signal,port);if(!execution)return created;const running=await execute({task_id:args.task_id,generation:created.generation},exec.signal,port,provenance);if(execution.concludeDelegation===true)exec.concludeTurn();return Object.freeze({task_id:running.task_id,sessionId:running.sessionId,generation:running.generation,pending:true,held:running.held,nativeSettlementVerified:false});
+   const created=await delegate({...args,operationId:id,nonce:id},exec.signal,port);if(!execution)return created;const running=await execute({task_id:args.task_id,generation:created.generation},exec.signal,port,provenance);if(concludeDelegation)exec.concludeTurn();return Object.freeze({task_id:running.task_id,sessionId:running.sessionId,generation:running.generation,pending:true,held:running.held,nativeSettlementVerified:false});
   }catch(error){if(onFailure){onFailure('producer_delegate_unconfirmed');throw Error('producer_delegate_unconfirmed');}throw error;}
-  }
- });disposeTool=originAgent.ctx.tools.register(delegateTool);if(generationControl){const source=generationControl.bindMainDelegateTool(delegateTool);if(source&&typeof source.then==='function')Promise.resolve(source).catch(()=>{});requireValue(!source||typeof source.then!=='function','invalid_generation_control');mainGenerationSource=source??null;}ownerCtx.effect(()=>()=>api.dispose());return api;}catch(error){api.dispose();throw error;}
+  };
+ try{entry.used=true;entry.dispatch=delegateExecute;const delegateTool=entry.definition??mainDelegateDefinition(entry,execution);disposeTool=originAgent.ctx.tools.register(delegateTool);if(generationControl){const source=generationControl.bindMainDelegateTool(delegateTool);if(source&&typeof source.then==='function')Promise.resolve(source).catch(()=>{});requireValue(!source||typeof source.then!=='function','invalid_generation_control');mainGenerationSource=source??null;}ownerCtx.effect(()=>()=>api.dispose());return api;}catch(error){api.dispose();throw error;}
 }
