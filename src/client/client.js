@@ -81,9 +81,8 @@ window.__ModuleLoader__.load({id:'dsh-bot',factory:require=>{
   const read=signal=>rpc('/dsh-bot','snapshot',{},signal),ownerCall=(endpoint,botId,payload,signal)=>rpc('/dsh-bot-owner',endpoint,{command:endpoint,botId,payload},signal);
   const guiCall=config.guiOwner===true?(endpoint,payload,signal)=>rpc('/dsh-bot-gui',endpoint,payload,signal):undefined;
   ctx.effect(()=>ctx.locale.register(namespace,{en,zh}),'dsh-bot: dictionaries');const t=ctx.locale.bind(namespace);
-  ctx.slots.inject('main',()=>ctx.slots.register({name:'main',key:panelId,locale:namespace,inject:()=>({hooks:{connection:ctx.connection.state,generation:ctx.connection.generation},read,ownerCall,guiCall})},BotPanel));
+  ctx.slots.inject('main',()=>{const remove=ctx.slots.register({name:'main',key:panelId,locale:namespace,inject:()=>({hooks:{connection:ctx.connection.state,generation:ctx.connection.generation},read,ownerCall,guiCall})},BotPanel);if(guiCall)ctx.layout.selectPanel(panelId);return remove;});
   ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:panelId,order:70,label:()=>t('nav'),locale:namespace},BotIcon));
-  if(guiCall)ctx.effect(()=>{let live=true;void Promise.resolve().then(()=>{if(live)ctx.layout.selectPanel(panelId);}).catch(()=>{});return()=>{live=false;};},'dsh-bot: initial Bot panel');
  }
  return{name:'dsh-bot-client',inject:['slots','layout','locale','connection'],apply};
 }});

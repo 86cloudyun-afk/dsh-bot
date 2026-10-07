@@ -23,3 +23,6 @@ Archival/restoration controls are added only with complete native log inspection
 ## Validation
 
 Use meaningful failing tests for profile isolation, authenticated owner bootstrap/create replay, actual Session persistence/restart identity, and current-peer rejection. Run the existing test suite. Launch the packed profile in a fresh private Home on loopback and use Chromium with an empty user-data directory to exchange the real process token for its signed cookie. Verify an unauthenticated root/API is refused and a foreign Origin is refused. Verify the real Loader roster loads the Bot panel and creates/selects one Bot without a model request. Synthetic external output may test result presentation and routing, and must remain labeled synthetic in evidence. No production Home/history/key values are read or copied.
+### Native controller and browser roster
+
+The stock Web SessionController browser face requires the file-upload client service. This owner profile keeps file intake closed. It mounts the exact stock native SessionController class through a host-only package subpath and disables the stock Session, Workspace, Conversation, and Sidebar browser rows. The official renderer, layout, locale, connection, and module Loader remain the browser shell. The owner panel selects itself only after its main slot has registered.

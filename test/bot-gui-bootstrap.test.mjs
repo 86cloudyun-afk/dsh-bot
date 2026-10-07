@@ -5,6 +5,18 @@ const oldWindow=globalThis.window;
 globalThis.window={__ModuleLoader__:{load:value=>{registration=value;}}};
 try {await import('../src/client/client.js?fixture=gui-bootstrap');} finally {globalThis.window=oldWindow;}
 const tick=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
+test('initial owner panel is selected after a delayed main slot registration',async()=>{
+  const plugin=registration.factory(name=>{assert.equal(name,'react');return {createElement(){}};});
+  let mainReady,registered=false;const selections=[];
+  const ctx={effect:fn=>fn(),locale:{register:()=>()=>{},bind:()=>key=>key},
+    connection:{state:{},generation:{},rpc:{call(){throw Error('no browser calls before mount');}}},
+    layout:{selectPanel(id){assert.equal(registered,true,'main slot must exist before selection');selections.push(id);}},
+    slots:{inject(name,fn){if(name==='main'){mainReady=fn;return()=>{};}return()=>{};},register(){registered=true;return()=>{};}}};
+  plugin.apply(ctx,{guiOwner:true});await tick();
+  assert.deepEqual(selections,[]);
+  mainReady();await tick();
+  assert.deepEqual(selections,['dsh-bot']);
+});
 function fixture({storage=new Map(),server={created:false,lost:false}}={}) {
   let cursor=0;const states=[],effects=[],pending=[],cleanups=[],entries=[],calls=[];
   const react={createElement:(type,props,...children)=>({type,props:props??{},children}),

@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {packageSnapshotOptions} from './package-snapshot-fixture.mjs';
 import {applyEntryPatches,entryListSchema} from '@deepseek-ai/cordis-plugin-include';
 import yaml from 'js-yaml';
+import {SessionController} from '@deepseek-ai/dsh-api-session-controller';
 
 async function installer() {
   const m = await import('../scripts/install-bot-gui-profile.mjs').catch(e => {
@@ -53,9 +54,19 @@ test('fresh GUI profile installs packed owner with real BrowserAuth and an empty
   rows=applyEntryPatches(rows,patch,()=>{});
   assert.equal(rows.find(r=>r.id==='web-startup').disabled,true,'stock Web flags must not swallow owner enablement');
   assert.equal(rows.find(r=>r.id==='bot-gui-startup')?.name,'dsh-bot/bot-gui-startup');
+  assert.equal(rows.find(r=>r.id==='session-controller').disabled,true,'stock client controller requires fileUpload; keep only its native host class');
+  assert.equal(rows.find(r=>r.id==='bot-gui-session-controller')?.name,'dsh-bot/bot-gui-session-controller');
+  for(const id of ['ui-session','ui-workspace','ui-conversation','ui-sidebar']) assert.equal(rows.find(r=>r.id===id).disabled,true,'single Bot surface must not depend on unrelated Session/fileUpload UI');
   assert.notEqual(rows.find(r=>r.id==='config-editor').disabled,true,'stock locale/settings reads need their config service');
   assert.ok(rows.find(r=>r.id==='connection').inject.includes('webServer'),'stock RPC handler captures Connection activation and needs webServer there');
   assert.ok(rows.find(r=>r.id==='connection').config.maxRequestBodyBytes>=280668843,'respect stock aggregate attachment invariant');
+});
+
+test('GUI native-only controller uses the exact stock SessionController class', async () => {
+  const shim=await import('../src/bot-gui-session-controller.mjs').catch(e=>{if(e.code!=='ERR_MODULE_NOT_FOUND')throw e;return {};});
+  assert.equal(shim.default,SessionController,'do not substitute native Session lifecycle behavior');
+  const product=JSON.parse(await readFile(join(import.meta.dirname,'..','package.json'),'utf8'));
+  assert.equal(product.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-sidebar'),false);
 });
 
 test('GUI profile refuses reuse and source/runtime nesting before writes', async () => {
