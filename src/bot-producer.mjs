@@ -128,7 +128,18 @@ export function installOwnedBotProducer({ownerCtx,host,caller,originAgent,botId,
   }catch(error){reject(error);throw error;}finally{mainAdmission?.release();continuations.delete(request.operationId);}
  }
  function canContinueOriginalWork(request){try{executionAdmission();const w=selectedWork(request);return Boolean(generationControl&&mainBridge?.canAdmit(live)===true&&w.generation===request.generation&&w.nativeRuntimeVerified&&primary.canResumeOriginal({task_id:w.task_id,generation:w.generation})&&mainBridge.hasSettledReceipt(originalResultRoute(w).generationBinding));}catch{return false;}}
- const detach=ownerCtx.on('session/event',(session,event)=>{if(event.type!=='turn/end')return;for(const row of executionRows.values()){if(session.id===row.sessionId)void observe(row);else if(generationControl&&session.id===originSession.id)void reconcileMain(row);}});
+ const detach=ownerCtx.on('session/event',(session,event)=>{
+  if(event.type!=='turn/end')return;
+  for(const row of executionRows.values()){
+   // The SDK marks the original activity returned after publishing turn/end.
+   // Each real terminal event opens a fresh bounded window to inspect its receipt.
+   if(session.id===row.sessionId){row.workRetries=0;void observe(row);}
+   else if(generationControl&&session.id===originSession.id){
+    if(!row.response){row.workRetries=0;void observe(row);}
+    else{row.mainRetries=0;void reconcileMain(row);}
+   }
+  }
+ });
  const api=Object.freeze({delegate:(r,s)=>delegate(r,s),execute:(p,s)=>execute(p,s),continueOriginalWork,inspectOriginalWorkContinuation,canContinueOriginalWork,assertWorkAgentTools:agent=>{try{live();const w=host.ledger.list('workTask').find(w=>w.botId===botId&&w.sessionId===agent?.id);return Boolean(w&&target(w).agent===agent);}catch{return false;}},acknowledged:p=>{live();const row=executionRows.get(canonical([p.task_id,p.generation]));if(row?.target.generation!==p.generation||!row?.resultInputMessageId)return null;try{currentWork(row);}catch{return null;}return deriveMainAcknowledgment(originSession.snapshotEvents(),row.resultInputMessageId,{source:{kind:'dsh-bot-work-result',botId,taskId:row.taskId,sessionId:row.sessionId,generation:row.target.generation,producerId,originSessionId:originSession.id,task_id:p.task_id},task_id:p.task_id,inputText:row.resultInputText,expectedMarker:row.expectedMarker,forbiddenMarkers:row.forbiddenMarkers});},query:selection=>{live();return primary.query(selection);},queue:async(p,signal)=>{live();requireValue(!signal?.aborted,'cancelled');return primary.queueMessage(makeEnvelope('prepareWorkSessionDelivery',p,primary),p,signal);},dispose(){if(closed)return;closed=true;disposeTool();detach();for(const timer of retryTimers)clearTimeout(timer);retryTimers.clear();for(const entry of parentDefinitions.values())entry.dispose?.();parentDefinitions.clear();for(const p of ports)p.dispose();ports.clear();}});
  const entry=delegatePreparation===undefined?{dispatch:null,definition:null,used:false}:delegatePreparations.get(delegatePreparation);
  requireValue(entry&&!entry.used,'producer_preparation_consumed');if(delegatePreparation!==undefined){const o=entry.options;requireValue(o.ownerCtx===ownerCtx&&o.host===host&&o.caller===caller&&o.originSessionId===originSession.id&&o.botId===botId&&o.botEpoch===botEpoch&&o.authorityEpoch===authorityEpoch&&o.cwd===cwd&&o.rootInstructionRef===rootInstructionRef&&o.execution===execution,'producer_preparation_binding_changed');}
