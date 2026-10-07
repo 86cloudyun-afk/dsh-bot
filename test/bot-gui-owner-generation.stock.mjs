@@ -10,6 +10,12 @@ import * as Native from '@deepseek-ai/dsh-experimental-native-run';
 const original=Object.freeze({operationId:'gui-native-create-original',nonce:'gui-native-create-nonce',name:'Native GUI Bot'});
 const input=number=>({operationId:`gui-native-contact-${number}`,nonce:`gui-native-contact-${number}`,text:'Harmless keyless synthetic GUI main goal'});
 async function originalReceipt(f,botId,operation){let receipt;for(let n=0;n<80;n++){await f.tick();receipt=await f.ownerCall('inspectContactReceipt',botId,{operationId:operation.operationId,nonce:operation.nonce});if(receipt.ok&&receipt.value.generationObservation.local==='returned')break;}return receipt;}
+test('a mounted Loader owner declares its actual native Workspace dependency before original creation',{skip:typeof Native.mountOwnedGenerationArchiveGate!=='function'},async t=>{
+  const f=await guiGenerationRuntime(t,{mountedOwner:true}),created=await f.call('createBot',original);
+  assert.equal(created.ok,true);assert.equal(created.value.state,'created');
+  assert.equal((await f.call('bootstrap')).value.nativeGenerationTerminalSupported,true);
+  assert.equal(f.ctx.agents.get(created.value.sessionId).id,created.value.sessionId);assert.equal(f.requests(),0);
+});
 test('actual GUI requires a genuine M1 journal and keeps the model gate closed on a default launch',async t=>{
   const f=await guiGenerationRuntime(t),created=await f.call('createBot',original),boot=(await f.call('bootstrap')).value;
   assert.equal(created.ok,true);assert.equal(boot.modelRequestsEnabled,false);assert.equal(boot.modelDispatchStatus,'disabled');

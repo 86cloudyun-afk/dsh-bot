@@ -21,7 +21,7 @@ import {isOwnedBotLifecycleRestoreGrant,describeOwnedBotLifecycleRestore} from '
 
 export const name='dsh-bot-gui-owner-app';
 export const inject=['appReady','appExit','dshBotGuiStartup','connection','webServer','llm','deepseekProtectedProviders','sessions',
-  'sessionProjections','sessionPersistence','tools','agents','agentPresets','sessionQuery','sessionController','agentDefaultModel'];
+  'sessionProjections','sessionPersistence','tools','agents','agentPresets','sessionQuery','sessionController','agentDefaultModel','workspaceRegistry'];
 const identity = service => service?.[symbols.original] ?? service;
 const active = fiber => fiber?.state === 2 && fiber?.uid !== null;
 const exact = (value,keys) => requireValue(value && Object.getPrototypeOf(value) === Object.prototype
