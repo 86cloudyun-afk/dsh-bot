@@ -12,6 +12,8 @@ import {DshAdapter} from '../src/adapter.mjs';
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy';
 import Approval from '@deepseek-ai/dsh-user-approval';
 import PermissionPresets from '@deepseek-ai/dsh-permission-presets';
+import {SessionCreationDriver} from '../src/session-creation.mjs';
+import {scopeOf} from '@deepseek-ai/dsh-scope';
 globalThis.__offlineIO ??= {model:0};
 
 async function installer() {
@@ -44,28 +46,42 @@ async function runtime(directory,{initialMode}={}) {
       presets:{[initialMode.permissionPreset]:{sandbox:initialMode.sandboxMode,approval:initialMode.approvalPolicy}}});
   }
   return {ctx,connection,handlers,options:{ownerCtx:ctx,homeDirectory:directory,cwd,
-    agentPreset:preset,route:{provider:'offline-blocked',model:'never-invoked',reasoning:'off'},modelRequestsEnabled:false,initialMode},
+    agentPreset:preset,route:{provider:'deepseek-official',model:'deepseek-flash',reasoning:'off'},modelRequestsEnabled:false,initialMode},
     call(endpoint,payload={},peer=connection.operator) {return handlers.get('/dsh-bot-gui')(endpoint,payload,new AbortController().signal,peer);},
     async dispose(){connection.register=register;await ctx.fiber.dispose();}};
 }
 const create = {operationId:'gui-create-original',nonce:'gui-create-original-nonce',name:'One Bot'};
 
-test('GUI original creation binds an immutable official initial mode before native effects and rejects changed restart modes', async () => {
+test('formal GUI refuses an SDK without a genuine journal before any native creation and preserves its original UNKNOWN',async()=>{
+ const install=await installer(),directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-no-journal-')),f=await runtime(directory);
+ const app=await install({...f.options,route:{provider:'deepseek-official',model:'deepseek-flash',reasoning:'off'}});
+ let nativeCreates=0;const nativeCreate=f.ctx.sessionController.create;
+ f.ctx.sessionController.create=function(...args){nativeCreates++;return nativeCreate.apply(this,args);};
+ try{
+  const original=await f.call('createBot',create);assert.equal(original.ok,true);assert.equal(original.value.state,'unknown');
+  const retained=(await f.call('bootstrap')).value.creation;assert.equal(retained.operationId,create.operationId);
+  assert.equal((await f.call('reconcileCreate',{operationId:create.operationId,nonce:create.nonce})).value.sessionId,retained.sessionId);
+  assert.equal((await f.call('createBot',{...create,operationId:'replacement',nonce:'replacement'})).ok,false);
+  assert.equal(nativeCreates,0);assert.equal(f.ctx.agents.list().length,0);assert.equal(f.ctx.sessions.list().length,0);
+  const ledger=new Ledger(join(directory,'bot-gui.sqlite'));
+  try{assert.equal(ledger.list('creation').length,1);assert.equal(ledger.list('creation')[0].state,'unknown');assert.equal(ledger.list('contactOwnerOperation').length,0);}
+  finally{ledger.close();}
+ }finally{f.ctx.sessionController.create=nativeCreate;app.dispose();await f.dispose();}
+});
+
+test('GUI original UNKNOWN binds an immutable official initial mode and rejects changed restart modes before effects', async () => {
   const install=await installer(),directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-mode-'));
   const expected={permissionPreset:'workspace-write',sandboxMode:'workspace-write',approvalPolicy:'ask'},input={...expected};
   const f=await runtime(directory,{initialMode:input}),app=await install(f.options),before=globalThis.__offlineIO.model;
   try {
     input.approvalPolicy='never';
     const response=await f.call('createBot',create);
-    assert.equal(response.ok,true);assert.equal(response.value.state,'created');
+    assert.equal(response.ok,true);assert.equal(response.value.state,'unknown');
     const ledger=new Ledger(join(directory,'bot-gui.sqlite'));
     let row;
     try{row=ledger.get('guiCreationOperation',create.operationId);assert.deepEqual(row.initialMode,expected);}
     finally{ledger.close();}
-    const log=await f.ctx.sessionController.inspect(row.sessionId);
-    assert.deepEqual(log.events.map(event=>[event.type,event.data]),[
-      ['permission/preset',{preset:'workspace-write'}],['sandbox/mode',{mode:'workspace-write'}],['approval/policy',{policy:'ask'}],
-    ]);
+    assert.equal(f.ctx.sessions.get(row.sessionId),undefined);assert.equal(f.ctx.agents.get(row.sessionId),undefined);
     assert.equal(globalThis.__offlineIO.model,before);
     // An UNKNOWN native creation remains its original operation, never a replacement.
     assert.equal((await f.call('reconcileCreate',{operationId:create.operationId,nonce:create.nonce})).value.sessionId,row.sessionId);
@@ -73,16 +89,15 @@ test('GUI original creation binds an immutable official initial mode before nati
   const same=await runtime(directory,{initialMode:{...expected}}),resumed=await install(same.options);
   try {
     const boot=(await same.call('bootstrap')).value;
-    assert.equal(boot.creation.operationId,create.operationId);assert.equal(boot.creation.state,'created');
-    assert.equal(same.ctx.agents.list().length,1);
-    assert.deepEqual(same.ctx.tools.schemas(same.ctx.agents.get(boot.contactSessionId)).map(tool=>tool.name),['dsh_bot_delegate']);
+    assert.equal(boot.creation.operationId,create.operationId);assert.equal(boot.creation.state,'unknown');
+    assert.equal(same.ctx.agents.list().length,0);
   } finally{resumed.dispose();await same.dispose();}
   const changed=await runtime(directory,{initialMode:{permissionPreset:'read-only',sandboxMode:'read-only',approvalPolicy:'ask'}});
   try {await assert.rejects(()=>install(changed.options),{code:'gui_initial_mode_changed'});assert.equal(changed.ctx.agents.list().length,0);}
   finally{await changed.dispose();}
 });
 
-test('private GUI composer exposes no ledger to a forged gateway peer and creates exactly one durable tool-free main', async () => {
+test('private GUI composer rejects a forged gateway peer and retains only one original UNKNOWN without a raw main', async () => {
   const install = await installer(), directory = await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-owner-'));
   const f = await runtime(directory), before = globalThis.__offlineIO.model;
   const app = await install(f.options);
@@ -95,31 +110,35 @@ test('private GUI composer exposes no ledger to a forged gateway peer and create
     assert.equal(r.ok,false);
     assert.equal((await f.call('bootstrap')).value.selectedBotId,null);
     const created = await f.call('createBot',create);
-    assert.equal(created.ok,true); assert.equal(created.value.state,'created');
+    assert.equal(created.ok,true); assert.equal(created.value.state,'unknown');
     const boot = (await f.call('bootstrap')).value;
-    assert.equal(boot.selectedBotId,created.value.botId); assert.equal(boot.contactSessionId,created.value.sessionId);
+    assert.equal(boot.selectedBotId,null); assert.equal(boot.contactSessionId,null);assert.equal(boot.creation.sessionId,created.value.sessionId);
     assert.equal(f.ctx.tools.schemas().length,0);
-    const main = f.ctx.agents.get(boot.contactSessionId);
-    assert.ok(main); assert.deepEqual(f.ctx.tools.schemas(main).map(t=>t.name),['dsh_bot_delegate']);
-    const log = await f.ctx.sessionController.inspect(main.id);
-    assert.equal(log.meta.agentPreset,preset); assert.equal(log.meta.cwd,f.options.cwd); assert.equal(log.events.length,0);
+    assert.equal(f.ctx.agents.get(created.value.sessionId),undefined);
     assert.equal(globalThis.__offlineIO.model,before);
-    assert.equal((await f.call('createBot',create)).value.sessionId,main.id);
-    assert.equal((await f.call('reconcileCreate',{operationId:create.operationId,nonce:create.nonce})).value.sessionId,main.id);
+    assert.equal((await f.call('createBot',create)).value.sessionId,created.value.sessionId);
+    assert.equal((await f.call('reconcileCreate',{operationId:create.operationId,nonce:create.nonce})).value.sessionId,created.value.sessionId);
     assert.equal((await f.call('createBot',{...create,operationId:'another-original',nonce:'another-nonce'})).ok,false);
     assert.equal((await f.call('createBot',{...create,nonce:'altered-nonce'})).ok,false);
     assert.equal((await f.call('createBot',{...create,model:'untrusted-route'})).ok,false);
-    assert.equal(f.ctx.agents.list().length,1);
+    assert.equal(f.ctx.agents.list().length,0);
   } finally {app.dispose();await f.dispose();}
 });
 
-test('GUI restart preserves ledger/Bot/main identity and never activates held historical work', async () => {
+test('unsealed legacy GUI restart preserves original ledger/Bot/main identity without activating any bare main or held work', async () => {
   const install = await installer(), directory = await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-restart-'));
-  const first = await runtime(directory), app = await install(first.options);
-  const created = (await first.call('createBot',create)).value, boot = (await first.call('bootstrap')).value;
+  const first = await runtime(directory);
   const ledger = new Ledger(join(directory,'bot-gui.sqlite'));
   const fixtureHost=new Host({ledger,ownerHumanId:'this-home-authenticated-gui-owner',ownerCapability:first.ctx.fiber,adapter:new DshAdapter(first.ctx)});
   await fixtureHost.adapter.refreshSessionModeCatalog();
+  const command=(name,payload,revision=null)=>{const e=envelope(name,payload,revision,{nativeOwner:1});return{value:fixtureHost.executeOwned(first.ctx.fiber,e,payload).result,envelope:e};};
+  const bot=command('createBot',{name:create.name,config:{contact:first.options.route,execution:first.options.route,agentPreset:preset}}).value;
+  const original=command('prepareContactSession',{botId:bot.botId,cwd:first.options.cwd},bot.revision);
+  const bound=await new SessionCreationDriver({host:fixtureHost,caller:first.ctx.fiber,port:fixtureHost.adapter.ownedCreationPort([original.value.sessionId],{scopeOf,durable:true})}).run(first.ctx.fiber,original.value.operationId);
+  assert.equal(bound.state,'created');const created={botId:bot.botId,sessionId:bound.sessionId};
+  ledger.put('guiCreationOperation',create.operationId,{...create,state:'created',initialMode:null,createdAt:new Date().toISOString(),botId:bot.botId,sessionId:bound.sessionId,creationOperation:original.envelope});
+  ledger.put('guiOwner','selected',{botId:bot.botId,sessionId:bound.sessionId,botEpoch:1,configVersion:bot.configVersion});
+  const ledgerId=fixtureHost.ledgerInstanceId;
   const port=fixtureHost.openOwnedWorkSessionPort(first.ctx.fiber,{botId:created.botId,botEpoch:1,authorityEpoch:1});
   const payload={task_id:'historical-work',goal:'Synthetic held historical work',completion_condition:'Never execute this fixture'};
   const historical=port.delegate(envelope('delegateWorkSession',payload,null,{bot:1,nativeOwner:1}),payload).result;
@@ -127,22 +146,18 @@ test('GUI restart preserves ledger/Bot/main identity and never activates held hi
   ledger.put('workGeneration',key,{...held,state:'unknown',held:true});
   port.dispose();
   ledger.close();
-  app.dispose();await first.dispose();
+  await first.dispose();
   const second = await runtime(directory);
-  const resolveAgent=second.ctx.sessionController.resolveAgent;
-  second.ctx.sessionController.resolveAgent=async function(...args) {
-    const found=await resolveAgent.apply(this,args);
-    assert.equal(found.error,undefined,found.error?.message);
-    return found;
-  };
+  let rawActivations=0;second.ctx.sessionController.resolveAgent=async()=>{rawActivations++;throw Error('BARE_AGENT_ACTIVATION_FORBIDDEN');};
   const recovered = await install(second.options);
   try {
     const resumed = (await second.call('bootstrap')).value;
-    assert.equal(resumed.ledgerId,boot.ledgerId);assert.equal(resumed.selectedBotId,created.botId);assert.equal(resumed.contactSessionId,created.sessionId);
+    assert.equal(resumed.ledgerId,ledgerId);assert.equal(resumed.selectedBotId,created.botId);assert.equal(resumed.contactSessionId,created.sessionId);
     assert.equal(second.ctx.agents.get(historical.sessionId),undefined);
-    assert.ok(second.ctx.agents.get(created.sessionId));
-    assert.deepEqual(second.ctx.tools.schemas(second.ctx.agents.get(created.sessionId)).map(t=>t.name),['dsh_bot_delegate']);
-    assert.equal((await second.call('createBot',create)).value.sessionId,created.sessionId);
+    assert.equal(second.ctx.agents.get(created.sessionId),undefined);assert.equal(rawActivations,0);
+    assert.equal(resumed.modelRequestsEnabled,false);assert.equal(resumed.nativeGenerationTerminalSupported,false);
+    assert.equal((await second.call('reconcileCreate',{operationId:create.operationId,nonce:create.nonce})).ok,false);
+    assert.equal((await second.call('bootstrap')).value.creation.sessionId,created.sessionId);
   } finally {recovered.dispose();await second.dispose();}
 });
 
@@ -164,14 +179,12 @@ test('GUI model-enable flag cannot grant sends to an unprotected main and advert
   const install=await installer(),directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-readonly-'));
   const f=await runtime(directory),app=await install({...f.options,modelRequestsEnabled:true}),before=globalThis.__offlineIO.model;
   try{
-    const created=await f.call('createBot',create);assert.equal(created.value.state,'created');
+    const created=await f.call('createBot',create);assert.equal(created.value.state,'unknown');
     const boot=(await f.call('bootstrap')).value;
     assert.equal(boot.modelRequestsEnabled,false);assert.equal(boot.modelDispatchStatus,'unconfirmed');
-    const denied=await f.handlers.get('/dsh-bot-owner')('sendContactText',{command:'sendContactText',botId:created.value.botId,
-      payload:{operationId:'unprotected-original',nonce:'unprotected-nonce',text:'Do not queue this unprotected goal'}},new AbortController().signal,f.connection.operator);
-    assert.equal(denied.ok,false);
+    assert.equal(f.handlers.has('/dsh-bot-owner'),false);
     const ledger=new Ledger(join(directory,'bot-gui.sqlite'));
     try{assert.equal(ledger.list('contactOwnerOperation').length,0);}finally{ledger.close();}
-    assert.equal(f.ctx.agents.get(created.value.sessionId).session.seq,0);assert.equal(globalThis.__offlineIO.model,before);
+    assert.equal(f.ctx.agents.get(created.value.sessionId),undefined);assert.equal(globalThis.__offlineIO.model,before);
   }finally{app.dispose();await f.dispose();}
 });

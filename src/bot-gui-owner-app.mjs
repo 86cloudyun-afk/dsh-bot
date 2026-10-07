@@ -8,14 +8,16 @@ import {Host} from './host.mjs';
 import {Ledger} from './ledger.mjs';
 import {DshAdapter} from './adapter.mjs';
 import {SessionCreationDriver} from './session-creation.mjs';
-import {installOwnedBotProducer} from './bot-producer.mjs';
+import {prepareOwnedBotProducer} from './bot-producer.mjs';
 import {installSelectedBotContactOwner} from './selected-bot-contact-owner.mjs';
 import {installExplicitOperatorReadBinding} from './explicit-operator-read-binding.mjs';
 import {canonical,digest,requireValue,text} from './errors.mjs';
 import {freezeInitialSessionMode,isBlankInitialSessionEvents} from './initial-session-blank.mjs';
+import {createGuiGenerationPreparation} from './bot-gui-generation-preparation.mjs';
+import {loadOwnedGenerationSdk} from './owned-generation-bridge.mjs';
 
 export const name='dsh-bot-gui-owner-app';
-export const inject=['appReady','appExit','dshBotGuiStartup','connection','webServer','llm','sessions',
+export const inject=['appReady','appExit','dshBotGuiStartup','connection','webServer','llm','deepseekProtectedProviders','sessions',
   'sessionProjections','sessionPersistence','tools','agents','agentPresets','sessionQuery','sessionController','agentDefaultModel'];
 const identity = service => service?.[symbols.original] ?? service;
 const active = fiber => fiber?.state === 2 && fiber?.uid !== null;
@@ -39,9 +41,11 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   const host=new Host({ledger,ownerHumanId:'this-home-authenticated-gui-owner',ownerCapability:owner,adapter:new DshAdapter(ownerCtx)});
   const authorityEpoch=ledger.get('grant','native-owner')?.epoch;
   const generation=Object.freeze({activation:randomUUID()});
-  let closed=false,selected=null,contactOwner=null,producer=null,creationTail=Promise.resolve(),readBinding=null,mainGenerationSource=null;
+  let closed=false,selected=null,contactOwner=null,producer=null,creationTail=Promise.resolve(),readBinding=null,mainGenerationSource=null,generationSdk=null,closePromise=null;
+  const mainPorts=new Map();
   // Only an exact SDK-minted, privately retained source may enable this main dialog.
-  const modelStatus=()=>!modelRequestsEnabled?'disabled':mainGenerationSource===null?'unconfirmed':'available';
+  const nativeSourceAvailable=()=>mainGenerationSource!==null&&generationSdk?.isOwnedGenerationSource(mainGenerationSource,ownerCtx)===true;
+  const modelStatus=()=>!modelRequestsEnabled?'disabled':nativeSourceAvailable()?'available':'unconfirmed';
   const currentGeneration=()=>!closed && identity(ownerCtx.get('connection')) === connection && connection.operator === peer ? generation : null;
   function current(actualPeer=peer,signal) {
     requireValue(!closed && active(owner) && active(peer.ctx.fiber) && actualPeer === peer && currentGeneration() === generation,'gui_owner_stale');
@@ -54,6 +58,8 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
         && bot.contactSessionId === selected.sessionId && bot.lifecycle === 'active','gui_binding_changed');
     }
   }
+  const generationPreparation=createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,agentPreset,route:modelRoute,initialization,
+    isOwnerCurrent:()=>{try{current();return true;}catch{return false;}},canModelDispatch:()=>modelStatus()==='available'});
   function envelope(command,payload,row,revision=null,epochs={}) {
     return {operationId:row.operationId,nonce:row.nonce,command,payloadDigest:digest(payload),expectedRevision:revision,
       expectedEpochs:{nativeOwner:authorityEpoch,...epochs},rootHumanInstructionRef:'authenticated-single-bot-gui-owner',
@@ -70,6 +76,17 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     requireValue(canonical(row.initialMode??null)===canonical(initialization??null),'gui_initial_mode_changed');
     return row.initialMode==null?undefined:freezeInitialSessionMode(row.initialMode);
   }
+  function mainPort(intent,row) {
+    let port=mainPorts.get(intent.operationId);
+    if(!port) {
+      port=host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'main',initialization:boundInitialMode(row),
+        isCurrent:()=>{try{current();return true;}catch{return false;}},
+        prepareGeneration:(original,options)=>generationPreparation.prepare(original,{role:'main',create:options.mode==='create',
+          mainSessionId:original.sessionId,...(options.delegateTool?{delegateTool:options.delegateTool}:{})})});
+      mainPorts.set(intent.operationId,port);
+    }
+    return port;
+  }
   const modelGate=ownerCtx.on('agent/pre-step', event => {
     current();
     requireValue(modelStatus()==='available','gui_model_requests_disabled');
@@ -82,28 +99,44 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   async function bindMain(bot,checkpoint,{fresh=false}={}) {
     checkpoint();
     requireValue(bot.lifecycle === 'active' && bot.contactSessionId && ledger.get('config',bot.configVersion)?.agentPreset === agentPreset,'gui_main_binding_unconfirmed');
-    if(selected) {requireValue(selected.botId === bot.botId && selected.sessionId === bot.contactSessionId,'gui_single_bot_required');return;}
+    if(selected) {requireValue(selected.botId === bot.botId && selected.sessionId === bot.contactSessionId,'gui_single_bot_required');requireValue(contactOwner&&producer&&nativeSourceAvailable(),'gui_main_binding_unconfirmed');return;}
     const log=await ownerCtx.sessionController.inspect(bot.contactSessionId);checkpoint();
     requireValue(log?.meta?.id === bot.contactSessionId && log.meta.cwd === cwd && log.meta.agentPreset === agentPreset
       && log.meta.isSeeded === false && Array.isArray(log.events),'gui_main_log_unconfirmed');
     const original=ledger.list('guiCreationOperation').find(row=>row.botId===bot.botId&&row.sessionId===bot.contactSessionId);
     requireValue(original,'gui_original_receipt_required');
+    const intent=ledger.get('creation',original.creationOperation?.operationId);
+    requireValue(intent?.state==='created'&&intent.sessionId===bot.contactSessionId&&intent.botId===bot.botId,'gui_original_receipt_required');
     const mode=boundInitialMode(original),prefixLength=mode?3:0;
     requireValue(isBlankInitialSessionEvents(log.events.slice(0,prefixLength),mode)
       && !log.events.slice(prefixLength).some(event=>['permission/preset','sandbox/mode','approval/policy'].includes(event.type)),'gui_initial_mode_changed');
     if(fresh) requireValue(isBlankInitialSessionEvents(log.events,mode),'gui_main_not_blank');
-    const found=await ownerCtx.sessionController.resolveAgent(bot.contactSessionId);checkpoint();
-    const agent=found?.agent;
+    const port=mainPort(intent,original);
+    const preparedProducer=prepareOwnedBotProducer({ownerCtx,host,caller:owner,originSessionId:intent.sessionId,botId:bot.botId,botEpoch:bot.epoch,
+      authorityEpoch,cwd,rootInstructionRef:'authenticated-single-bot-main-goal',execution:{isCurrent:()=>{try{current();return true;}catch{return false;}},
+        beforeExecute:async()=>{current();},generationControl:{initialization:mode,
+          prepareWorkGeneration:(work,options)=>generationPreparation.prepare(work,{role:'work',create:options.mode==='create',mainSessionId:intent.sessionId}),
+          bindMainDelegateTool:definition=>{current();const source=host.adapter.bindOwnedMainGeneration(port,intent,definition);
+            requireValue(generationSdk?.isOwnedGenerationSource(source,ownerCtx)===true,'gui_owned_source_required');mainGenerationSource=source;return source;}}}});
+    if(!fresh) {
+      requireValue(ownerCtx.agents.get(intent.sessionId)===undefined,'gui_unprotected_main_active');
+      await port.resumeOwnedSession(intent,{delegateTool:preparedProducer.delegateTool});checkpoint();
+    }
+    const proof=await port.inspectOwnedCreation(intent);checkpoint();
+    requireValue(proof?.sessionId===intent.sessionId&&proof.agentPreset===agentPreset&&proof.globalTools===0&&proof.scopedTools===0
+      &&proof.blank===fresh,'gui_main_scope_unconfirmed');
+    generationSdk=await loadOwnedGenerationSdk();checkpoint();
+    const agent=ownerCtx.agents.get(intent.sessionId);
     requireValue(agent?.id === bot.contactSessionId && agent.session?.id === bot.contactSessionId
       && ownerCtx.agents.get(agent.id) === agent && scopeOf(agent.ctx) === agent
       && ownerCtx.tools.schemas().length === 0 && ownerCtx.tools.schemas(agent).length === 0,'gui_main_scope_unconfirmed');
     if(fresh) requireValue(isBlankInitialSessionEvents(agent.session.snapshotEvents(),mode,agent.session.seq),'gui_main_not_blank');
     selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:agent.id});
     current();
-    producer=installOwnedBotProducer({ownerCtx,host,caller:owner,originAgent:agent,botId:bot.botId,botEpoch:bot.epoch,
-      authorityEpoch,cwd,rootInstructionRef:'authenticated-single-bot-main-goal',execution:{beforeExecute:async()=>{current();}}});
+    producer=preparedProducer.attach(agent);
+    requireValue(nativeSourceAvailable(),'gui_owned_source_required');
     contactOwner=installSelectedBotContactOwner({ownerCtx,expectedHost:host,connection,peer,connectionGeneration:generation,
-      getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,requireOwnedGeneration:true,
+      getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,requireOwnedGeneration:true,generationSource:mainGenerationSource,
       canSend:()=>{current();return modelStatus()==='available';}});
     selectRead(bot.botId);
     ledger.put('guiOwner','selected',{botId:bot.botId,sessionId:agent.id,configVersion:bot.configVersion,botEpoch:bot.epoch});
@@ -136,13 +169,13 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     const creation=ledger.get('creation',row.creationOperation.operationId);
     requireValue(creation?.sessionId === row.sessionId && creation.botId === row.botId,'gui_creation_binding_unconfirmed');
     if(creation.state !== 'created') {
-      await new SessionCreationDriver({host,caller:owner,port:host.adapter.ownedCreationPort([row.sessionId],{scopeOf,durable:true,initialization:boundInitialMode(row)}),
+      await new SessionCreationDriver({host,caller:owner,port:mainPort(creation,row),
         isCurrent:()=>{try{checkpoint();return true;}catch{return false;}}}).run(owner,creation.operationId);
       checkpoint();
     }
     if(ledger.get('creation',creation.operationId)?.state !== 'created') return creationView(row);
     bot=host.object('bot',row.botId);
-    await bindMain(bot,checkpoint,{fresh:row.state !== 'created'});checkpoint();
+    await bindMain(bot,checkpoint,{fresh:ownerCtx.agents.get(row.sessionId)!==undefined&&row.state!=='created'});checkpoint();
     row={...row,state:'created'};ledger.put('guiCreationOperation',row.operationId,row);
     return creationView(row);
   }
@@ -151,7 +184,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     const rows=ledger.list('guiCreationOperation');
     requireValue(rows.length <= 1 && ledger.list('bot').length <= 1,'gui_single_bot_required');
     return {version:1,status:'ready',ledgerId:host.ledgerInstanceId,selectedBotId:selected?.botId ?? null,
-      contactSessionId:selected?.sessionId ?? null,modelRequestsEnabled:modelStatus()==='available',modelDispatchStatus:modelStatus(),creation:creationView(rows[0]),nativeGenerationTerminalSupported:false};
+      contactSessionId:selected?.sessionId ?? null,modelRequestsEnabled:modelStatus()==='available',modelDispatchStatus:modelStatus(),creation:creationView(rows[0]),nativeGenerationTerminalSupported:nativeSourceAvailable()};
   }
   const handler=async(endpoint,payload,signal,actualPeer)=>{
     const checkpoint=()=>current(actualPeer,signal);
@@ -186,10 +219,10 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   };
   const unregister=ownerCtx.get('connection').rpc.handle('/dsh-bot-gui',handler);
   const dispose=()=>{
-    if(closed)return;closed=true;
+    if(closePromise)return closePromise;closed=true;
     contactOwner?.dispose();producer?.dispose();readBinding?.close();modelGate();void unregister?.();
     // In-flight native operations observe closed before touching the database again.
-    void creationTail.finally(()=>ledger.close());
+    closePromise=creationTail.finally(async()=>{await generationPreparation.close();ledger.close();});return closePromise;
   };
   ownerCtx.effect(()=>()=>dispose());
   try {
@@ -200,7 +233,8 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
       const bot=host.object('bot',saved.botId);
       requireValue(saved.sessionId === bot.contactSessionId && saved.configVersion === bot.configVersion
         && saved.botEpoch === bot.epoch,'gui_saved_identity_changed');
-      await bindMain(bot,()=>current());current();
+      try {await bindMain(bot,()=>current());current();}
+      catch {current();selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:bot.contactSessionId});selectRead(bot.botId);}
     }
     bootstrap();
     return Object.freeze({dispose});

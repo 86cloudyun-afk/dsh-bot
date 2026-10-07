@@ -67,8 +67,17 @@ The archived `d7e6f55` fresh relocated-export browser proof covers actual Loader
 - [x] Require an actual private source and synchronous private model gate before contact allocation; enable flag alone cannot wake a bare Agent.
 - [x] Test and implement separate original-authority and dispatch callbacks, preserving fenced original receipt verification without admitting old/new dispatch.
 - [x] Mount the actual protected provider directory in the profile; registration does not enable models.
-- [ ] Open native journal before actual create/resume, verify exact journal/prepared brands, and retain SDK sources privately after exact delegate binding.
-- [ ] Resume only the same original Session after complete sealed known-history validation; preserve failures and UNKNOWN, with no Agent retrofit or replacement identity.
+- [x] Wire native journal preparation before actual create/resume, verify exact journal/prepared brands, and retain SDK sources privately after exact delegate binding. The actual M1 positive path still requires the new frozen test graph below.
+- [x] Implement same-original Session resume through sealed-history SDK preparation; preserve failures and UNKNOWN without Controller/bare Agent activation or replacement identity. Unsupported/unsealed refusal is verified; successful native history continuation remains pending the M1 fixture.
 - [ ] Run actual new SDK/components with explicitly synthetic external transport for execution/receipt/stop/restore checks.
 - [ ] Pack exact reviewed final bytes and validate actual Loader/BrowserAuth in another fresh Home on the final frozen runtime; archive clean-URL screenshots and pins.
 - [ ] Obtain root-arranged independent fresh review and deliver exact validation/limitations. Root owns any bounded real-provider acceptance.
+
+### Task 5: Final native parent/child and archive controls
+
+Root selected the final fresh profile policy: the main has one exact `dsh_bot_delegate`; newly prepared depth-zero parent work has one delegate definition scoped to the original task/generation; actual parent ToolCall-derived depth-one children have zero tools permanently. Parent, child and UNKNOWN generations share the same Bot limit of fifteen. Existing ordinary zero-tool work cannot be upgraded. The private product bridge and complete M2 tool policy must provide this authority before the GUI enables the final policy.
+
+- [ ] Consume the product's exact parent preparation/tool binding and private original control-tree interfaces; verify fixed policy before native effects.
+- [ ] Add Chinese original-operation work continuation and Bot archive/restore controls, preserving pending/UNKNOWN and exact historical selectors.
+- [ ] Mint M2 original controls before durable dispatch/task epoch fences, stop the original tree, and archive only with the real native workspace/gate proof.
+- [ ] Restore the same native Session IDs only through complete known-history selectors and a fresh genuine resumed source; never reopen UNKNOWN or reuse old dispatch authority.
