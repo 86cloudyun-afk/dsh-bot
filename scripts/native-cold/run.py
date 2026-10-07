@@ -116,6 +116,13 @@ def prepare(root,ctx):
     (root/'binding-config.json').write_text(json.dumps({'source':str(SOURCE),'pins':ctx['pins'],'installed':installed}))
     (root/'binding-config.json').chmod(0o600)
 
+def cold_observation_diagnostic(journal,statuses,contract,pid):
+    diagnostic=B.observation_diagnostic(journal,statuses,contract,pid)
+    # terminalValid belongs to builtin denial proof, not cold admission or validity.
+    diagnostic.update(scope='COLD_OBSERVATION_DIAGNOSTIC_ONLY',terminalValid=None,
+        terminalValidityScope='NOT_APPLICABLE_TO_COLD')
+    return diagnostic
+
 def collect_cold(root,pid,case,helpers,diagnostic=None):
     known=set(helpers)|{'binding-config.json','synthetic-empty-home','node-addon-native-custom-loader-'+str(os.getuid())}
     entries=list(root.iterdir());R.require(len(entries)<=208,'COLD_INVENTORY_REFUSED')
@@ -143,9 +150,8 @@ def collect_cold(root,pid,case,helpers,diagnostic=None):
         R.require(type(value) is dict and type(value.get('pid')) is int and value['pid']==pid,'COLD_ENVELOPE_REFUSED')
         R.require(sequence==len(records) or value.get('stage')!='NATIVE_ADMISSION_REFUSED','COLD_TERMINAL_ORDER_REFUSED')
     if diagnostic is not None:
-        diagnostic.update(B.observation_diagnostic({'TRACE':value},{'TRACE':'TRACE_PRESENT'},
+        diagnostic.update(cold_observation_diagnostic({'TRACE':value},{'TRACE':'TRACE_PRESENT'},
             {'inventoryValid':True,'recordCounts':{'TRACE':len(records)}},pid))
-        diagnostic['scope']='COLD_OBSERVATION_DIAGNOSTIC_ONLY'
     R.require(T.trace_valid(value,pid),'COLD_TRACE_REFUSED')
     return value,{'recordCount':len(records),'inventoryValid':True,'scope':'ISOLATED_NATIVE_TEST_ONLY','durability':'NON_DURABLE'}
 
@@ -209,7 +215,7 @@ def run_case(case,ctx,prior=None):
     R.require(not any(p.exists() or p.is_symlink() for p in paths.values()),'ONE_SHOT_REFUSED')
     root=None;errors=[];trace=None;counts={};diagnostics=[];observation=None;startup=None;eligible=False
     builtin_diagnostic=B.observation_diagnostic({}, {}, {}, None) if case=='builtin-dual' else None
-    cold_diagnostic=B.observation_diagnostic({}, {}, {}, None) if case!='builtin-dual' else None
+    cold_diagnostic=cold_observation_diagnostic({}, {}, {}, None) if case!='builtin-dual' else None
     child=R.Capture(childCreated=False,childPID=None,returncode=None,processStopped=True,outputComplete=False,errorCategories=[])
     completion={'status':'PREPARATION_INCOMPLETE','diagnosticPersisted':False,'temporaryDirectoryRemoved':False,'safeToRunOtherApprovedCase':False}
     stop=R.SupervisorSignals();entered=False;start=budget.start

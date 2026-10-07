@@ -12,6 +12,19 @@ import supervisor as R
 from contract import select_platform
 
 class BuiltinDiagnosticTests(unittest.TestCase):
+    def test_builtin_terminal_semantics_remain_valid_refused_and_unknown(self):
+        trace=self.terminal()
+        with patch.object(R,'NATIVE_SHA',select_platform('linux','x86_64')['bindings'][0]['sha256'],create=True):
+            valid=run.B.observation_diagnostic({'TRACE':trace},{'TRACE':'TRACE_PRESENT'},{'inventoryValid':True},999)
+            self.assertIs(valid['terminalValid'],True)
+            trace['preflightBoundary']['permissionReady']=False
+            refused=run.B.observation_diagnostic({'TRACE':trace},{'TRACE':'TRACE_PRESENT'},{'inventoryValid':True},999)
+            self.assertIs(refused['terminalValid'],False)
+            unknown=run.B.observation_diagnostic({'TRACE':{'stage':{},'untrusted':'UNTRUSTED_TEXT_MUST_NOT_PERSIST'}},{},{},None)
+            self.assertIsNone(unknown['terminalValid']);self.assertEqual(unknown['trace']['stage'],'UNKNOWN')
+            self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(unknown))
+        for value in (valid,refused,unknown):self.assertNotIn('terminalValidityScope',value)
+
     def test_preflight_false_predicate_is_retained_and_never_admits(self):
         names=('caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches')
         for failed in names:
@@ -138,6 +151,49 @@ class BuiltinDiagnosticTests(unittest.TestCase):
             self.assertTrue(diagnostic['terminalValid']);self.assertEqual(diagnostic['validationFailureCategory'],category)
             self.assertEqual(result['status'],'BLOCKED_OR_FAIL');self.assertFalse(result['completion']['safeToRunOtherApprovedCase'])
             self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(sealed))
+
+class ColdDiagnosticTests(unittest.TestCase):
+    def collect(self,trace):
+        diagnostic={};pid=trace['pid']
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d).resolve();directory=root/'builtin-observation-TRACE-0001';directory.mkdir()
+            (directory/'record.json').write_text(json.dumps({'schemaVersion':1,'scope':'ISOLATED_NATIVE_TEST_ONLY','durability':'NON_DURABLE',
+                'pid':pid,'case':'cold1','role':'TRACE','sequence':1,'payload':trace}))
+            try:result=run.collect_cold(root,pid,'cold1',{},diagnostic)
+            except R.SafetyError as error:result=error.code
+        self.assertIsNone(diagnostic['terminalValid'])
+        self.assertEqual(diagnostic['terminalValidityScope'],'NOT_APPLICABLE_TO_COLD')
+        self.assertEqual(diagnostic['scope'],'COLD_OBSERVATION_DIAGNOSTIC_ONLY')
+        return result,diagnostic
+
+    def fixture(self):
+        run.T.configure(select_platform('linux','x86_64'))
+        return json.loads((Path(__file__).parent/'trace-fixture.json').read_text())
+
+    def eligible(self,data):
+        return run.T.cold_eligible(trace=data['trace'],counts=data['counts'],diagnostics=data['diagnostics'],returncode=0,
+            stopped=True,complete=True,errors=[],pins=True)
+
+    def test_valid_cold_marks_builtin_terminal_validation_not_applicable_without_blocking_admission(self):
+        data=self.fixture();self.assertTrue(self.eligible(data));result,diagnostic=self.collect(data['trace'])
+        self.assertIsInstance(result,tuple);self.assertTrue(self.eligible(data))
+        self.assertIs(diagnostic['preflightBoundary']['permissionReady'],True)
+
+    def test_refused_cold_keeps_false_predicate_and_original_admission_refusal(self):
+        data=self.fixture();data['trace']['preflightBoundary']['permissionReady']=False
+        self.assertFalse(self.eligible(data));result,diagnostic=self.collect(data['trace'])
+        self.assertIsInstance(result,tuple);self.assertFalse(self.eligible(data))
+        self.assertIs(diagnostic['preflightBoundary']['permissionReady'],False)
+
+    def test_unknown_cold_fields_are_safe_and_never_become_builtin_false_or_admission(self):
+        data=self.fixture();data['trace']['stage']={};data['trace']['preflightBoundary']['permissionReady']='UNTRUSTED_TEXT_MUST_NOT_PERSIST'
+        self.assertFalse(self.eligible(data));result,diagnostic=self.collect(data['trace'])
+        self.assertEqual(result,'COLD_TRACE_REFUSED');self.assertEqual(diagnostic['trace']['stage'],'UNKNOWN')
+        self.assertIsNone(diagnostic['preflightBoundary']['permissionReady'])
+        self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(diagnostic))
+        initial=run.cold_observation_diagnostic({}, {}, {},None)
+        self.assertIsNone(initial['terminalValid']);self.assertEqual(initial['terminalValidityScope'],'NOT_APPLICABLE_TO_COLD')
+        self.assertEqual(initial['scope'],'COLD_OBSERVATION_DIAGNOSTIC_ONLY')
 
 class RunTests(unittest.TestCase):
     def test_preparation_failure_commits_diagnostic_before_removing_root(self):
