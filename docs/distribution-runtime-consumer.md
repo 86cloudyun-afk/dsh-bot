@@ -12,7 +12,7 @@ File reads check canonical identity before opening an `O_NOFOLLOW` descriptor an
 
 The source identity's source-file index, file count and lock-object hash must match the pinned overlay. Its `declaredLocalHeadIsBuiltIdentity` must be `false`. The raw source lock must match the SHA-256 in that identity. Overlay verification runs with the trusted manifest pin before and after assembly, on the same platform and architecture. Each check creates a distinct, exclusive, owner-only temporary file view in the output's canonical parent. Only safely read, manifest-pinned bytes and modes enter that view; the shared overlay verifier reads that private view instead of caller-controlled input paths. The original manifest, full payload hashes/modes and complete file/directory set are checked again before accepting the verification result. Temporary views are retained on both success and failure; no asynchronous pathname check authorizes recursive removal. They are verification inputs outside the deliverable runtime inventory.
 
-The current cold build pins are:
+The following pins and command describe the historical frozen cold build. A later generation requires its own trusted source identity and platform-specific manifest pins:
 
 | Input | SHA-256 |
 | --- | --- |
@@ -37,26 +37,26 @@ The output must be absent, have a canonical parent and sit outside every input, 
 
 ```sh
 node scripts/assemble-distribution-runtime.mjs \
-  --official /workspace/dsh-bot-current \
-  --official-lock /workspace/dsh-bot-current/package-lock.json \
+  --official /absolute/inputs/official-sdk \
+  --official-lock /absolute/inputs/official-sdk/package-lock.json \
   --official-lock-sha256 75c5f79b1e3b7ee8bbbfcc2ef08fb8b62f2bcb4cc584f130f5088c81b4c5ed1a \
-  --overlay /workspace/dsh-v1-evidence/host-build/core-overlay \
+  --overlay /absolute/inputs/core-overlay \
   --manifest-sha256 67f10c14ba778924a5d60481d97f01035612611397ad6eb994aee22364a2d7bc \
-  --source-identity /workspace/dsh-v1-evidence/host-build/source-identity.json \
+  --source-identity /absolute/inputs/source-identity.json \
   --source-identity-sha256 298948c3b5c83684eaacd9db2bf201e4d69e1137c21c17ccacc8742fb25bc170 \
-  --source-lock /workspace/dsh-host-v1/pnpm-lock.yaml \
-  --registry /workspace/dsh-v1-evidence/host-build/runtime-registry \
-  --receipts /workspace/dsh-v1-evidence/host-build/runtime-registry-receipts.json \
-  --product /workspace/dsh-bot-current \
-  --public-license /workspace/dsh-host-v1/LICENSE \
+  --source-lock /absolute/inputs/source/pnpm-lock.yaml \
+  --registry /absolute/inputs/runtime-registry \
+  --receipts /absolute/inputs/runtime-registry-receipts.json \
+  --product /absolute/inputs/bot-source \
+  --public-license /absolute/inputs/source/LICENSE \
   --public-license-sha256 ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be \
-  --native-license /workspace/dsh-host-v1/native/system/LICENSE \
+  --native-license /absolute/inputs/source/native/system/LICENSE \
   --native-license-sha256 fed2134d7f6af959ff9fbf2c0a35ea747db10e21d1b5d2d1ac58be88ce43ad90 \
-  --musl-copyright /workspace/dsh-v1-evidence/release-audit/native-input-licenses/musl-1.2.5.COPYRIGHT.txt \
+  --musl-copyright /absolute/inputs/licenses/musl-1.2.5.COPYRIGHT.txt \
   --musl-copyright-sha256 f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af \
-  --musl-source-notices /workspace/dsh-v1-evidence/release-audit/native-input-licenses/musl-1.2.5.source-notices.txt \
+  --musl-source-notices /absolute/inputs/licenses/musl-1.2.5.source-notices.txt \
   --musl-source-notices-sha256 ca56b73cb9410ba6f1aaf44c51425854b4731c3a1b20d20dc34f152008517b6d \
-  --output /workspace/dsh-v1-runtime-new
+  --output /absolute/new/runtime
 ```
 
 The function API is `assembleDistributionRuntime(options)` with the corresponding camel-case keys visible in the CLI flag map. It returns the runtime directory, launcher path, receipt path, receipt SHA-256, directory inode/device ownership and parsed receipt. The launcher is `<output>/node_modules/.bin/dsh`.
