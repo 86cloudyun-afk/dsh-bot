@@ -6,6 +6,7 @@ import { autonomyPolicy,registerProgression } from './progression.mjs';
 import { emptyPresetCatalog,requireHealthyPreset,prepareSessionCreate } from './session-mode.mjs';
 import { projectBotTaskSnapshot } from './bot-task-read-model.mjs';
 import {createWorkSessionManager} from './work-sessions.mjs';
+import {createOwnedBotLifecyclePort} from './owned-bot-lifecycle.mjs';
 
 const ownedReadPorts=new WeakMap();
 /** A brand check grants no authority and cannot construct a retained owner port. */
@@ -50,6 +51,8 @@ export class Host {
     this.#workSessions=createWorkSessionManager(this,{runtime:workSessionRuntime,authorize:caller=>requireValue(this.#ownerCapability!==undefined&&caller===this.#ownerCapability,'unsupported_host_identity'),createTask:(p,id)=>this.#createTaskRecord(p,id)});
   }
   openOwnedWorkSessionPort(caller,options){return this.#workSessions.open(caller,options);}
+  /** Exact private owner lifecycle. Ordinary ledger commands cannot invoke native archival. */
+  async openOwnedBotLifecyclePort(caller,options){const authorize=()=>requireValue(this.#ownerCapability!==undefined&&caller===this.#ownerCapability,'unsupported_host_identity');authorize();return createOwnedBotLifecyclePort(this,caller,options,this.#workSessions,authorize);}
   #createTaskRecord(p,taskId=randomUUID()){
     const b=this.object('bot',p.ownerBotId);requireValue(b.lifecycle==='active','owner_unavailable');
     requireValue(p.scope&&typeof p.scope.namespace==='string'&&Array.isArray(p.scope.writeResources),'invalid_scope');

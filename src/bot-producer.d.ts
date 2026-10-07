@@ -3,7 +3,8 @@ import type {Context} from '@deepseek-ai/cordis';
 import type {Agent} from '@deepseek-ai/dsh-agent';
 import type {UserMessage} from '@deepseek-ai/dsh-llm';
 import type {ToolDefinition} from '@deepseek-ai/dsh-tools';
-import type {Host,CreationIntent,OwnedGenerationPreparation,OwnedGenerationBinding,WorkDelegation,WorkTarget,WorkSessionView,WorkSessionSnapshot,WorkGenerationObservation,WorkProducerProvenance,WorkMessageBinding} from './contracts.js';
+import type {Host,CreationIntent,OwnedGenerationCreationPort,OwnedGenerationPreparation,OwnedGenerationBinding,WorkDelegation,WorkTarget,WorkSessionView,WorkSessionSnapshot,WorkGenerationObservation,WorkProducerProvenance,WorkMessageBinding} from './contracts.js';
+import type {OwnedBotLifecycleRestoreGrant} from './owned-bot-lifecycle.mjs';
 export type BotProducerSource = WorkProducerProvenance & WorkMessageBinding & {readonly kind:'dsh-bot'};
 declare module '@deepseek-ai/dsh-llm' {interface MessageSourceMap {'dsh-bot':BotProducerSource}}
 /** The protocol role is user; the producer source identifies a Bot, never a human. */
@@ -34,5 +35,5 @@ export interface OwnedBotProducer {
 }
 export declare function installOwnedBotProducer(options:OwnedBotProducerOptions):OwnedBotProducer;
 /** Private exact ToolDefinition exists before known-history resume; attach registers the same object once. */
-export interface OwnedBotProducerPreparation {readonly delegateTool:ToolDefinition;readonly attach:(originAgent:Agent)=>OwnedBotProducer}
-export declare function prepareOwnedBotProducer(options:Omit<OwnedBotProducerOptions,'originAgent'>&{readonly originSessionId:string}):OwnedBotProducerPreparation;
+export interface OwnedBotProducerPreparation {readonly delegateTool:ToolDefinition;readonly workDelegateFor:(intent:CreationIntent)=>ToolDefinition;readonly bindRestoredDelegate:(agent:Agent,intent:CreationIntent,port:OwnedGenerationCreationPort)=>object;readonly attach:(originAgent:Agent)=>OwnedBotProducer}
+export declare function prepareOwnedBotProducer(options:Omit<OwnedBotProducerOptions,'originAgent'>&{readonly originSessionId:string;readonly lifecycleRestoreGrant?:OwnedBotLifecycleRestoreGrant}):OwnedBotProducerPreparation;

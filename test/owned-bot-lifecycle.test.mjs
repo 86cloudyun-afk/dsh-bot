@@ -1,0 +1,22 @@
+/** Offline negative controls. No native session, model, provider or archive effect. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Host} from '../src/host.mjs';
+import {Ledger} from '../src/ledger.mjs';
+import {digest} from '../src/errors.mjs';
+import {isOwnedBotLifecycleRestoreGrant,describeOwnedBotLifecycleRestore} from '../src/owned-bot-lifecycle.mjs';
+
+function fixture(t){const ledger=new Ledger(':memory:'),caller={},host=new Host({ledger,ownerHumanId:'Offline lifecycle owner',ownerCapability:caller});t.after(()=>ledger.close());const payload={name:'Lifecycle Bot',config:{contact:{provider:'inert',model:'unused'}}},envelope={operationId:'create',nonce:'create',command:'createBot',payloadDigest:digest(payload),expectedRevision:null,expectedEpochs:{},authorizationRef:'native-owner',rootHumanInstructionRef:'explicit offline fixture',createdAt:new Date().toISOString(),deadline:null},bot=host.executeOwned(caller,envelope,payload).result;return{ledger,caller,host,bot};}
+
+test('bare or missing native lifecycle source denies effects before operation or epoch allocation',async t=>{const f=fixture(t),port=await f.host.openOwnedBotLifecyclePort(f.caller,{botId:f.bot.botId,botEpoch:1,authorityEpoch:1,isOwnerCurrent:()=>true});assert.deepEqual(port.query(),{botEpoch:1,lifecycle:'active',canArchive:false,canRestore:false});const before=f.ledger.list('bot');await assert.rejects(()=>port.archiveOriginalBot({operationId:'archive',nonce:'archive',botId:f.bot.botId,botEpoch:1}),{code:'unsupported_owned_bot_lifecycle'});assert.deepEqual(f.ledger.list('bot'),before);assert.equal(f.ledger.list('ownedBotLifecycle').length,0);assert.deepEqual(await port.inspectOriginalBotLifecycle({operationId:'absent',nonce:'absent',botId:f.bot.botId}),{operationId:'absent',nonce:'absent',botId:f.bot.botId,botEpoch:1,lifecycle:'active',state:'unknown',nativeArchiveVerified:false,nativeRestoreVerified:false,canArchive:false,canRestore:false});});
+
+test('lifecycle owner/grant/lifetime are exact; copied restore grants convey nothing',async t=>{const f=fixture(t),options={botId:f.bot.botId,botEpoch:1,authorityEpoch:1,isOwnerCurrent:()=>true};await assert.rejects(()=>f.host.openOwnedBotLifecyclePort({},options),{code:'unsupported_host_identity'});const port=await f.host.openOwnedBotLifecyclePort(f.caller,options);const intent={operationId:'original',sessionId:'original-session',botId:f.bot.botId};assert.equal(isOwnedBotLifecycleRestoreGrant({},f.host,f.caller,intent),false);assert.throws(()=>describeOwnedBotLifecycleRestore({},f.host,f.caller,intent),{code:'unsupported_owned_bot_restore'});const grant=f.ledger.get('grant','native-owner');f.ledger.put('grant','native-owner',{...grant,active:false});assert.throws(()=>port.query(),{code:'unauthorized'});await assert.rejects(()=>port.inspectOriginalBotLifecycle({operationId:'absent',nonce:'absent',botId:f.bot.botId}),{code:'unauthorized'});});
+
+test('legacy ledger archival does not acquire protected restore capability',async t=>{const f=fixture(t),port=await f.host.openOwnedBotLifecyclePort(f.caller,{botId:f.bot.botId,botEpoch:1,authorityEpoch:1,isOwnerCurrent:()=>true});const payload={kind:'bot',id:f.bot.botId},envelope={operationId:'legacy-archive',nonce:'legacy-archive',command:'archive',payloadDigest:digest(payload),expectedRevision:1,expectedEpochs:{bot:1},authorizationRef:'native-owner',rootHumanInstructionRef:'explicit offline fixture',createdAt:new Date().toISOString(),deadline:null};f.host.executeOwned(f.caller,envelope,payload);assert.deepEqual(port.query(),{botEpoch:2,lifecycle:'archived',canArchive:false,canRestore:false});await assert.rejects(()=>port.restoreOriginalBot({operationId:'restore',nonce:'restore',botId:f.bot.botId,botEpoch:2}),{code:'unsupported_owned_bot_restore'});assert.equal(f.ledger.list('ownedBotLifecycle').length,0);});
+
+test('active recovery without genuine sealed history allocates no operation, epoch or lease',async t=>{
+ const f=fixture(t),port=await f.host.openOwnedBotLifecyclePort(f.caller,{botId:f.bot.botId,botEpoch:1,authorityEpoch:1,isOwnerCurrent:()=>true});
+ assert.equal(typeof port.recoverOriginalBot,'function');const before=f.ledger.list('bot');
+ await assert.rejects(()=>port.recoverOriginalBot(),{code:'unsupported_owned_bot_recovery'});
+ assert.deepEqual(f.ledger.list('bot'),before);assert.equal(f.ledger.list('ownedBotLifecycle').length,0);assert.equal(f.ledger.list('workGeneration').length,0);
+});

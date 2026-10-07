@@ -2,17 +2,21 @@ import { canonical,requireValue,text } from './errors.mjs';
 import { emptyPresetCatalog,normalizePresetCatalog,presetId } from './session-mode.mjs';
 import {freezeInitialSessionMode,isBlankInitialSessionEvents} from './initial-session-blank.mjs';
 import {loadOwnedGenerationSdk} from './owned-generation-bridge.mjs';
+import {isOwnedBotLifecycleRestoreGrantForPort} from './owned-bot-lifecycle.mjs';
 export const REQUIRED_NATIVE=Object.freeze(['session_model','dispatch_freeze','operation_lookup','run_fence','resource_settlement','producer','scope_enforce','interaction_capacity']);
 // Cordis Service.tracker is public per-instance metadata; property reads create fresh proxies.
 // Compare that identity only. Keep calling through the traced service, never unwrap its implementation.
 const registryIdentity=registry=>registry?.[Symbol.for('cordis.tracker')] ?? registry;
 const durablePorts=new WeakMap();
 const generationPorts=new WeakMap();
+const freezeJson=value=>value&&typeof value==='object'?Object.freeze(Array.isArray(value)?value.map(freezeJson):Object.fromEntries(Object.entries(value).map(([key,item])=>[key,freezeJson(item)]))):value;
 const creationCoordinates=i=>canonical([i.operationId,i.nonce??null,i.sessionId,i.cwd,i.agentPreset,i.kind??null,i.botId,i.botEpoch,i.configVersion,i.authorityEpoch,i.taskId??null,i.taskEpoch??null,i.taskRevision??null,i.workDepth??null,i.parentBinding??null]);
 /** Private exact-port lookup; neither copied ports nor historical JSON recover a source. */
 export function ownedGenerationSourceFor(port,intent){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);if(!row)return null;retained.check(intent);requireValue(row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');return row.source??null;}
 /** Exact private original preparation snapshot for native blank control; JSON is only a selector. */
 export function ownedGenerationCreationIntentFor(port,intent){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);if(!row)return null;retained.check(intent);requireValue(row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');return row.creationIntent??null;}
+/** Internal lifecycle access requires the original exact private port, not a copied DTO. */
+export function ownedGenerationRetainedFor(port,intent){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);if(!row)return null;retained.check(intent);requireValue(!row.closed&&row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');retained.mounted(row);return{context:retained.context,source:row.source,creationIntent:row.creationIntent,role:retained.role};}
 /** Internal evidence query: labels or copied/wrapped ports cannot mint this identity. */
 export const ownedCreationProofKind=(port,intent)=>durablePorts.get(port)?.has(intent.operationId)?'stock-session-durable':'fixture-contract';
 export class DshAdapter {
@@ -106,7 +110,10 @@ export class DshAdapter {
       const presets=context.agentPresets,presetIdentity=registryIdentity(presets),resolved=await presets.resolve(i.agentPreset);check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&resolved.id===i.agentPreset,'mode_registry_changed');
       const parentAgent=preparation.prepared.parentAgent;
       requireValue(i.workDepth===1?role==='work'&&parentAgent&&parentAgent.id===i.parentBinding?.sessionId&&context.agents.get(parentAgent.id)===parentAgent&&scopeOf(parentAgent.ctx)===parentAgent:parentAgent===undefined,'native_creation_lineage_conflict');
-      const row={coordinates:creationCoordinates(i),prepared:preparation.prepared,sdk,source:null,mode,expectedDelegateTool:definition,creationIntent:mode==='create'&&typeof i.nonce==='string'?Object.freeze({binding:Object.freeze(structuredClone(i)),operationId:i.operationId,nonce:i.nonce}):null};rows.set(i.operationId,row);return{row,route,presets,presetIdentity};};
+      const original=preparation.creationIntent??(mode==='create'&&typeof i.nonce==='string'?{binding:structuredClone(i),operationId:i.operationId,nonce:i.nonce}:null);
+      if(original!==null)requireValue(original.operationId===i.operationId&&original.nonce===i.nonce&&creationCoordinates(original.binding)===creationCoordinates(i)&&(mode!=='create'||canonical(original.binding)===canonical(i)),'native_creation_binding_changed');
+      requireValue(preparation.selectHistory===undefined||typeof preparation.selectHistory==='function','unsupported_owned_generation_restore');
+      const row={coordinates:creationCoordinates(i),prepared:preparation.prepared,sdk,source:null,mode,expectedDelegateTool:definition,creationIntent:original===null?null:freezeJson(structuredClone(original)),selectHistory:preparation.selectHistory?.bind(preparation)};rows.set(i.operationId,row);return{row,route,presets,presetIdentity};};
     const setup=(i,presets,presetIdentity)=>async(agentCtx,agent)=>{check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity,'mode_registry_changed');const preset=await presets.mount(agentCtx,i.agentPreset);check(i);requireValue(preset.id===i.agentPreset&&scopeOf(agentCtx)===agent,'native_creation_binding_changed');return{commit:()=>{check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&context.tools.schemas().length===0&&context.tools.schemas(agent).length===0,'native_creation_binding_changed');}};};
     const port=Object.freeze({
       createOwnedSession:async i=>{
@@ -145,6 +152,12 @@ export class DshAdapter {
   bindOwnedWorkGeneration(port,intent,delegateTool){
     return this.#bindOwnedDelegateGeneration(port,intent,delegateTool,'work');
   }
+  /** Restore only an SDK-sealed historical selector; the callback is captured privately at preparation. */
+  async restoreOwnedGeneration(port,intent,binding){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);requireValue(retained?.adapter===this&&row?.source&&row.coordinates===creationCoordinates(intent),'unsupported_owned_generation_restore');retained.check(intent);retained.mounted(row);const exact=Object.freeze(structuredClone(binding));requireValue(exact.sessionId===intent.sessionId,'native_restore_binding_changed');const source=row.source;
+    const generation=row.selectHistory?await source.restoreKnown(await row.selectHistory(exact)):await source.restore(exact);retained.check(intent);retained.mounted(row);requireValue(row.source===source&&row.sdk.isOwnedGenerationSource(source,retained.context)===true,'native_restore_binding_changed');const view=await source.inspect(generation);retained.check(intent);retained.mounted(row);requireValue(view?.remote==='settled'&&view.usageKnown===true&&canonical(view.binding)===canonical(exact)&&row.sdk.isOwnedGenerationReceipt(view.receipt,source,exact)===true,'native_restore_binding_changed');return{source,generation,view};
+  }
+  /** Release only this adapter's actual retained native handle under the exact private restore grant. */
+  async closeOwnedGenerationSession(port,intent,grant){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);requireValue(retained?.adapter===this&&row?.handle&&row.coordinates===creationCoordinates(intent)&&isOwnedBotLifecycleRestoreGrantForPort(grant,this,port,intent)===true,'unsupported_owned_bot_restore');if(row.closed)return;retained.mounted(row);const handle=row.handle;await handle.dispose();requireValue(isOwnedBotLifecycleRestoreGrantForPort(grant,this,port,intent)===true&&row.handle===handle,'unsupported_owned_bot_restore');row.closed=true;}
   #bindOwnedDelegateGeneration(port,intent,delegateTool,role){
     const retained=generationPorts.get(port);requireValue(retained?.adapter===this&&retained.role===role&&retained.verified.has(intent?.operationId),'unsupported_owned_generation_source');retained.check(intent);
     const row=retained.rows.get(intent.operationId);requireValue(row?.handle&&row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');retained.mounted(row);

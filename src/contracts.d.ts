@@ -54,6 +54,8 @@ export declare class Host {
  /** Exact retained owner control; no credentials or native execution are granted. */
  openOwnedControlSession(caller:object,options:OwnedControlSessionOptions):OwnedControlSession;
  openOwnedWorkSessionPort(caller:object,options:OwnedWorkSessionOptions):OwnedWorkSessionPort;
+ /** Native lifecycle is an explicit private owner path, independent of ordinary ledger commands. */
+ openOwnedBotLifecyclePort(caller:object,options:import('./owned-bot-lifecycle.mjs').OwnedBotLifecycleOptions):Promise<import('./owned-bot-lifecycle.mjs').OwnedBotLifecyclePort>;
 }
 export declare class Ledger {
  constructor(path:string);
@@ -169,7 +171,7 @@ export type OwnedWorkCreationOptions = Readonly<{cwd:string;reserveGeneration?:b
 /** Configuration travels separately from the native preparation; runtime branding is mandatory. */
 export interface OwnedGenerationRoute {readonly provider:string;readonly model:string;readonly maxTokens:number;readonly reasoningEffort:'off'}
 export interface OwnedGenerationBinding extends WorkBinding {readonly nonce:string;readonly inputMessageId:string;readonly messageIdentity:string;readonly slotLease:WorkSlotLease;readonly parentWorkBinding?:OwnedGenerationBinding}
-export interface OwnedGenerationPreparation {readonly prepared:unknown;readonly route:OwnedGenerationRoute}
+export interface OwnedGenerationPreparation {readonly prepared:unknown;readonly route:OwnedGenerationRoute;readonly creationIntent?:Readonly<{binding:CreationIntent;operationId:string;nonce:string}>;readonly selectHistory?:(binding:Readonly<Record<string,unknown>>)=>Promise<unknown>}
 /** Private open-time transport. Never accept these methods from tool or RPC arguments. */
 export interface OwnedWorkProducerOptions {readonly execution?:boolean;readonly requireOwnedGeneration?:boolean;readonly provenance:WorkProducerProvenance;readonly isCurrent:()=>boolean;readonly createMessage:(binding:WorkMessageBinding,provenance:WorkProducerProvenance,content:string)=>WorkProducerMessage;readonly send:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<void>;readonly inspect:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<boolean>}
 export interface OwnedWorkSessionOptions {readonly botId:string;readonly botEpoch:number;readonly authorityEpoch:number;readonly isCurrent?:()=>boolean;readonly creation?:OwnedWorkCreationOptions;readonly producer?:OwnedWorkProducerOptions}
@@ -192,6 +194,8 @@ export interface OwnedWorkSessionPort {
  /** Persist the product fence before requesting exact retained native-generation cancellation. */
  readonly stop:(envelope:CommandEnvelope,payload:WorkTarget&{readonly reason:'terminate'|'handoff'})=>Promise<WorkSessionView>;
  readonly resume:(envelope:CommandEnvelope,payload:WorkTarget)=>Receipt<WorkSessionView>;
+ /** Safe private admission query; actual continuation still performs a fresh branded receipt check. */
+ readonly canResumeOriginal:(target:WorkTarget)=>boolean;
  readonly spawnChild:{(request:WorkChildRequest):Readonly<{status:'unsupported';code:'child_spawn_unsupported'}>;(envelope:CommandEnvelope,request:WorkChildRequest,signal?:AbortSignal):Promise<WorkSessionView>};
  readonly dispose:()=>void;
 }

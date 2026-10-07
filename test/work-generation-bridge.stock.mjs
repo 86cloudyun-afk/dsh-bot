@@ -5,7 +5,12 @@ import {scopeOf} from '@deepseek-ai/dsh-scope';
 import {createUserMessage} from '@deepseek-ai/dsh-llm';
 import {defineTool} from '@deepseek-ai/dsh-tools';
 import {SessionCreationDriver} from '../src/session-creation.mjs';
+import {ownedGenerationCreationIntentFor} from '../src/adapter.mjs';
 import {generationFixture,envelope,tick,syntheticResponse,observeUntil} from './work-generation-fixture.mjs';
+
+test('private preparation retains the full original creating intent and nonce after mutable creation completes',async t=>{const f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);let original;const port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'main',isCurrent:()=>true,prepareGeneration:i=>{original=structuredClone(i);return{...f.prepareGeneration(i,'main'),creationIntent:{binding:i,operationId:i.operationId,nonce:i.nonce}};}}),created=await new SessionCreationDriver({host:f.host,caller:f.caller,port}).run(f.caller,intent.operationId);assert.equal(created.state,'created');const retained=ownedGenerationCreationIntentFor(port,created);assert.equal(retained.binding.state,'creating');assert.equal(retained.nonce,intent.nonce);assert.deepEqual(retained.binding,original);assert.throws(()=>{retained.binding.nonce='mutation';},TypeError);assert.equal(ownedGenerationCreationIntentFor(port,created).binding.nonce,intent.nonce);assert.equal(f.requests(),0);});
+
+test('changed original creation nonce is refused before mounting any actual native Agent',async t=>{const f=await generationFixture(t),intent={...f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision),state:'creating'},port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'main',isCurrent:()=>true,prepareGeneration:i=>({...f.prepareGeneration(i,'main'),creationIntent:{binding:i,operationId:i.operationId,nonce:'copied-new-nonce'}})});await assert.rejects(()=>port.createOwnedSession(intent),{code:'native_creation_binding_changed'});assert.equal(f.ctx.agents.get(intent.sessionId),undefined);assert.equal(f.ctx.sessions.get(intent.sessionId),undefined);assert.equal(f.requests(),0);});
 
 async function work(t,fetcher) {
  const f=await generationFixture(t,fetcher);

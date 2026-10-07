@@ -1,0 +1,41 @@
+/** Actual exclusive SDK history/native registry recovery; keyless synthetic SSE, no remote model evidence. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {join} from 'node:path';
+import {mkdtemp} from 'node:fs/promises';
+import {scopeOf} from '@deepseek-ai/dsh-scope';
+import {defineTool} from '@deepseek-ai/dsh-tools';
+import {createUserMessage} from '@deepseek-ai/dsh-llm';
+import {Ledger} from '../src/ledger.mjs';
+import {SessionCreationDriver} from '../src/session-creation.mjs';
+import {createOwnedMainGenerationBridge} from '../src/owned-main-generation.mjs';
+import {isOwnedBotLifecycleRestoreGrant,describeOwnedBotLifecycleRestore} from '../src/owned-bot-lifecycle.mjs';
+import {generationFixture,route,syntheticResponse,observeUntil} from './work-generation-fixture.mjs';
+
+const tool=()=>defineTool({name:'dsh_bot_delegate',description:'Synthetic original recovery delegate',parameters:{},output:{schema:{type:'object',additionalProperties:true},render:()=>[]},async execute(){return{};}});
+async function first(t,unknown=false){
+ const directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'bot-recovery-')),ledger=new Ledger(join(directory,'product.sqlite'));t.after(()=>ledger.close());
+ const f=await generationFixture(t,()=>syntheticResponse({finish:!unknown}),{directory,ledger,realWorkspace:true}),N=f.Native;assert.equal(typeof N.admitOwnedBlankSessionControl,'function','M2_NATIVE_HISTORY_REQUIRED');await N.mountOwnedGenerationArchiveGate(f.ctx);
+ const i=f.command('prepareContactSession',{botId:f.bot.botId,cwd:directory},1),definition=tool();let original,journal;
+ const port=f.host.adapter.ownedGenerationCreationPort([i.sessionId],{scopeOf,role:'main',isCurrent:()=>true,prepareGeneration:async creating=>{original={binding:structuredClone(creating),operationId:creating.operationId,nonce:creating.nonce};journal=await N.openOwnedGenerationJournal({ownerCtx:f.ctx,directory:join(directory,'main-journal'),create:true,sessionId:i.sessionId,role:'main',route,session:{cwd:i.cwd,agentPreset:i.agentPreset},creationIntent:original});return{route,creationIntent:original,prepared:N.prepareOwnedGenerationSource({ownerCtx:f.ctx,providerFactory:f.ctx.deepseekProtectedProviders.lookup(route.provider),sessionId:i.sessionId,role:'main',route,journal,isCurrent:()=>true})};}}),created=await new SessionCreationDriver({host:f.host,caller:f.caller,port}).run(f.caller,i.operationId),agent=f.ctx.agents.get(i.sessionId);agent.ctx.tools.register(definition);
+ const source=f.host.adapter.bindOwnedMainGeneration(port,created,definition),bridge=createOwnedMainGenerationBridge({host:f.host,ownerCtx:f.ctx,source,botId:f.bot.botId,botEpoch:1,authorityEpoch:1,sessionId:i.sessionId,configVersion:f.bot.configVersion}),admission=await bridge.admit(()=>{}),sent=admission.start({kind:'contact',taskId:'recover-original',taskEpoch:1,taskRevision:1,operationId:'recover-original',nonce:'recover-original',message:createUserMessage({source:{kind:'user'},content:[{type:'text',text:'Synthetic original recovery input'}]})},()=>{});admission.release();
+ const observed=await observeUntil(()=>bridge.inspect(sent.binding,()=>{}),r=>r.generationObservation.local==='returned');assert.equal(observed.generationObservation.settlementVerified,!unknown);await f.ctx.fiber.dispose();await journal.close();
+ return{f,created,original,sent};
+}
+async function open(t,old){
+ const next=await generationFixture(t,undefined,{directory:old.f.directory,ledger:old.f.ledger,botId:old.f.bot.botId,realWorkspace:true}),N=next.Native;await N.mountOwnedGenerationArchiveGate(next.ctx);let resumed=0,journal,source;
+ const authority={isAuthorized:()=>true,isDispatchFenced:()=>false},lifecycle=await next.host.openOwnedBotLifecyclePort(next.caller,{botId:next.bot.botId,botEpoch:next.bot.epoch,authorityEpoch:1,isOwnerCurrent:()=>true,readOriginalCreation:()=>structuredClone(old.original),inspectOriginalHistory:async(i,options)=>{assert.equal(options.purpose,'active-recovery');journal=await N.openOwnedGenerationJournal({ownerCtx:next.ctx,directory:join(next.directory,'main-journal'),create:false,sessionId:i.sessionId,role:'main',route,session:{cwd:i.cwd,agentPreset:i.agentPreset},creationIntent:options.originalCreationIntent});return{journal,selectHistory:binding=>N.selectOwnedGenerationHistory(journal,next.ctx,binding,authority)};},prepareRestore:async(i,{grant,role,historyProof,originalCreationIntent,purpose})=>{resumed++;assert.equal(purpose,'active-recovery');assert.equal(isOwnedBotLifecycleRestoreGrant(grant,next.host,next.caller,i),true);assert.equal(describeOwnedBotLifecycleRestore(grant,next.host,next.caller,i).botEpoch,next.bot.epoch);const definition=tool(),port=next.host.adapter.ownedGenerationCreationPort([i.sessionId],{scopeOf,role,delegateTool:definition,isCurrent:()=>isOwnedBotLifecycleRestoreGrant(grant,next.host,next.caller,i),prepareGeneration:()=>({route,creationIntent:originalCreationIntent,prepared:N.prepareOwnedGenerationSource({ownerCtx:next.ctx,providerFactory:next.ctx.deepseekProtectedProviders.lookup(route.provider),sessionId:i.sessionId,role,route,journal:historyProof.journal,delegateTool:definition,isCurrent:()=>true}),selectHistory:binding=>N.selectOwnedGenerationHistory(historyProof.journal,next.ctx,binding,authority)})});return{port,delegateTool:definition,bindDelegate:()=>{next.ctx.agents.get(i.sessionId).ctx.tools.register(definition);source=next.host.adapter.bindOwnedMainGeneration(port,i,definition);}};}});t.after(async()=>{await next.ctx.fiber.dispose();await journal?.close();});return{...next,lifecycle,resumed:()=>resumed,source:()=>source};
+}
+
+test('known ACTIVE cold recovery restores the same original source without epoch, input, lease or model effects',async t=>{
+ const old=await first(t),next=await open(t,old),before=next.ledger.list('bot'),counter=next.ledger.list('ownedMainGenerationCounter');
+ const recovered=await next.lifecycle.recoverOriginalBot();assert.equal(recovered.state,'accepted');assert.equal(recovered.nativeRecoveryVerified,true);assert.equal(next.resumed(),1);assert.equal(next.requests(),0);assert.deepEqual(next.ledger.list('bot'),before);assert.deepEqual(next.ledger.list('ownedMainGenerationCounter'),counter);assert.equal(next.ledger.list('ownedBotLifecycle').length,0);assert.equal(next.ctx.agents.get(old.created.sessionId).id,old.created.sessionId);
+ assert.deepEqual(await next.lifecycle.recoverOriginalBot(),recovered);assert.equal(next.resumed(),1);
+ const bridge=createOwnedMainGenerationBridge({host:next.host,ownerCtx:next.ctx,source:next.source(),botId:next.bot.botId,botEpoch:next.bot.epoch,authorityEpoch:1,sessionId:old.created.sessionId,configVersion:next.bot.configVersion});assert.equal((await bridge.inspect(old.sent.binding,()=>{})).generationObservation.settlementVerified,true);
+ const admission=await bridge.admit(()=>{}),continued=admission.start({kind:'contact',taskId:'recovered-next',taskEpoch:1,taskRevision:1,operationId:'recovered-next',nonce:'recovered-next',message:createUserMessage({source:{kind:'user'},content:[{type:'text',text:'Synthetic new user input after recovery'}]})},()=>{});admission.release();assert.equal(continued.binding.generation,2);assert.equal((await observeUntil(()=>bridge.inspect(continued.binding,()=>{}),v=>v.generationObservation.settlementVerified)).generationObservation.settlementVerified,true);assert.equal(next.requests(),1);
+});
+
+test('UNKNOWN original remains unactivated on ACTIVE recovery even if product JSON claims known',async t=>{
+ const old=await first(t,true),row=old.f.ledger.list('ownedMainGeneration')[0];old.f.ledger.put('ownedMainGeneration',JSON.stringify([old.f.bot.botId,old.created.sessionId,1]),{...row,state:'settled',generationObservation:{local:'returned',remote:'settled',usageKnown:true,usage:{inputTokens:5,outputTokens:3,totalTokens:8},settlementVerified:true}});
+ const next=await open(t,old),before=next.ledger.list('bot');await assert.rejects(()=>next.lifecycle.recoverOriginalBot());assert.equal(next.resumed(),0);assert.equal(next.ctx.agents.get(old.created.sessionId),undefined);assert.equal(next.ctx.sessions.get(old.created.sessionId),undefined);assert.equal(next.requests(),0);assert.deepEqual(next.ledger.list('bot'),before);assert.equal(next.ledger.list('ownedBotLifecycle').length,0);
+});

@@ -3,6 +3,7 @@ import type { scopeOf as nativeScopeOf } from '@deepseek-ai/dsh-scope';
 import type { AgentPresetCatalog,CreationIntent,OwnedCreationPort,OwnedGenerationCreationPort,OwnedGenerationPreparation } from './contracts.js';
 import type {ToolDefinition} from '@deepseek-ai/dsh-tools';
 import type {InitialSessionModeSnapshot} from './initial-session-blank.mjs';
+import type {OwnedBotLifecycleRestoreGrant} from './owned-bot-lifecycle.mjs';
 export declare const REQUIRED_NATIVE:readonly ['session_model','dispatch_freeze','operation_lookup','run_fence','resource_settlement','producer','scope_enforce','interaction_capacity'];
 /** Private lookups require the exact retained port and immutable creation coordinates. */
 export declare function ownedGenerationSourceFor(port:OwnedCreationPort,intent:CreationIntent):object|null;
@@ -47,6 +48,10 @@ export declare class DshAdapter {
  bindOwnedMainGeneration(port:OwnedCreationPort,intent:CreationIntent,delegateTool:ToolDefinition):object;
  /** Native parent-work policy must already own this exact registered definition. */
  bindOwnedWorkGeneration(port:OwnedCreationPort,intent:CreationIntent,delegateTool:ToolDefinition):object;
+ /** Private same-journal SDK selector restore; never sends or replays a UserMessage. */
+ restoreOwnedGeneration(port:OwnedGenerationCreationPort,intent:CreationIntent,binding:object):Promise<Readonly<{source:object;generation:object;view:unknown}>>;
+ /** Disposes only the actual retained handle selected by a genuine lifecycle restore grant. */
+ closeOwnedGenerationSession(port:OwnedGenerationCreationPort,intent:CreationIntent,grant:OwnedBotLifecycleRestoreGrant):Promise<void>;
  unsupported<T extends string>(operation:T):UnsupportedOperation<T>;
  selectSessionModel():UnsupportedOperation<'selectSessionModel'>;
  dispatch():UnsupportedOperation<'dispatchPermit'>;
