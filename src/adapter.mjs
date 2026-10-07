@@ -1,4 +1,4 @@
-import { requireValue,text } from './errors.mjs';
+import { canonical,requireValue,text } from './errors.mjs';
 import { emptyPresetCatalog,normalizePresetCatalog,presetId } from './session-mode.mjs';
 import {freezeInitialSessionMode,isBlankInitialSessionEvents} from './initial-session-blank.mjs';
 import {loadOwnedGenerationSdk} from './owned-generation-bridge.mjs';
@@ -7,6 +7,10 @@ export const REQUIRED_NATIVE=Object.freeze(['session_model','dispatch_freeze','o
 // Compare that identity only. Keep calling through the traced service, never unwrap its implementation.
 const registryIdentity=registry=>registry?.[Symbol.for('cordis.tracker')] ?? registry;
 const durablePorts=new WeakMap();
+const generationPorts=new WeakMap();
+const creationCoordinates=i=>canonical([i.operationId,i.sessionId,i.cwd,i.agentPreset,i.kind,i.botId,i.botEpoch,i.configVersion,i.authorityEpoch,i.taskId??null,i.taskEpoch??null,i.taskRevision??null]);
+/** Private exact-port lookup; neither copied ports nor historical JSON recover a source. */
+export function ownedGenerationSourceFor(port,intent){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);if(!row)return null;retained.check(intent);requireValue(row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');return row.source??null;}
 /** Internal evidence query: labels or copied/wrapped ports cannot mint this identity. */
 export const ownedCreationProofKind=(port,intent)=>durablePorts.get(port)?.has(intent.operationId)?'stock-session-durable':'fixture-contract';
 export class DshAdapter {
@@ -83,19 +87,45 @@ export class DshAdapter {
     });
     durablePorts.set(port,verified);return port;
   }
-  /** Explicit future-SDK path. Public-lock and synthetic contexts cannot create protected sessions. */
-  ownedGenerationCreationPort(sessionIds,{scopeOf,role,prepareGeneration,isCurrent}) {
+  /** Prepare actual protected calls before mounting; retain the original native handle privately. */
+  ownedGenerationCreationPort(sessionIds,{scopeOf,role,prepareGeneration,isCurrent,initialization}) {
     requireValue(Array.isArray(sessionIds)&&sessionIds.length>0&&typeof scopeOf==='function'&&['main','work'].includes(role)&&typeof prepareGeneration==='function'&&typeof isCurrent==='function','invalid_creation_options');
-    const owned=new Set(sessionIds.map(id=>text(id,'sessionId',200))),context=this.context;
+    const owned=new Set(sessionIds.map(id=>text(id,'sessionId',200))),context=this.context,rows=new Map(),verified=new Set(),initialMode=initialization===undefined?undefined:freezeInitialSessionMode(initialization);
     const check=i=>{requireValue(owned.has(i?.sessionId),'scope_denied');requireValue(context&&this.context===context&&isCurrent()===true,'host_disconnected');};
-    return Object.freeze({
+    const mounted=row=>{const {handle,session}=row;requireValue(context.agents.get(session.id)===handle.agent&&context.sessions.get(session.id)===session&&handle.agent.session===session&&scopeOf(handle.agent.ctx)===handle.agent,'native_creation_binding_changed');};
+    const readBlank=async(i,row)=>{check(i);mounted(row);const stat=await context.sessionPersistence.stat(i.sessionId);check(i);mounted(row);requireValue(stat?.sizeBytes>0,'native_creation_not_durable');const stored=await context.sessionPersistence.open(i.sessionId,'read');try{check(i);mounted(row);const log=await stored.read();check(i);mounted(row);requireValue(stored.header.id===i.sessionId&&stored.header.cwd===i.cwd&&stored.header.agentPreset===i.agentPreset&&stored.header.isSeeded===false&&isBlankInitialSessionEvents(log.events,initialMode)&&canonical(log.events)===canonical(row.session.snapshotEvents()),'native_creation_not_durable');}finally{await stored.close();check(i);mounted(row);}};
+    const port=Object.freeze({
       createOwnedSession:async i=>{
-        check(i);await loadOwnedGenerationSdk();check(i);
+        check(i);const sdk=await loadOwnedGenerationSdk();check(i);
         const {Context}=await import('@deepseek-ai/cordis');check(i);requireValue(context instanceof Context,'unsupported_host_identity');
-        requireValue(false,'unsupported_native_creation');
+        requireValue(!rows.has(i.operationId),'native_creation_replay');
+        const preparation=prepareGeneration(Object.freeze(structuredClone(i)));if(preparation&&typeof preparation.then==='function')Promise.resolve(preparation).catch(()=>{});
+        requireValue(preparation&&typeof preparation.then!=='function'&&sdk.isPreparedOwnedGenerationSource(preparation.prepared,context,i.sessionId,role)===true,'unsupported_owned_generation_preparation');
+        const route=Object.freeze(structuredClone(preparation.route));requireValue(route&&typeof route.provider==='string'&&typeof route.model==='string'&&Number.isSafeInteger(route.maxTokens)&&route.maxTokens>0&&route.reasoningEffort==='off','invalid_generation_route');
+        const presets=context.agentPresets,presetIdentity=registryIdentity(presets),resolved=await presets.resolve(i.agentPreset);check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&resolved.id===i.agentPreset,'mode_registry_changed');
+        const row={coordinates:creationCoordinates(i),prepared:preparation.prepared,sdk,source:null};rows.set(i.operationId,row);
+        const handle=await context.agents.create({sessionId:i.sessionId,agentOptions:route,meta:{cwd:i.cwd,agentPreset:i.agentPreset},protectedModelCalls:row.prepared.protectedModelCalls,
+          setup:async(agentCtx,agent)=>{check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity,'mode_registry_changed');const preset=await presets.mount(agentCtx,i.agentPreset);check(i);requireValue(preset.id===i.agentPreset&&scopeOf(agentCtx)===agent,'native_creation_binding_changed');return{commit:()=>{check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&context.tools.schemas().length===0&&context.tools.schemas(agent).length===0,'native_creation_binding_changed');}};}});
+        row.handle=handle;row.session=handle.agent.session;check(i);mounted(row);
+        if(role==='work'){row.source=row.prepared.attach(handle);requireValue(sdk.isOwnedGenerationSource(row.source,context)===true,'unsupported_owned_generation_source');}
+        requireValue(await context.sessions.flush(row.session),'native_creation_not_durable');check(i);mounted(row);await readBlank(i,row);return{sessionId:i.sessionId};
       },
-      inspectOwnedCreation:async i=>{check(i);return null;}
+      inspectOwnedCreation:async i=>{check(i);const row=rows.get(i.operationId);if(!row?.handle)return null;requireValue(row.coordinates===creationCoordinates(i),'native_creation_binding_changed');mounted(row);await readBlank(i,row);
+        const [{default:SessionStore},{default:Persistence},{default:Agents},{default:Tools},{scopeOf:officialScopeOf}]=await Promise.all([import('@deepseek-ai/dsh-session'),import('@deepseek-ai/dsh-session-persistence-jsonl'),import('@deepseek-ai/dsh-agent'),import('@deepseek-ai/dsh-tools'),import('@deepseek-ai/dsh-scope')]);
+        check(i);mounted(row);requireValue(context.sessions instanceof SessionStore&&context.sessionPersistence instanceof Persistence&&context.agents instanceof Agents&&context.tools instanceof Tools&&scopeOf===officialScopeOf&&row.sdk.isPreparedOwnedGenerationSource(row.prepared,context,i.sessionId,role)===true,'unsupported_host_identity');
+        const preset=context.sessionProjections.stateOf(row.session,'agentPreset');requireValue(preset===i.agentPreset,'native_creation_binding_changed');verified.add(i.operationId);
+        return{sessionId:i.sessionId,agentPreset:preset,blank:isBlankInitialSessionEvents(row.session.snapshotEvents(),initialMode,row.session.seq),globalTools:context.tools.schemas().length,scopedTools:context.tools.schemas(row.handle.agent).length};
+      }
     });
+    generationPorts.set(port,{adapter:this,context,role,rows,verified,check,mounted,initialMode});durablePorts.set(port,verified);return port;
+  }
+  /** Main tool binding occurs after original blank proof and before any model input. */
+  bindOwnedMainGeneration(port,intent,delegateTool){
+    const retained=generationPorts.get(port);requireValue(retained?.adapter===this&&retained.role==='main'&&retained.verified.has(intent?.operationId),'unsupported_owned_generation_source');retained.check(intent);
+    const row=retained.rows.get(intent.operationId);requireValue(row?.handle&&row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');retained.mounted(row);
+    if(row.source){requireValue(row.delegateTool===delegateTool,'native_creation_binding_changed');return row.source;}
+    requireValue(isBlankInitialSessionEvents(row.session.snapshotEvents(),retained.initialMode,row.session.seq),'native_creation_not_blank');
+    const source=row.prepared.attach(row.handle,{delegateTool});requireValue(row.sdk.isOwnedGenerationSource(source,retained.context)===true,'unsupported_owned_generation_source');row.delegateTool=delegateTool;row.source=source;return source;
   }
   unsupported(operation) { return {status:'unsupported',operation,reason:'Missing verified native contract; no native mutation issued'}; }
   selectSessionModel() { return this.unsupported('selectSessionModel'); }

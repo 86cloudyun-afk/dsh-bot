@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { scopeOf as nativeScopeOf } from '@deepseek-ai/dsh-scope';
-import type { AgentPresetCatalog,CreationIntent,OwnedCreationPort } from './contracts.js';
+import type { AgentPresetCatalog,CreationIntent,OwnedCreationPort,OwnedGenerationPreparation } from './contracts.js';
+import type {ToolDefinition} from '@deepseek-ai/dsh-tools';
 import type {InitialSessionModeSnapshot} from './initial-session-blank.mjs';
 export declare const REQUIRED_NATIVE:readonly ['session_model','dispatch_freeze','operation_lookup','run_fence','resource_settlement','producer','scope_enforce','interaction_capacity'];
 export type RequiredNativeCapability = typeof REQUIRED_NATIVE[number];
@@ -37,6 +38,10 @@ export declare class DshAdapter {
  refreshSessionModeCatalog():Promise<AgentPresetCatalog>;
  /** Private owned creation port; scopeOf must return the exact mounted Agent identity. */
  ownedCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;durable?:boolean;initialization?:InitialSessionModeSnapshot}):OwnedCreationPort;
+ /** Explicit private creation: actual prepared SDK brand and retained native handle are required. */
+ ownedGenerationCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;role:'main'|'work';prepareGeneration:(intent:CreationIntent)=>OwnedGenerationPreparation;isCurrent:()=>boolean;initialization?:InitialSessionModeSnapshot}):OwnedCreationPort;
+ /** Called once with the exact registered native ToolDefinition before first main input. */
+ bindOwnedMainGeneration(port:OwnedCreationPort,intent:CreationIntent,delegateTool:ToolDefinition):object;
  unsupported<T extends string>(operation:T):UnsupportedOperation<T>;
  selectSessionModel():UnsupportedOperation<'selectSessionModel'>;
  dispatch():UnsupportedOperation<'dispatchPermit'>;

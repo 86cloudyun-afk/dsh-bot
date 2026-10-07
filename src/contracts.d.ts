@@ -135,7 +135,7 @@ export interface WorkSessionView extends WorkDelegation {
  readonly state:WorkState;readonly creationState:'reserved'|'confirmed'|'unknown';readonly held:boolean;readonly fence:WorkFence|null;
  readonly creationOperationId:string|null;readonly creationReceipt:CreationProof|null;readonly sessionCreation:WorkSessionCreation;readonly delivery:WorkDeliveryReceipt|null;
  readonly slotLease:WorkSlotLease|null;readonly summary:string|null;readonly unsupported:WorkUnsupportedCode|null;
- readonly evidenceKind:'unsupported'|'offline-synthetic';readonly nativeRuntimeVerified:false;
+ /** True verifies only this original generation's branded settlement, never all session history. */readonly evidenceKind:'unsupported'|'offline-synthetic'|'native-sdk';readonly nativeRuntimeVerified:boolean;
  readonly generationObservation:WorkGenerationObservation;
 }
 /** Serializable observations only; local return or usage defaults never imply settlement. */
@@ -161,10 +161,11 @@ export interface WorkProducerMessage {readonly id:string;readonly role:'user';re
 /** Owner-only capability, captured synchronously once per original creation intent. */
 export type OwnedWorkCreationOptions = Readonly<{cwd:string}> & (Readonly<{port:OwnedCreationPort;portFor?:never}>|Readonly<{port?:never;portFor:(intent:CreationIntent)=>OwnedCreationPort}>);
 /** Configuration travels separately from the native preparation; runtime branding is mandatory. */
-export interface OwnedGenerationRoute {readonly provider:string;readonly model:string;readonly maxTokens:number;readonly reasoningEffort:string}
+export interface OwnedGenerationRoute {readonly provider:string;readonly model:string;readonly maxTokens:number;readonly reasoningEffort:'off'}
+export interface OwnedGenerationBinding extends WorkBinding {readonly nonce:string;readonly inputMessageId:string;readonly messageIdentity:string;readonly slotLease:WorkSlotLease}
 export interface OwnedGenerationPreparation {readonly prepared:unknown;readonly route:OwnedGenerationRoute}
 /** Private open-time transport. Never accept these methods from tool or RPC arguments. */
-export interface OwnedWorkProducerOptions {readonly execution?:boolean;readonly provenance:WorkProducerProvenance;readonly isCurrent:()=>boolean;readonly createMessage:(binding:WorkMessageBinding,provenance:WorkProducerProvenance,content:string)=>WorkProducerMessage;readonly send:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<void>;readonly inspect:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<boolean>}
+export interface OwnedWorkProducerOptions {readonly execution?:boolean;readonly requireOwnedGeneration?:boolean;readonly provenance:WorkProducerProvenance;readonly isCurrent:()=>boolean;readonly createMessage:(binding:WorkMessageBinding,provenance:WorkProducerProvenance,content:string)=>WorkProducerMessage;readonly send:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<void>;readonly inspect:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<boolean>}
 export interface OwnedWorkSessionOptions {readonly botId:string;readonly botEpoch:number;readonly authorityEpoch:number;readonly isCurrent?:()=>boolean;readonly creation?:OwnedWorkCreationOptions;readonly producer?:OwnedWorkProducerOptions}
 export interface WorkChildRequest extends WorkDelegation {readonly parentTaskId:string;readonly parentSessionId:string;readonly parentGeneration:number}
 declare const ownedWorkSessionBrand:unique symbol;

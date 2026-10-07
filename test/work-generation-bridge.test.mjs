@@ -10,11 +10,11 @@ import {digest} from '../src/errors.mjs';
 function envelope(command,payload,revision,epochs={}) {
  return {operationId:randomUUID(),nonce:randomUUID(),command,payloadDigest:digest(payload),expectedRevision:revision,expectedEpochs:epochs,authorizationRef:'native-owner',rootHumanInstructionRef:'synthetic-generation-bridge',createdAt:new Date().toISOString(),deadline:null};
 }
-async function fixture(t) {
+async function fixture(t,{requireOwnedGeneration=false}={}) {
  const ledger=new Ledger(':memory:'),caller={},adapter=new DshAdapter({agentPresets:{list:()=>[{id:'synthetic/empty'}],defaultId:'synthetic/empty'}});
  const host=new Host({ledger,ownerHumanId:'synthetic',ownerCapability:caller,adapter});t.after(()=>ledger.close());await adapter.refreshSessionModeCatalog();
  const bot=host.executeOwned(caller,envelope('createBot',{name:'Synthetic Bot',config:{contact:{provider:'unused',model:'unused'},agentPreset:'synthetic/empty'}},null),{name:'Synthetic Bot',config:{contact:{provider:'unused',model:'unused'},agentPreset:'synthetic/empty'}}).result;
- const sent=[],created=new Map(),producer={execution:true,provenance:{producerId:'synthetic-producer',ingress:'owner',originSessionId:'synthetic-main'},isCurrent:()=>true,
+ const sent=[],created=new Map(),producer={execution:true,requireOwnedGeneration,provenance:{producerId:'synthetic-producer',ingress:'owner',originSessionId:'synthetic-main'},isCurrent:()=>true,
   createMessage:(binding,provenance,text)=>({id:randomUUID(),role:'user',content:[{type:'text',text}],source:{kind:'dsh-bot',...provenance,...binding}}),
   async send(binding,message){assert.equal(ledger.list('workGeneration').filter(g=>g.held).length,1);sent.push(message.id);},async inspect(){return true;}};
  const port=host.openOwnedWorkSessionPort(caller,{botId:bot.botId,botEpoch:1,authorityEpoch:1,producer,creation:{cwd:'/synthetic',port:{
@@ -47,4 +47,10 @@ test('synthetic legacy stop durably fences original generation and keeps UNKNOWN
  const f=await fixture(t);await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'task',generation:1});
  const stopped=await f.call('stop','fenceWorkSession',{task_id:'task',generation:1,reason:'terminate'});
  assert.equal(stopped.fence.reason,'terminate');assert.equal(stopped.held,true);assert.equal(stopped.generationObservation.remote,'UNKNOWN');assert.equal(f.ledger.list('workGeneration')[0].fence.operationId,stopped.fence.operationId);assert.equal(f.sent.length,1);
+});
+
+for(const method of ['executeMessage','queueMessage'])test(`synthetic strict producer ${method} refuses missing native source before delivery and reservation`,async t=>{
+ const f=await fixture(t,{requireOwnedGeneration:true});const before=f.query();
+ await assert.rejects(()=>f.call(method,method==='executeMessage'?'prepareWorkSessionExecution':'prepareWorkSessionDelivery',{task_id:'task',generation:1}),e=>e.code==='unsupported_owned_generation_source');
+ assert.deepEqual(f.query(),before);assert.equal(f.sent.length,0);assert.equal(f.ledger.list('workDelivery').length,0);assert.equal(f.port.query({}).held,0);
 });
