@@ -1,6 +1,6 @@
 """Pure read-only public SDK/current-installation identity. Never launch Node or SDK."""
 import hashlib,json,os,re,stat
-from pathlib import Path
+from pathlib import Path,PosixPath
 import supervisor as R
 
 def fixed(path,maximum=512*1024*1024):
@@ -18,20 +18,22 @@ def safe(path):
 
 def files_under(root,sdk=False):
     rows=[];inspected=0;total=0
-    def walk(directory):
+    def walk(directory,prefix=None):
         nonlocal inspected,total
         R.require(directory.is_dir() and not directory.is_symlink() and directory.resolve(strict=True)==directory,'INSTALLED_CONTENT_IDENTITY_REFUSED')
         for path in sorted(directory.iterdir(),key=lambda p:p.name.encode()):
             inspected+=1;R.require(inspected<=100000,'INSTALLED_CONTENT_IDENTITY_REFUSED')
             if sdk and path.name=='.bin':continue
-            rel=path.relative_to(root).as_posix();R.require(safe(rel) and not path.is_symlink(),'INSTALLED_CONTENT_IDENTITY_REFUSED')
-            if path.is_dir():walk(path)
+            direct=prefix is not None and type(path) is PosixPath and path.parent==directory
+            rel=(prefix+'/' if prefix else '')+path.name if direct else path.relative_to(root).as_posix()
+            R.require(safe(rel) and not path.is_symlink(),'INSTALLED_CONTENT_IDENTITY_REFUSED')
+            if path.is_dir():walk(path,rel if direct else None)
             else:
                 R.require(path.is_file(),'INSTALLED_CONTENT_IDENTITY_REFUSED')
                 if not sdk or re.search(r'\.(js|mjs|cjs|json|wasm)$',rel):
                     data,mode,digest=fixed(path);total+=len(data);R.require(total<=2*1024**3 and len(rows)<50000,'INSTALLED_CONTENT_IDENTITY_REFUSED')
                     rows.append({'path':rel,'bytes':len(data),'sha256':digest,'mode':mode})
-    walk(root);return sorted(rows,key=lambda r:r['path'].encode())
+    walk(root,'' if type(root) is PosixPath else None);return sorted(rows,key=lambda r:r['path'].encode())
 
 def sdk_inventory(source):
     data,_,digest=fixed(source/'package-lock.json',4*1024*1024);lock=json.loads(data);packages=[]
