@@ -18,7 +18,7 @@
 | Bot 生命周期、归档、恢复 | `[data-dsh-bot-lifecycle]`、`[data-dsh-bot-archive]`、`[data-dsh-bot-restore]` |
 | 生命周期回执、原回执查询 | `[data-dsh-bot-lifecycle-receipt]`、`[data-dsh-bot-lifecycle-reconcile]` |
 
-`TASK_ID` 是返回的原始任务 ID。工作详情的 `<details>` 需要先展开。工作原生状态属性为 `pending`、`unknown` 或 `settled`；停止回执为 `accepted` 时，状态仍可能为 `unknown`，槽位继续保留。
+`TASK_ID` 是返回的原始任务 ID。工作详情的 `<details>` 需要先展开。工作原生状态属性为 `pending`、`UNKNOWN` 或 `settled`；停止回执为 `accepted` 时，状态仍可能为 `UNKNOWN`，槽位继续保留。
 
 `/dsh-bot-gui` 的控制 payload 和成功返回如下；失败统一为 `{ok:false,error:{code:'dsh-bot-gui/action-unconfirmed',...}}`，客户端将结果保留 UNKNOWN，不换原操作。
 
