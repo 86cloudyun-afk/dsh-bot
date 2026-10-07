@@ -154,7 +154,7 @@ window.__ModuleLoader__.load({id:'dsh-bot',factory:require=>{
     &&controls?.work.some(row=>row.taskId===w.taskId&&row.sessionId===w.sessionId&&row.generation===w.generation&&row.canContinue===true);
   // A pending read may disable new controls; it cannot replace the exact receipt identity.
   // This connection-scoped anchor grants no native authority and contains no capability.
-  memory.current.live={...memory.current.live,ledgerId:memory.current.guiIdentity?.generation===generation?memory.current.guiIdentity.ledgerId:undefined,controls,work:current?owned.work:[],modelEnabled:guiCurrent&&gui.modelRequestsEnabled};
+  memory.current.live={...memory.current.live,ledgerId:connected&&memory.current.guiIdentity?.generation===generation?memory.current.guiIdentity.ledgerId:undefined,controls,work:current?owned.work:[],modelEnabled:guiCurrent&&gui.modelRequestsEnabled};
   async function controlAction(kind,work,inspect=false){
    if(!guiCurrent||!controlReady||!identityReady||controlBusy||memory.current.busy||!selectedId)return;
    const previous=kind==='continue'?workOriginal(work):lifecycleOriginal,lookup=inspect||previous?.state==='unknown';

@@ -14,7 +14,7 @@ function locks(){const tails=new Map();return{async request(key,options,fn){cons
  const pending=new Promise(resolve=>{release=resolve;});tails.set(key,pending);try{await old;if(options.signal.aborted)throw Error('synthetic-abort');return await fn();}
  finally{release();if(tails.get(key)===pending)tails.delete(key);}}};}
 function fixture({storage=new Map(),server={lifecycle:'active',botEpoch:1,canArchive:true,canRestore:false,canContinue:true,work:initialWork()},lock=locks()}={}){
- let cursor=0,generation=1;const states=[],effects=[],pending=[],entries=[],cleanups=[],calls=[];
+ let cursor=0,generation=1,connection='connected';const states=[],effects=[],pending=[],entries=[],cleanups=[],calls=[];
  const react={createElement:(type,props,...children)=>({type,props:props??{},children}),
   useState(initial){const i=cursor++;if(!(i in states))states[i]=typeof initial==='function'?initial():initial;return[states[i],value=>{states[i]=typeof value==='function'?value(states[i]):value;}];},
   useRef(initial){const i=cursor++;states[i]??={current:initial};return states[i];},
@@ -50,13 +50,23 @@ function fixture({storage=new Map(),server={lifecycle:'active',botEpoch:1,canArc
   slots:{provideRoot(){},installScope(){},inject(_name,fn){return ctx.effect(fn);},register(options,component){entries.push({options,component});return()=>{};}},
   connection:{state:{},generation:{},rpc:{call(channel,endpoint,frame,signal){calls.push({channel,endpoint,frame,signal});return responder(channel,endpoint,frame,signal);}}}};
  plugin.apply(ctx,{guiOwner:true});const entry=entries.find(e=>e.options.name==='main'),props=entry.options.inject();
- return{server,storage,calls,setResponder:fn=>{const original=responder;responder=(...args)=>fn(original,...args);},setGeneration:id=>{generation=id;},
-  render(){cursor=0;const tree=entry.component({t:key=>key,...props,useConnection:fn=>fn('connected'),useGeneration:fn=>fn({id:generation})});for(const fn of pending.splice(0))fn();return tree;},
+ return{server,storage,calls,setResponder:fn=>{const original=responder;responder=(...args)=>fn(original,...args);},setGeneration:id=>{generation=id;},setConnection:value=>{connection=value;},
+  render(){cursor=0;const tree=entry.component({t:key=>key,...props,useConnection:fn=>fn(connection),useGeneration:fn=>fn(generation===undefined?undefined:{id:generation})});for(const fn of pending.splice(0))fn();return tree;},
   async settle(){for(let i=0;i<14;i++){this.render();await tick();}return this.render();},
   async dispose(){for(const effect of effects)effect?.cleanup?.();for(const cleanup of cleanups.reverse())await cleanup?.();}};
 }
 function find(tree,key){if(!tree||typeof tree!=='object')return null;if(Object.hasOwn(tree.props??{},key))return tree;
  for(const child of tree.children??[]){const found=Array.isArray(child)?child.map(n=>find(n,key)).find(Boolean):find(child,key);if(found)return found;}return null;}
+
+test('an unstarted connection renders an inert panel before its first generation',async()=>{
+ const f=fixture();f.setConnection('unstarted');f.setGeneration(undefined);
+ try{const first=await f.settle();assert.ok(find(first,'data-dsh-bot-panel'));assert.equal(find(first,'data-dsh-bot-goal').props.disabled,true);
+  assert.equal(find(first,'data-dsh-bot-select').props.disabled,true);assert.equal(f.calls.length,0);assert.equal(f.storage.size,0);
+  f.setConnection('connected');f.setGeneration(1);const connected=await f.settle();
+  assert.equal(find(connected,'data-dsh-bot-work-continue').props.disabled,false);
+  assert.equal(f.calls.filter(call=>['continueWork','createBot','archiveBot','restoreBot','sendContactText'].includes(call.endpoint)).length,0);
+ }finally{await f.dispose();}
+});
 
 test('verified original work continues through the private GUI channel with the exact task, session and generation',async()=>{
  const f=fixture();try{let tree=await f.settle(),button=find(tree,'data-dsh-bot-work-continue');assert.ok(button,'missing same-session work continuation');assert.equal(button.props.disabled,false);
