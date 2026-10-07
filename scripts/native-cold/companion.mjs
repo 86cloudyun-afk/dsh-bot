@@ -36,6 +36,7 @@ let guardPreflightReady=false;
 const now=()=>new Date().toISOString();
 const state={pid:process.pid,startUTC:now(),endUTC:null,stage:'COMPANION_STARTED',setupReady:false,explicitApprovedAddonFlag:process.execArgv.includes('--allow-addons')&&process.execArgv.includes('--permission'),environmentRestricted:false,sqliteGuardVerified:false,resolveCalls:0,resolveCompleted:false,resolveStartUTC:null,resolveEndUTC:null,resolveAgentPresent:null,outerErrorCode:'UNRECORDED',nativeLoadAttempts:0,nativeLoads:0,nativeAttempts:[],nativeCalls:0,nativeCallStartUTC:null,nativeCallEndUTC:null,nativeCallbackErrno:null,nativeReturnCategory:'UNRECORDED',nativeFdOwned:false,nativeFdIdentity:null,nativeFdClosedBeforeExit:null,networkAttempts:0,spawnAttempts:0,workerAttempts:0,sqliteConstructAttempts:0,modelAttempts:null,boundaryRefusals:[],setupFailureCode:'NONE',targetSHA256:sha,systemLoads:0,narbLoads:0,narbInfoQueries:0,narbRequireCalls:0,narbCalls:[],terminalRefusalCategory:null};
 state.installedIdentity=null;
+state.preflightBoundary={status:'NOT_CHECKED',caseRecognized:null,permissionReady:null,environmentRestricted:null,platformMatches:null,architectureMatches:null};
 let nativeFd;
 const atomicSave=createBuiltinObservationWriter(fs,root,'TRACE',process.pid,caseName);
 const save=()=>{try{atomicSave(state);}catch{exitImmediately(75);throw Error('OBSERVATION_COMMIT_REFUSED');}};
@@ -78,8 +79,11 @@ try{
  checkpoint('C_BOUNDARY_PREFLIGHT');
  const allowed=new Set(['DSH_HOME','DSH_BOT_TEST_ROOT','TMPDIR','TZ','LANG','NODE_TEST_CONTEXT']);
  state.environmentRestricted=Object.keys(process.env).every(key=>allowed.has(key));
- if(!['builtin-dual','cold1','cold2'].includes(caseName))refused('PREFLIGHT_BOUNDARY_REFUSED');
  const permissionReady=guardOnly?process.execArgv.includes('--permission')&&!process.execArgv.includes('--allow-addons'):state.explicitApprovedAddonFlag;
+ state.preflightBoundary={status:'CHECKED',caseRecognized:['builtin-dual','cold1','cold2'].includes(caseName),permissionReady,
+  environmentRestricted:state.environmentRestricted,platformMatches:process.platform===pins.platform,architectureMatches:process.arch===pins.arch};
+ save();
+ if(!state.preflightBoundary.caseRecognized)refused('PREFLIGHT_BOUNDARY_REFUSED');
  if(!permissionReady||!state.environmentRestricted||process.platform!==pins.platform||process.arch!==pins.arch)refused('PREFLIGHT_BOUNDARY_REFUSED');
  if(!guardOnly)verifyInstalled('before');
  process.report.excludeEnv=true;

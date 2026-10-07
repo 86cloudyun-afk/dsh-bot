@@ -1,9 +1,10 @@
 import copy,datetime,re
 import supervisor as R
 import ledger as LEG
+import builtin_policy as B
 from supervisor import require,SafetyError,TRACE_KEYS,CODES,REFUSALS
 STAGES=R.STAGES|{"NATIVE_ADMISSION_REFUSED"}
-EXTRA_KEYS={'systemLoads','narbLoads','narbInfoQueries','narbRequireCalls','narbCalls','terminalRefusalCategory','installedIdentity'}
+EXTRA_KEYS={'systemLoads','narbLoads','narbInfoQueries','narbRequireCalls','narbCalls','terminalRefusalCategory','installedIdentity','preflightBoundary'}
 TERMINAL_CATEGORIES_EXTRA={'NATIVE_LOCK_BOUNDARY_REFUSED','NATIVE_LOCK_CALLBACK_REFUSED','NATIVE_LOCK_RESULT_REFUSED','DNS_GUARD_INSTALL_REFUSED','DNS_GUARD_BINDING_REFUSED','INSTALLED_CONTENT_IDENTITY_REFUSED'}
 
 TERMINAL_CATEGORIES={'OTHER_ADDON_LOAD_REFUSED','PINNED_ADDON_HASH_REFUSED','ADDON_LOAD_LIMIT_REFUSED','NARB_API_LIMIT_REFUSED','NARB_ARGUMENT_REFUSED','NARB_INFO_LIMIT_REFUSED','NARB_MODULE_REFUSED','NARB_REQUIRE_LIMIT_REFUSED','NARB_API_REFUSED','NARB_CALL_FAILED','NARB_BINDING_INFO_REFUSED','NARB_MODULE_RESULT_REFUSED','NATIVE_EXPORT_SURFACE_REFUSED','NATIVE_WRAP_FAILED','ORIGINAL_DLOPEN_FAILED','OBSERVATION_COMMIT_REFUSED'}|REFUSALS|{'MODEL_OPERATION_REFUSED','MODEL_GUARD_BINDING_REFUSED'}
@@ -80,6 +81,7 @@ def project_core(t):
 def trace_valid(t,pid):
  try:
   require(type(t) is dict and set(t)==TRACE_KEYS|EXTRA_KEYS,'DUAL_TRACE_SCHEMA_REFUSED')
+  require(B.boundary_valid(t['preflightBoundary']),'PREFLIGHT_OBSERVATION_SCHEMA_REFUSED')
   integer=lambda x,max:type(x) is int and 0<=x<=max
   require(all(integer(t[k],limit) for k,limit in [('systemLoads',1),('narbLoads',1),('narbInfoQueries',2),('narbRequireCalls',1),('nativeLoads',2),('nativeLoadAttempts',3)]),'DUAL_TRACE_COUNTER_REFUSED')
   require(t['terminalRefusalCategory'] is None or t['terminalRefusalCategory'] in TERMINAL_CATEGORIES|TERMINAL_CATEGORIES_EXTRA,'DUAL_TRACE_ENUM_REFUSED')
@@ -117,6 +119,7 @@ def trace_valid(t,pid):
 
 def cold_eligible(*,trace,counts,diagnostics,returncode,stopped,complete,errors,pins):
  if not trace_valid(trace,trace.get('pid') if type(trace) is dict else None) or errors or not pins or not stopped or not complete or returncode!=0:return False
+ if not B.boundary_passed(trace['preflightBoundary']):return False
  if trace['terminalRefusalCategory'] is not None or trace['nativeLoadAttempts']!=2 or trace['narbLoads']!=1 or trace['systemLoads']!=1 or trace['narbInfoQueries']!=2 or trace['narbRequireCalls']!=1:return False
  if trace['installedIdentity'] is None or trace['installedIdentity']['checkedBefore'] is not True or trace['installedIdentity']['checkedAfter'] is not True:return False
  if any(e['admission']!='ALLOW' or e['outcome']!='LOADED' or e['reason']!='NONE' for e in trace['nativeAttempts']):return False

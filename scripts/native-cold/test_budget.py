@@ -1,0 +1,194 @@
+"""Synthetic clocks, owned files and fake children only; no SDK/native/model/network."""
+import hashlib, io, json, math, signal, subprocess, tempfile, time, unittest
+from contextlib import redirect_stdout
+from types import SimpleNamespace
+from pathlib import Path
+from unittest.mock import patch
+import supervisor as R
+import run
+try:
+ from case_budget import CaseBudget
+except ModuleNotFoundError:
+ CaseBudget=None
+class Clock:
+ def __init__(self):self.value=0.
+ def __call__(self):return self.value
+ def advance(self,seconds):self.value+=seconds
+class BudgetTests(unittest.TestCase):
+ def setUp(self):self.assertIsNotNone(CaseBudget,'CASE_TOTAL_BUDGET_MISSING');self.clock=Clock()
+ def budget(self,limit=5):return CaseBudget(limit,clock=self.clock,alarms=False)
+ def test_remaining_includes_prior_identity_work(self):
+  b=self.budget();self.clock.advance(2)
+  self.assertEqual(b.remaining(),3)
+  with b.phase('CONTEXT_BEFORE'):self.clock.advance(1)
+  self.assertEqual(b.remaining(),2);self.assertEqual(b.snapshot()['phasesSeconds']['CONTEXT_BEFORE'],1)
+ def test_exact_boundary_and_slow_identity_are_refused(self):
+  for spent in (5,11.463614244):
+   b=self.budget()
+   with self.assertRaises(R.SafetyError) as caught:
+    with b.phase('CONTEXT_BEFORE'):self.clock.advance(spent)
+   self.assertEqual(caught.exception.code,'CASE_BUDGET_EXHAUSTED')
+   self.assertFalse(b.snapshot()['withinBudget'])
+ def test_previous_cold_wall_overruns_cannot_pass_numeric_total_budget(self):
+  for spent in (20.570495544,20.410317702):
+   b=self.budget(20)
+   with self.assertRaises(R.SafetyError):
+    with b.phase('CONTEXT_AFTER'):self.clock.advance(spent)
+   self.assertFalse(b.snapshot()['withinBudget'])
+ def test_cleanup_is_completed_measured_and_wall_is_not_hidden(self):
+  b=self.budget();self.clock.advance(3);called=[]
+  b.cleanup(lambda:(called.append(True),self.clock.advance(7)))
+  self.clock.advance(1);s=b.snapshot()
+  self.assertEqual(called,[True]);self.assertEqual(s['cleanupSeconds'],7)
+  self.assertEqual(s['activeSeconds'],4);self.assertEqual(s['wholeWallSeconds'],11);self.assertTrue(s['withinBudget'])
+ def test_cleanup_exception_still_has_time_accounted(self):
+  b=self.budget()
+  def remove():self.clock.advance(2);raise OSError()
+  with self.assertRaises(OSError):b.cleanup(remove)
+  self.assertEqual(b.snapshot()['cleanupSeconds'],2)
+ def test_failure_finalization_keeps_evidence_and_cannot_restore_success(self):
+  b=self.budget();self.clock.advance(6)
+  with self.assertRaises(R.SafetyError):b.remaining()
+  with b.safety_phase('RESULT_RECEIPT'):self.clock.advance(1)
+  self.assertFalse(b.snapshot()['withinBudget']);self.assertEqual(b.snapshot()['safetyFinalizationSeconds'],1)
+ def test_invalid_types_limits_and_phase_labels_are_refused(self):
+  for limit in (True,0,-1,21,float('inf'),float('nan'),'5'):
+   with self.assertRaises(R.SafetyError):CaseBudget(limit,clock=self.clock,alarms=False)
+  b=self.budget()
+  with self.assertRaises(R.SafetyError):
+   with b.phase('UNTRUSTED_TEXT_MUST_NOT_PERSIST'):pass
+  self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(b.snapshot()))
+ def test_short_real_alarm_interrupts_only_synthetic_sleep_and_restores_handler(self):
+  previous=signal.getsignal(signal.SIGALRM);b=CaseBudget(.03)
+  with self.assertRaises(R.SafetyError) as caught:
+   with b.phase('CONTEXT_BEFORE'):time.sleep(.1)
+  self.assertEqual(caught.exception.code,'CASE_BUDGET_EXHAUSTED')
+  self.assertEqual(signal.getsignal(signal.SIGALRM),previous);self.assertEqual(signal.getitimer(signal.ITIMER_REAL),(0.,0.))
+ def test_existing_alarm_is_never_overridden(self):
+  previous=signal.getsignal(signal.SIGALRM);timer=signal.getitimer(signal.ITIMER_REAL)
+  signal.setitimer(signal.ITIMER_REAL,10)
+  try:
+   b=CaseBudget(5)
+   with self.assertRaises(R.SafetyError) as caught:
+    with b.phase('CONTEXT_BEFORE'):pass
+   self.assertEqual(caught.exception.code,'CASE_BUDGET_TIMER_BUSY')
+   self.assertGreater(signal.getitimer(signal.ITIMER_REAL)[0],0);self.assertEqual(signal.getsignal(signal.SIGALRM),previous)
+  finally:signal.setitimer(signal.ITIMER_REAL,*timer)
+class SupervisorBudgetTests(unittest.TestCase):
+ def setUp(self):self.assertIsNotNone(CaseBudget,'CASE_TOTAL_BUDGET_MISSING');self.clock=Clock()
+ def budget(self,limit=5):return CaseBudget(limit,clock=self.clock,alarms=False)
+ def exercise(self,node_seconds=0,launch_seconds=0,timeout_once=False):
+  b=self.budget();self.clock.advance(3);calls=[]
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d).resolve();env=R.synthetic_env(root)
+   class Child:
+    pid=999
+    done=False
+    def communicate(child,timeout):
+     calls.append(('wait',timeout))
+     if timeout_once and not child.done:self.clock.advance(timeout);raise subprocess.TimeoutExpired('synthetic',timeout)
+     self.clock.advance(.2);child.done=True;return b'',b''
+    def poll(child):return 0 if child.done else None
+    def terminate(child):calls.append(('terminate',None));child.done=True
+    def kill(child):calls.append(('kill',None));child.done=True
+   def launch(*a,**k):calls.append(('launch',None));self.clock.advance(launch_seconds);return Child()
+   def node():self.clock.advance(node_seconds);return Path('/synthetic/node')
+   with patch.object(R.os,'kill',side_effect=ProcessLookupError):
+    capture=R.supervise_once(['/synthetic/node','--permission'],root,env,20,popen=launch,node_check=node,budget=b)
+  return capture,calls,b
+ def test_child_uses_remaining_total_after_node_identity(self):
+  capture,calls,b=self.exercise(node_seconds=.25)
+  self.assertTrue(capture['processStopped']);self.assertTrue(capture['outputComplete'])
+  waits=[v for k,v in calls if k=='wait'];self.assertLessEqual(max(waits),1.75)
+  self.assertTrue(b.snapshot()['withinBudget'])
+ def test_slow_node_identity_prevents_launch(self):
+  capture,calls,b=self.exercise(node_seconds=3)
+  self.assertFalse(capture['childCreated']);self.assertFalse(any(k=='launch' for k,v in calls))
+  self.assertIn('CASE_BUDGET_EXHAUSTED',capture['errorCategories'])
+ def test_launch_overrun_retains_handle_and_stops_child(self):
+  capture,calls,b=self.exercise(launch_seconds=3)
+  self.assertTrue(capture['childCreated']);self.assertTrue(capture['processStopped'])
+  self.assertIn('CASE_BUDGET_EXHAUSTED',capture['errorCategories']);self.assertFalse(b.snapshot()['withinBudget'])
+ def test_child_timeout_stops_and_completes_capture_within_remaining_allowance(self):
+  capture,calls,b=self.exercise(timeout_once=True)
+  self.assertTrue(capture['timedOut']);self.assertTrue(capture['processStopped']);self.assertTrue(capture['outputComplete'])
+  self.assertIn('TIMEOUT',capture['errorCategories']);self.assertTrue(any(k=='terminate' for k,v in calls))
+class CaseBudgetIntegrationTests(unittest.TestCase):
+ def setUp(self):self.assertIsNotNone(CaseBudget,'CASE_TOTAL_BUDGET_MISSING');self.clock=Clock()
+ def exercise(self,slow_identity=0,slow_receipt=0,slow_cleanup=0,slow_terminal=0,slow_cleanup_receipt=0,slow_return_hash=0):
+  with tempfile.TemporaryDirectory() as d:
+   temp=Path(d).resolve();evidence=temp/'evidence';evidence.mkdir()
+   ctx={'temp':temp,'evidence':evidence,'head':'a'*40,'tree':'b'*40,'node':Path('/synthetic/node')}
+   b=CaseBudget(5,clock=self.clock,alarms=False);ctx['builtinBudget']=b
+   child=R.Capture(childCreated=True,childPID=999,returncode=74,processStopped=True,outputComplete=True,errorCategories=[])
+   writer=R.atomic_create;remover=R.shutil.rmtree;hasher=R.sha
+   def check(context):self.clock.advance(slow_identity)
+   def write(path,value,**kwargs):
+    if path.name=='builtin-dual-receipt.json':self.clock.advance(slow_receipt)
+    if path.name=='builtin-dual-cleanup.json' and value.get('safeToRunOtherApprovedCase'):self.clock.advance(slow_cleanup_receipt)
+    if path.name=='builtin-dual-terminal.json' and value.get('evaluatedOutcome')=='PASS':self.clock.advance(slow_terminal)
+    return writer(path,value,**kwargs)
+   def remove(path):self.assertTrue((evidence/'builtin-dual-receipt.json').is_file());self.clock.advance(slow_cleanup);return remover(path)
+   def digest(path):
+    if path.name=='builtin-dual-cleanup.json':self.clock.advance(slow_return_hash)
+    return hasher(path)
+   with patch.object(run,'check_context',side_effect=check),patch.object(run,'prepare'),patch.object(R,'supervise_bounded',return_value=child) as launch,patch.object(run,'builtin_observation',return_value=({'stage':'NATIVE_ADMISSION_REFUSED'},{})),patch.object(R,'atomic_create',side_effect=write),patch.object(R.shutil,'rmtree',side_effect=remove),patch.object(R,'sha',side_effect=digest),patch.dict(run.WITNESSES,{},clear=True):
+    outcome=run.run_case('builtin-dual',ctx)
+    witness='builtin-dual' in run.WITNESSES
+   files={p.name:json.loads(p.read_text()) for p in evidence.glob('*.json')}
+   terminal=files.get('builtin-dual-terminal.json')
+   if terminal:
+    for field,name in [('diagnosticSHA256','builtin-dual-receipt.json'),('cleanupSHA256','builtin-dual-cleanup.json')]:
+     self.assertEqual(terminal[field],hashlib.sha256((evidence/name).read_bytes()).hexdigest())
+   return outcome,files,launch.call_count,witness
+ def test_slow_case_identity_blocks_launch_and_keeps_failure_receipt(self):
+  outcome,files,launch,witness=self.exercise(slow_identity=6)
+  self.assertEqual(launch,0);self.assertFalse(witness);self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL')
+  self.assertIn('CASE_BUDGET_EXHAUSTED',outcome['errors']);self.assertIn('builtin-dual-receipt.json',files)
+ def test_slow_result_receipt_blocks_success_but_cleanup_is_complete(self):
+  outcome,files,launch,witness=self.exercise(slow_receipt=6)
+  self.assertFalse(witness);self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL')
+  self.assertTrue(outcome['completion']['diagnosticPersisted']);self.assertTrue(outcome['completion']['temporaryDirectoryRemoved'])
+  self.assertFalse(outcome['timing']['withinBudget'])
+ def test_slow_cleanup_is_done_and_separately_quantified(self):
+  outcome,files,launch,witness=self.exercise(slow_cleanup=7)
+  self.assertEqual(outcome['status'],'PASS');self.assertTrue(witness)
+  self.assertEqual(outcome['timing']['cleanupSeconds'],7);self.assertGreaterEqual(outcome['elapsedSeconds'],7)
+  self.assertEqual(outcome['timing']['activeSeconds'],0);self.assertTrue(outcome['completion']['temporaryDirectoryRemoved'])
+ def test_late_terminal_write_never_leaves_final_pass_or_witness(self):
+  outcome,files,launch,witness=self.exercise(slow_terminal=6)
+  self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL');self.assertFalse(witness)
+  self.assertEqual(files['builtin-dual-terminal.json']['evaluatedOutcome'],'BLOCKED_OR_FAIL')
+ def test_initial_context_work_and_case_share_one_builtin_allowance(self):
+  with tempfile.TemporaryDirectory() as d:
+   temp=Path(d).resolve();evidence=temp/'evidence';evidence.mkdir();b=CaseBudget(5,clock=self.clock,alarms=False);self.clock.advance(4)
+   ctx={'temp':temp,'evidence':evidence,'head':'a'*40,'tree':'b'*40,'node':Path('/synthetic/node'),'builtinBudget':b}
+   with patch.object(run,'check_context',side_effect=lambda c:self.clock.advance(2)),patch.object(R,'supervise_bounded') as launch:
+    result=run.run_case('builtin-dual',ctx)
+   launch.assert_not_called();self.assertEqual(result['status'],'BLOCKED_OR_FAIL')
+   self.assertEqual(result['timing']['activeSeconds'],6)
+ def test_slow_cleanup_receipt_is_charged_and_sealed_as_blocked(self):
+  outcome,files,launch,witness=self.exercise(slow_cleanup_receipt=6)
+  self.assertFalse(witness);self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL')
+  self.assertFalse(files['builtin-dual-cleanup.json']['safeToRunOtherApprovedCase'])
+  self.assertEqual(files['builtin-dual-terminal.json']['evaluatedOutcome'],'BLOCKED_OR_FAIL')
+ def test_slow_receipt_hash_still_preserves_a_failed_terminal(self):
+  outcome,files,launch,witness=self.exercise(slow_return_hash=6)
+  self.assertFalse(witness);self.assertEqual(outcome['status'],'BLOCKED_OR_FAIL')
+  self.assertIn('builtin-dual-terminal.json',files)
+  self.assertEqual(files['builtin-dual-terminal.json']['evaluatedOutcome'],'BLOCKED_OR_FAIL')
+ def test_initial_context_timeout_cleans_verified_owned_installation_without_a_child(self):
+  with tempfile.TemporaryDirectory() as d:
+   temp=Path(d).resolve();current=temp/'current';current.mkdir();evidence=temp/'evidence'
+   args=SimpleNamespace(temp_dir=str(temp),evidence_dir=str(evidence),current_dir=str(current),expected_sha='a'*40,node='/synthetic/node')
+   b=CaseBudget(5,clock=self.clock,alarms=False)
+   def context(arguments,resources,budget):
+    evidence.mkdir();resources.update(evidence=evidence,current=current);self.clock.advance(6)
+    return {}
+   with patch.object(run,'CaseBudget',return_value=b),patch.object(run.argparse.ArgumentParser,'parse_args',return_value=args),patch.object(run,'context',side_effect=context),patch.object(R,'supervise_bounded') as launch,redirect_stdout(io.StringIO()):
+    exitcode=run.main()
+   launch.assert_not_called();self.assertEqual(exitcode,2);self.assertFalse(current.exists())
+   self.assertTrue((evidence/'preflight-receipt.json').is_file())
+   sealed=json.loads((evidence/'preflight-cleanup.json').read_text())
+   self.assertTrue(sealed['diagnosticPersisted']);self.assertTrue(sealed['temporaryDirectoryRemoved'])
+if __name__=='__main__':unittest.main()

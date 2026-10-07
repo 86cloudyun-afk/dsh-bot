@@ -1,5 +1,6 @@
 import datetime,hashlib,json,os,re,shutil,signal,stat,subprocess,tempfile,time
 from pathlib import Path
+from contextlib import nullcontext
 
 def checked_node():
     require(regular(NODE) and sha(NODE)==NODE_SHA,'NODE_PIN_REFUSED')
@@ -93,23 +94,29 @@ def atomic_create(path,value,*,rollback_on_failure=False):
             except OSError:pass
 
 
-def supervise_once(args,cwd,env,timeout=20,*,popen=subprocess.Popen,node_check=checked_node,on_started=None,allow_addons=False,supervisor_signals=None):
+def supervise_once(args,cwd,env,timeout=20,*,popen=subprocess.Popen,node_check=checked_node,on_started=None,allow_addons=False,supervisor_signals=None,budget=None):
     result=Capture(childCreated=False,childPID=None,returncode=None,terminationExitCode=None,terminationSignal=None,processStopped=True,timedOut=False,terminated=False,killed=False,outputComplete=False,errorCategories=[])
     child=None;deadline=None;kill_reserve=0
-    def remaining(reserve=0):return max(0,deadline-time.monotonic()-reserve)
+    clock=budget.clock if budget is not None else time.monotonic
+    def remaining(reserve=0):return max(0,deadline-clock()-reserve)
     try:
-        node=node_check();require(args[0]==str(node),'NODE_ARGUMENT_REFUSED')
-        require('--permission' in args and (allow_addons or '--allow-addons' not in args),'GUARD_FLAGS_REFUSED')
-        require(set(env)==ENV_KEYS and env==synthetic_env(Path(env['DSH_BOT_TEST_ROOT'])),'ENVIRONMENT_REFUSED')
+        with budget.phase('CHILD_NODE_IDENTITY') if budget is not None else nullcontext():
+            node=node_check();require(args[0]==str(node),'NODE_ARGUMENT_REFUSED')
+            require('--permission' in args and (allow_addons or '--allow-addons' not in args),'GUARD_FLAGS_REFUSED')
+            require(set(env)==ENV_KEYS and env==synthetic_env(Path(env['DSH_BOT_TEST_ROOT'])),'ENVIRONMENT_REFUSED')
         require(type(timeout) in (int,float) and 0<timeout<=20,'DEADLINE_REFUSED')
         require(supervisor_signals is None or supervisor_signals.received is None,'SUPERVISOR_SIGNAL')
-        deadline=time.monotonic()+timeout;kill_reserve=min(1,timeout/4);stop_reserve=min(4,timeout/2)
+        deadline=min(clock()+timeout,budget.child_deadline()) if budget is not None else clock()+timeout
+        allowance=remaining();require(allowance>0,'DEADLINE_REFUSED')
+        kill_reserve=min(1,allowance/4);stop_reserve=min(4,allowance/2)
         child=popen(args,cwd=cwd,env=dict(env),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         result.update(childCreated=True,childPID=child.pid,processStopped=False)
+        if budget is not None:budget.check()
         if supervisor_signals is not None:
             if supervisor_signals.received is not None:raise SupervisorStop()
             supervisor_signals.interruptible=True
-        if on_started is not None:on_started(child.pid)
+        if on_started is not None:
+            with budget.phase('START_RECEIPT') if budget is not None else nullcontext():on_started(child.pid)
         result.stdout,result.stderr=child.communicate(timeout=remaining(stop_reserve));result['outputComplete']=True
     except subprocess.TimeoutExpired:result['timedOut']=True;result['errorCategories'].append('TIMEOUT')
     except SupervisorStop:result['errorCategories'].append('SUPERVISOR_SIGNAL')
@@ -150,16 +157,51 @@ def supervise_once(args,cwd,env,timeout=20,*,popen=subprocess.Popen,node_check=c
     return result
 
 
-def persist_and_cleanup(root,receipt,completion,record,stopped,eligible,*,writer=atomic_create,remover=shutil.rmtree):
+def persist_and_cleanup(root,receipt,completion,record,stopped,eligible,*,writer=None,remover=None,budget=None):
+    writer=atomic_create if writer is None else writer
+    remover=shutil.rmtree if remover is None else remover
     out={'status':'DIAGNOSTIC_WRITE_FAILED','diagnosticPersisted':False,'temporaryDirectoryRemoved':False,'safeToRunOtherApprovedCase':False}
-    try:writer(receipt,record);out['diagnosticPersisted']=True;out['diagnosticSHA256']=sha(receipt)
+    try:
+        if budget is None:writer(receipt,record)
+        else:
+            try:
+                with budget.phase('RESULT_RECEIPT'):writer(receipt,record,rollback_on_failure=True)
+            except SafetyError:
+                if not budget.failed:raise
+                if not Path(receipt).exists():
+                    with budget.safety_phase('RESULT_RECEIPT'):writer(receipt,record,rollback_on_failure=True)
+        out['diagnosticPersisted']=True
+        if budget is None:out['diagnosticSHA256']=sha(receipt)
+        elif budget.failed:
+            with budget.safety_phase('RECEIPT_HASH'):out['diagnosticSHA256']=sha(receipt)
+        else:
+            try:
+                with budget.phase('RECEIPT_HASH'):out['diagnosticSHA256']=sha(receipt)
+            except SafetyError:
+                if not budget.failed:raise
+                with budget.safety_phase('RECEIPT_HASH'):out['diagnosticSHA256']=sha(receipt)
     except BaseException:return out
     out['status']='PROCESS_STOP_UNVERIFIED'
-    if stopped:
-        try:remover(root);out['temporaryDirectoryRemoved']=not Path(root).exists();out['status']='CLEANUP_OK' if out['temporaryDirectoryRemoved'] else 'CLEANUP_FAILED'
+    if stopped and root is None:
+        out['temporaryDirectoryRemoved']=True;out['status']='NO_CASE_DIRECTORY_CREATED'
+    elif stopped:
+        try:
+            if budget is None:remover(root)
+            else:budget.cleanup(lambda:remover(root))
+            out['temporaryDirectoryRemoved']=not Path(root).exists();out['status']='CLEANUP_OK' if out['temporaryDirectoryRemoved'] else 'CLEANUP_FAILED'
         except BaseException:out['status']='CLEANUP_FAILED'
-    out['safeToRunOtherApprovedCase']=bool(eligible and stopped and out['temporaryDirectoryRemoved'] and out['status']=='CLEANUP_OK')
-    try:writer(completion,out)
+    out['safeToRunOtherApprovedCase']=bool(eligible and stopped and out['temporaryDirectoryRemoved'] and out['status']=='CLEANUP_OK' and (budget is None or budget.snapshot()['withinBudget']))
+    try:
+        if budget is None:writer(completion,out)
+        else:
+            out['budgetBeforeCompletionReceipt']=budget.snapshot()
+            try:
+                with budget.phase('CLEANUP_RECEIPT'):writer(completion,out,rollback_on_failure=True)
+            except SafetyError:
+                if not budget.failed:raise
+                out['safeToRunOtherApprovedCase']=False;out['budgetBeforeCompletionReceipt']=budget.snapshot()
+                if Path(completion).exists():Path(completion).unlink()
+                with budget.safety_phase('CLEANUP_RECEIPT'):writer(completion,out,rollback_on_failure=True)
     except BaseException:out['status']='COMPLETION_WRITE_FAILED';out['safeToRunOtherApprovedCase']=False
     return out
 

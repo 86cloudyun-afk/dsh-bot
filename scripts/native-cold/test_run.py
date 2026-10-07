@@ -12,6 +12,27 @@ import supervisor as R
 from contract import select_platform
 
 class BuiltinDiagnosticTests(unittest.TestCase):
+    def test_preflight_false_predicate_is_retained_and_never_admits(self):
+        names=('caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches')
+        for failed in names:
+            trace=self.terminal();trace['preflightBoundary']={'status':'CHECKED',**{name:name!=failed for name in names}}
+            result,sealed=self.exercise(trace);diagnostic=sealed['builtinObservationDiagnostic']
+            self.assertIn('preflightBoundary',diagnostic)
+            self.assertEqual(diagnostic['preflightBoundary'],trace['preflightBoundary'])
+            self.assertEqual(result['status'],'BLOCKED_OR_FAIL')
+
+    def test_preflight_unknown_and_non_boolean_fields_are_safely_projected(self):
+        trace=self.terminal();trace['preflightBoundary']={'status':'UNTRUSTED_TEXT_MUST_NOT_PERSIST','caseRecognized':1,
+            'permissionReady':'UNTRUSTED_TEXT_MUST_NOT_PERSIST','environmentRestricted':{},'platformMatches':[],
+            'architectureMatches':None,'untrusted':'UNTRUSTED_TEXT_MUST_NOT_PERSIST'}
+        result,sealed=self.exercise(trace);diagnostic=sealed['builtinObservationDiagnostic']
+        self.assertIn('preflightBoundary',diagnostic)
+        self.assertEqual(diagnostic['preflightBoundary']['status'],'UNKNOWN')
+        for name in ('caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches'):
+            self.assertIsNone(diagnostic['preflightBoundary'][name])
+        self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(sealed))
+        self.assertEqual(result['status'],'BLOCKED_OR_FAIL')
+
     def terminal(self):
         stamp='2026-10-07T00:00:00.000Z'
         identity={'scope':'UNKNOWN','contentSHA256':None,'packageIdentity':'UNKNOWN','payloadIdentity':'UNKNOWN','pathRelation':'UNKNOWN','isPathAlias':None,'unknownReason':'OUT_OF_SCOPE'}
@@ -23,7 +44,8 @@ class BuiltinDiagnosticTests(unittest.TestCase):
           'nativeFdOwned':False,'nativeFdIdentity':None,'nativeFdClosedBeforeExit':None,'networkAttempts':0,'spawnAttempts':0,'workerAttempts':0,
           'sqliteConstructAttempts':0,'modelAttempts':None,'boundaryRefusals':['OTHER_ADDON_LOAD_REFUSED'],'setupFailureCode':'NONE',
           'targetSHA256':select_platform('linux','x86_64')['bindings'][0]['sha256'],'systemLoads':0,'narbLoads':0,'narbInfoQueries':0,'narbRequireCalls':0,'narbCalls':[],
-          'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED','installedIdentity':None}
+          'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED','installedIdentity':None,
+          'preflightBoundary':{'status':'CHECKED',**{name:True for name in ('caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches')}}}
 
     def exercise(self,trace,*,invalid_envelope=False,read_failure=False,target_change=None,assertion_change=None,progress_change=None):
         with tempfile.TemporaryDirectory() as d:
@@ -43,12 +65,12 @@ class BuiltinDiagnosticTests(unittest.TestCase):
                 progress.update(progress_change or {});(root/'builtin-progress.json').write_text(json.dumps(progress))
             child=R.Capture(childCreated=True,childPID=999,returncode=74,processStopped=True,outputComplete=True,errorCategories=[])
             seen={};original=R.persist_and_cleanup
-            def persist(root,receipt,cleanup,record,stopped,eligible):
+            def persist(root,receipt,cleanup,record,stopped,eligible,**kwargs):
                 def remove(path):
                     self.assertTrue(path.exists());self.assertTrue(receipt.is_file())
                     seen['receiptBeforeCleanup']=json.loads(receipt.read_text())
                     shutil.rmtree(path)
-                return original(root,receipt,cleanup,record,stopped,eligible,remover=remove)
+                return original(root,receipt,cleanup,record,stopped,eligible,remover=remove,**kwargs)
             failed_read=patch.object(run.B,'read_fixed',side_effect=OSError()) if read_failure else nullcontext()
             with patch.object(run,'check_context'),patch.object(run,'prepare',side_effect=prepare),patch.object(R,'supervise_bounded',return_value=child),patch.object(R,'persist_and_cleanup',side_effect=persist),patch.object(run.B,'BUNDLE_PINS',{},create=True),patch.object(R,'NATIVE_SHA',select_platform('linux','x86_64')['bindings'][0]['sha256'],create=True),patch.dict(run.WITNESSES,{},clear=True),failed_read:
                 result=run.run_case('builtin-dual',ctx)
@@ -124,10 +146,10 @@ class RunTests(unittest.TestCase):
             ctx={'temp':temp,'evidence':evidence,'head':'a'*40,'tree':'b'*40}
             original=R.persist_and_cleanup
             seen=[]
-            def persist(root,receipt,cleanup,record,stopped,eligible):
+            def persist(root,receipt,cleanup,record,stopped,eligible,**kwargs):
                 self.assertTrue(root.exists())
                 self.assertFalse(record['process']['childCreated'])
-                result=original(root,receipt,cleanup,record,stopped,eligible)
+                result=original(root,receipt,cleanup,record,stopped,eligible,**kwargs)
                 seen.append(result['diagnosticPersisted'] and result['temporaryDirectoryRemoved'])
                 return result
             with patch.object(run,'check_context'),patch.object(run,'prepare',side_effect=OSError()),patch.object(R,'persist_and_cleanup',side_effect=persist):
@@ -239,6 +261,13 @@ class RunTests(unittest.TestCase):
         for field in ('checkedBefore','checkedAfter'):
             data=copy.deepcopy(fixture);data['trace']['installedIdentity'][field]=False
             self.assertFalse(cold_eligible(trace=data['trace'],counts=data['counts'],diagnostics=data['diagnostics'],returncode=0,stopped=True,complete=True,errors=[],pins=True),field)
+        for name in ('caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches'):
+            for value in (False,None,1,'UNTRUSTED_TEXT_MUST_NOT_PERSIST'):
+                data=copy.deepcopy(fixture);data['trace']['preflightBoundary'][name]=value
+                self.assertFalse(cold_eligible(trace=data['trace'],counts=data['counts'],diagnostics=data['diagnostics'],returncode=0,stopped=True,complete=True,errors=[],pins=True),name)
+        for value in (None,{}, {'status':'NOT_CHECKED',**{key:None for key in run.B.PREFLIGHT_KEYS}}):
+            data=copy.deepcopy(fixture);data['trace']['preflightBoundary']=value
+            self.assertFalse(cold_eligible(trace=data['trace'],counts=data['counts'],diagnostics=data['diagnostics'],returncode=0,stopped=True,complete=True,errors=[],pins=True))
 
 if __name__ == '__main__':
     unittest.main()

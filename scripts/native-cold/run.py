@@ -17,12 +17,14 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from contextlib import nullcontext
 import builtin_policy as B
 import diagnostic as C
 import supervisor as R
 import trace_policy as T
 import installed_identity as I
 from contract import check_partition, select_platform, Refused
+from case_budget import CaseBudget
 
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE.parents[1]
@@ -45,8 +47,9 @@ def git(*args):
 
 def check_context(ctx):
     R.require(git('rev-parse','HEAD')==ctx['head'] and git('rev-parse','HEAD^{tree}')==ctx['tree'] and git('status','--porcelain')=='','SOURCE_CHANGED_REFUSED')
-    R.checked_node()
-    I.check(ctx,SOURCE)
+    budget=ctx.get('caseBudget')
+    with budget.phase('PARENT_NODE_IDENTITY',interrupt=False) if budget is not None else nullcontext():R.checked_node()
+    with budget.phase('SDK_PRODUCT_IDENTITY',interrupt=False) if budget is not None else nullcontext():I.check(ctx,SOURCE)
     R.require(R.sha(HERE/'platforms.json')==ctx['platformsSHA256'],'PLATFORM_PINS_CHANGED_REFUSED')
     R.require(check_partition(SOURCE)==ctx['partition'],'PARTITION_CHANGED_REFUSED')
     for name,digest in ctx['helpers'].items():
@@ -63,7 +66,7 @@ def check_context(ctx):
         with path.open('rb') as file:
             R.require(architecture(file.read(32),ctx['pins']),'PAYLOAD_ARCHITECTURE_REFUSED')
 
-def context(args):
+def context(args,resources=None,budget=None):
     # These are non-secret CI identity fields. No credential environment is read.
     R.require(os.environ.get('GITHUB_ACTIONS')=='true' and os.environ.get('GITHUB_REPOSITORY')==REPOSITORY and
               os.environ.get('GITHUB_EVENT_NAME')=='push' and os.environ.get('GITHUB_REF')=='refs/heads/'+BRANCH and
@@ -74,28 +77,32 @@ def context(args):
     evidence=Path(args.evidence_dir)
     R.require(evidence.parent.resolve(strict=True)==temp and not evidence.exists() and not evidence.is_symlink(),'EVIDENCE_ROOT_REFUSED')
     evidence.mkdir(mode=0o700);evidence=evidence.resolve(strict=True)
+    if resources is not None:resources['evidence']=evidence
     pins=select_platform(sys.platform,platform.machine())
     try:node=Path(args.node).resolve(strict=True)
     except (OSError,ValueError):raise R.SafetyError('NODE_PIN_REFUSED') from None
     R.NODE=node; R.NODE_SHA=pins['node']['binarySHA256']; R.NATIVE_SHA=pins['bindings'][0]['sha256']
-    R.checked_node()
+    with budget.phase('INITIAL_NODE_IDENTITY',interrupt=False) if budget is not None else nullcontext():R.checked_node()
     with node.open('rb') as file:
         R.require(architecture(file.read(32),pins),'NODE_ARCHITECTURE_REFUSED')
     helpers=json.loads((HERE/'bundle-pins.json').read_text())
     current=Path(args.current_dir)
     R.require(current.parent.resolve(strict=True)==temp and current.is_dir() and not current.is_symlink() and current.resolve(strict=True)==current,'CURRENT_INSTALLATION_ROOT_REFUSED')
+    if resources is not None:resources['current']=current
     installation_bytes,_,installation_sha=I.fixed(current/'installation-record.json',1024*1024)
     installation=json.loads(installation_bytes)
     R.require(installation['schemaVersion']==1 and installation['scope']=='CURRENT_NATIVE_PRODUCT_AND_SDK','INSTALLATION_RECORD_REFUSED')
     ctx={'head':args.expected_sha,'tree':git('rev-parse','HEAD^{tree}'),'pins':pins,'node':node,'temp':temp,'evidence':evidence,
          'helpers':helpers,'partition':check_partition(SOURCE),'platformsSHA256':R.sha(HERE/'platforms.json'),
          'current':current,'installation':installation,'installationRecordSHA256':installation_sha}
+    if budget is not None:ctx['caseBudget']=budget
     T.configure(pins);B.BUNDLE_PINS=helpers
     check_context(ctx)
     R.atomic_create(evidence/'identity.json',{'authorization':AUTHORIZATION,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],
         'platform':pins,'nodeSHA256':R.NODE_SHA,'helperSHA256':helpers,'partition':ctx['partition'],
         'installedIdentity':installation,'installationRecordSHA256':installation_sha,
         'maximumChildren':3,'maximumColdChildren':2,'deadlinesSeconds':{'builtin':5,'cold':20},'noRetry':True,
+        'deadlineScope':'TOTAL_CONTEXT_AND_CASE_WORK_EXCEPT_ACTUAL_OWNED_DIRECTORY_REMOVAL',
         'childEnvironmentKeys':sorted(R.ENV_KEYS),'childObservationDurability':'NON_DURABLE','productionDurabilityEstablished':False})
     return ctx
 
@@ -157,23 +164,41 @@ def verify_prior(case,ctx,prior):
         R.require(R.regular(ctx['evidence']/name) and R.sha(ctx['evidence']/name)==digest,'PRIOR_RECEIPT_CHANGED_REFUSED')
     R.require(prior['completion']['diagnosticPersisted'] and prior['completion']['temporaryDirectoryRemoved'] and
               prior['completion']['safeToRunOtherApprovedCase'] and not prior['errors'],'PRIOR_CLEANUP_REFUSED')
+    R.require(prior.get('timing',{}).get('withinBudget') is True,'PRIOR_TOTAL_BUDGET_REFUSED')
+
+def block_budget_result(budget,result,completion,cleanup_path):
+    R.require(budget.failed,'CASE_BUDGET_FAILURE_EXPECTED')
+    result['status']='BLOCKED_OR_FAIL'
+    if budget.failure_category not in result['errors']:result['errors'].append(budget.failure_category)
+    if completion['safeToRunOtherApprovedCase']:
+        completion['safeToRunOtherApprovedCase']=False
+        completion['budgetBeforeCompletionReceipt']=budget.snapshot()
+        with budget.safety_phase('CLEANUP_RECEIPT'):
+            R.require(R.regular(cleanup_path),'BUDGET_COMPLETION_RECORD_REFUSED')
+            cleanup_path.unlink()
+            R.atomic_create(cleanup_path,completion,rollback_on_failure=True)
 
 def run_case(case,ctx,prior=None):
     R.require(case in CASES,'CASE_REFUSED')
-    if case!='builtin-dual':verify_prior(case,ctx,prior)
+    budget=ctx.get('builtinBudget') if case=='builtin-dual' else None
+    if budget is None:budget=CaseBudget(5 if case=='builtin-dual' else 20)
+    ctx['caseBudget']=budget
+    if case!='builtin-dual':
+        with budget.phase('PRIOR_RECEIPTS'):verify_prior(case,ctx,prior)
     evidence=ctx['evidence']; paths={name:evidence/(case+'-'+name+'.json') for name in ('launch','started','receipt','cleanup','terminal')}
     R.require(not any(p.exists() or p.is_symlink() for p in paths.values()),'ONE_SHOT_REFUSED')
     root=None;errors=[];trace=None;counts={};diagnostics=[];observation=None;startup=None;eligible=False
     builtin_diagnostic=B.observation_diagnostic({}, {}, {}, None) if case=='builtin-dual' else None
     child=R.Capture(childCreated=False,childPID=None,returncode=None,processStopped=True,outputComplete=False,errorCategories=[])
     completion={'status':'PREPARATION_INCOMPLETE','diagnosticPersisted':False,'temporaryDirectoryRemoved':False,'safeToRunOtherApprovedCase':False}
-    stop=R.SupervisorSignals();entered=False;start=time.monotonic()
+    stop=R.SupervisorSignals();entered=False;start=budget.start
     try:
         try:
             stop.__enter__();entered=True
-            check_context(ctx)
-            root=Path(tempfile.mkdtemp(prefix='dsh-native-cold-',dir=ctx['temp'])).resolve(strict=True)
-            prepare(root,ctx)
+            with budget.phase('CONTEXT_BEFORE'):check_context(ctx)
+            with budget.phase('CASE_PREPARATION',interrupt=False):
+                root=Path(tempfile.mkdtemp(prefix='dsh-native-cold-',dir=ctx['temp'])).resolve(strict=True)
+            with budget.phase('CASE_PREPARATION'):prepare(root,ctx)
             args=[str(ctx['node']),'--permission']
             if case=='builtin-dual':
                 args+=['--allow-fs-read='+str(root),'--allow-fs-write='+str(root),'--import',(root/'builtin-tripwire.mjs').as_uri(),
@@ -183,20 +208,25 @@ def run_case(case,ctx,prior=None):
                 args+=['--allow-addons','--allow-fs-read='+str(SOURCE),'--allow-fs-read='+str(ctx['current']),'--allow-fs-read='+str(root),'--allow-fs-write='+str(root),
                        '--experimental-test-isolation=none','--import',str(ctx['current']/'product/scripts/test-safety.mjs'),
                        '--import',(root/'companion.mjs').as_uri()+'?'+case,'--test','--test-reporter=tap',entry]
-            R.atomic_create(paths['launch'],{'case':case,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'maximumChildRuns':1,
-                'deadlineSeconds':5 if case=='builtin-dual' else 20,'argv':args,'environmentKeys':sorted(R.ENV_KEYS),
-                'SDKReadGrant':case!='builtin-dual','allowAddons':case!='builtin-dual','modelNetworkDatabaseAllowed':False})
-            child=R.supervise_bounded(args,root if case=='builtin-dual' else ctx['current']/'product',R.synthetic_env(root),5 if case=='builtin-dual' else 20,
-                allow_addons=case!='builtin-dual',supervisor_signals=stop,
-                on_started=lambda pid:R.atomic_create(paths['started'],{'pid':pid,'startUTC':R.now()}))
+            with budget.phase('CASE_PREPARATION'):
+                R.atomic_create(paths['launch'],{'case':case,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'maximumChildRuns':1,
+                    'deadlineSeconds':budget.limit,'remainingCaseBudgetSeconds':budget.remaining(),'argv':args,'environmentKeys':sorted(R.ENV_KEYS),
+                    'SDKReadGrant':case!='builtin-dual','allowAddons':case!='builtin-dual','modelNetworkDatabaseAllowed':False})
+            with budget.phase('CHILD_SUPERVISION',interrupt=False):
+                child=R.supervise_bounded(args,root if case=='builtin-dual' else ctx['current']/'product',R.synthetic_env(root),budget.remaining(),
+                    allow_addons=case!='builtin-dual',supervisor_signals=stop,budget=budget,
+                    on_started=lambda pid:R.atomic_create(paths['started'],{'pid':pid,'startUTC':R.now()}))
             errors.extend(child['errorCategories'])
-            if case=='builtin-dual':trace,observation=builtin_observation(root,child['childPID'],builtin_diagnostic)
-            else:
-                trace,observation=collect_cold(root,child['childPID'],case,ctx['helpers'])
-                counts,diagnostics=R.parse_output(child.stdout)
-            check_context(ctx)
-            if case!='builtin-dual':R.require(trace['installedIdentity']==I.check(ctx,SOURCE),'CHILD_INSTALLED_IDENTITY_REFUSED')
-            startup=C.collect_startup(child.stdout,child.stderr,child['returncode'],trace['stage'],owned_root=str(root))
+            with budget.phase('OBSERVATION'):
+                if case=='builtin-dual':trace,observation=builtin_observation(root,child['childPID'],builtin_diagnostic)
+                else:
+                    trace,observation=collect_cold(root,child['childPID'],case,ctx['helpers'])
+                    counts,diagnostics=R.parse_output(child.stdout)
+            with budget.phase('CONTEXT_AFTER'):
+                check_context(ctx)
+                if case!='builtin-dual':R.require(trace['installedIdentity']==I.check(ctx,SOURCE),'CHILD_INSTALLED_IDENTITY_REFUSED')
+            with budget.phase('STARTUP_DIAGNOSTIC'):
+                startup=C.collect_startup(child.stdout,child.stderr,child['returncode'],trace['stage'],owned_root=str(root))
             if startup['classificationTruncated']:errors.append('OUTPUT_TRUNCATED')
             if startup['startupErrorCategory'] in {'NODE_PERMISSION_REFUSAL','NATIVE_ADDON_PERMISSION','AMBIGUOUS_FAILURE'}:errors.append('STARTUP_REFUSED')
             if case=='builtin-dual':
@@ -215,7 +245,8 @@ def run_case(case,ctx,prior=None):
         if stop.received is not None:errors.append('SUPERVISOR_SIGNAL');eligible=False
         if startup is None:
             try:
-                startup=C.collect_startup(child.stdout,child.stderr,child['returncode'],trace['stage'] if trace else None,owned_root=str(root) if root else None)
+                with budget.safety_phase('STARTUP_DIAGNOSTIC') if budget.failed else budget.phase('STARTUP_DIAGNOSTIC'):
+                    startup=C.collect_startup(child.stdout,child.stderr,child['returncode'],trace['stage'] if trace else None,owned_root=str(root) if root else None)
             except BaseException:
                 errors.append('STARTUP_COLLECTION_FAILED');eligible=False
                 startup={'startupErrorCategory':'COLLECTION_FAILURE','rawStdoutSHA256':hashlib.sha256(child.stdout).hexdigest(),
@@ -226,42 +257,69 @@ def run_case(case,ctx,prior=None):
             for name,label in [('stdout','Stdout'),('stderr','Stderr')]:
                 startup['raw'+label+'SHA256']=metadata[name]['sha256'];startup[name+'ByteCount']=metadata[name]['bytes']
             if not all(m['completeWithinLimit'] for m in metadata.values()):errors.append('STREAM_LIMIT_REFUSED');eligible=False
-        record={'case':case,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'endUTC':R.now(),'elapsedSeconds':time.monotonic()-start,
+        record={'case':case,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'endUTC':R.now(),'elapsedSeconds':budget.snapshot()['wholeWallSeconds'],
             'process':dict(child),'errors':list(errors),'runtimeTrace':trace,'testCounts':counts,'safeColdDiagnostics':diagnostics,
             'startupDiagnostic':startup,'boundedCaptureMetadata':metadata,'observationContract':observation,'supervisorSignal':stop.received,
             'builtinObservationDiagnostic':builtin_diagnostic,
+            'timingAtCollection':budget.snapshot(),
             'rawOutputSavedOrPrinted':False,'childDurability':'NON_DURABLE','productionDurabilityEstablished':False,
             'modelObservation':'UNKNOWN_NOT_INSTRUMENTED' if case=='builtin-dual' else trace['modelAttempts'] if trace else 'UNKNOWN',
             'parentReceiptDurability':'DURABLE_PARENT_AFTER_CHILD_EXIT'}
-        if root is not None:
-            completion=R.persist_and_cleanup(root,paths['receipt'],paths['cleanup'],record,child['processStopped'],eligible and not errors)
-        else:
-            try:R.atomic_create(paths['receipt'],record);completion['diagnosticPersisted']=True;R.atomic_create(paths['cleanup'],completion)
-            except BaseException:errors.append('PREPARATION_DIAGNOSTIC_WRITE_FAILED')
+        completion=R.persist_and_cleanup(root,paths['receipt'],paths['cleanup'],record,child['processStopped'],eligible and not errors,budget=budget)
     finally:
         if entered:
             try:stop.__exit__(None,None,None)
             except BaseException:errors.append('SIGNAL_GUARD_RESTORE_FAILED');completion['safeToRunOtherApprovedCase']=False
     if stop.received is not None:completion['safeToRunOtherApprovedCase']=False
-    passed=not errors and completion['safeToRunOtherApprovedCase']
+    if budget.failed and budget.failure_category not in errors:errors.append(budget.failure_category)
+    passed=not errors and completion['safeToRunOtherApprovedCase'] and budget.snapshot()['withinBudget']
     result={'case':case,'status':'PASS' if passed else 'BLOCKED_OR_FAIL','errors':errors,'pid':child['childPID'],
             'returncode':child['returncode'],'processStopped':child['processStopped'],'testCounts':counts,'completion':completion,
-            'model':record['modelObservation'],'elapsedSeconds':record['elapsedSeconds'],'productionDurabilityEstablished':False}
+            'model':record['modelObservation'],'elapsedSeconds':budget.snapshot()['wholeWallSeconds'],'productionDurabilityEstablished':False}
     try:
-        hashes={p.name:R.sha(p) for p in (paths['receipt'],paths['cleanup'])}
-        R.atomic_create(paths['terminal'],{'case':case,'evaluatedOutcome':result['status'],'supervisorSignal':stop.received,
-            'diagnosticSHA256':hashes[paths['receipt'].name],'cleanupSHA256':hashes[paths['cleanup'].name]},rollback_on_failure=True)
-        hashes[paths['terminal'].name]=R.sha(paths['terminal'])
-        if passed:WITNESSES[case]={'result':result,'hashes':hashes}
+        hashes={}
+        try:
+            with budget.safety_phase('RETURN_HASHES') if budget.failed else budget.phase('RETURN_HASHES'):
+                for path in (paths['receipt'],paths['cleanup']):hashes[path.name]=R.sha(path)
+        except R.SafetyError:
+            if not budget.failed:raise
+            block_budget_result(budget,result,completion,paths['cleanup'])
+            with budget.safety_phase('RETURN_HASHES'):
+                for path in (paths['receipt'],paths['cleanup']):hashes[path.name]=R.sha(path)
+        terminal={'case':case,'evaluatedOutcome':result['status'],'supervisorSignal':stop.received,
+            'diagnosticSHA256':hashes[paths['receipt'].name],'cleanupSHA256':hashes[paths['cleanup'].name]}
+        try:
+            with budget.safety_phase('TERMINAL_RECEIPT') if budget.failed else budget.phase('TERMINAL_RECEIPT'):
+                R.atomic_create(paths['terminal'],terminal,rollback_on_failure=True)
+                hashes[paths['terminal'].name]=R.sha(paths['terminal'])
+        except R.SafetyError:
+            if not budget.failed:raise
+            block_budget_result(budget,result,completion,paths['cleanup'])
+            terminal['evaluatedOutcome']='BLOCKED_OR_FAIL'
+            with budget.safety_phase('RETURN_HASHES'):
+                hashes[paths['cleanup'].name]=R.sha(paths['cleanup'])
+                terminal['cleanupSHA256']=hashes[paths['cleanup'].name]
+            if paths['terminal'].exists():paths['terminal'].unlink()
+            with budget.safety_phase('TERMINAL_RECEIPT'):
+                R.atomic_create(paths['terminal'],terminal,rollback_on_failure=True)
+                hashes[paths['terminal'].name]=R.sha(paths['terminal'])
+        if budget.failed and budget.failure_category not in errors:errors.append(budget.failure_category)
+        result['timing']=budget.snapshot();result['elapsedSeconds']=result['timing']['wholeWallSeconds']
+        if passed and result['status']=='PASS' and result['timing']['withinBudget']:WITNESSES[case]={'result':result,'hashes':hashes}
     except BaseException:errors.append('TERMINAL_WRITE_FAILED');result['status']='BLOCKED_OR_FAIL';completion['safeToRunOtherApprovedCase']=False
+    result.setdefault('timing',budget.snapshot());result['elapsedSeconds']=result['timing']['wholeWallSeconds']
+    if not result['timing']['withinBudget']:result['status']='BLOCKED_OR_FAIL';completion['safeToRunOtherApprovedCase']=False
     return result
 
-def preflight_failure(args,category):
+def preflight_failure(args,category,budget=None,resources=None):
     record={'status':'BLOCKED','layer':'IDENTITY_PREFLIGHT','category':category,'actualChildren':0,'model':'UNKNOWN','noRetry':True}
+    if budget is not None:record['timing']=budget.snapshot()
     try:
         temp=Path(args.temp_dir).resolve(strict=True);evidence=Path(args.evidence_dir)
         R.require(evidence.parent.resolve(strict=True)==temp and evidence.is_dir() and not evidence.is_symlink(),'EVIDENCE_ROOT_REFUSED')
         R.atomic_create(evidence/'preflight-failure.json',record)
+        if resources is not None and resources.get('current') is not None:
+            record['installationCompletion']=R.persist_and_cleanup(resources['current'],evidence/'preflight-receipt.json',evidence/'preflight-cleanup.json',record.copy(),True,False,budget=budget)
     except BaseException:
         record['diagnosticPersisted']=False
     else:record['diagnosticPersisted']=True
@@ -269,16 +327,19 @@ def preflight_failure(args,category):
     return 2
 
 def main():
+    budget=CaseBudget(5);resources={}
     parser=argparse.ArgumentParser()
     for name in ('expected-sha','node','temp-dir','evidence-dir','current-dir'):parser.add_argument('--'+name,required=True)
     args=parser.parse_args()
-    try:ctx=context(args)
+    try:
+        with budget.phase('INITIAL_CONTEXT'):ctx=context(args,resources,budget)
+        ctx['builtinBudget']=budget
     except R.SafetyError as error:
-        return preflight_failure(args,error.code)
+        return preflight_failure(args,error.code,budget,resources)
     except Refused as error:
-        return preflight_failure(args,str(error))
+        return preflight_failure(args,str(error),budget,resources)
     except BaseException:
-        return preflight_failure(args,'IDENTITY_COLLECTION_FAILURE')
+        return preflight_failure(args,'IDENTITY_COLLECTION_FAILURE',budget,resources)
     results=[];prior=None
     try:
         for case in CASES:

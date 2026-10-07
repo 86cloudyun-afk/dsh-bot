@@ -105,6 +105,14 @@
       "sourceTree": "dddddddddddddddddddddddddddddddddddddddd",
       "checkedBefore": true,
       "checkedAfter": true
+    },
+    "preflightBoundary": {
+      "status": "CHECKED",
+      "caseRecognized": true,
+      "permissionReady": true,
+      "environmentRestricted": true,
+      "platformMatches": true,
+      "architectureMatches": true
     }
   },
   "counts": {

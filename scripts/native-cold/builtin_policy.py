@@ -9,9 +9,20 @@ LABEL_CODES={'ERR_ASSERTION','ERR_ACCESS_DENIED','ERR_DLOPEN_DISABLED','ERR_DLOP
 
 DIAGNOSTIC_FAILURES={'BUILTIN_TRACE_REFUSED','BUILTIN_TARGET_REFUSED','BUILTIN_ASSERTION_REFUSED','BUILTIN_PROGRESS_REFUSED',
  'POST_DENIAL_MARKER_REFUSED','BUILTIN_PROOF_JSON_REFUSED','BUILTIN_JOURNAL_INVENTORY_REFUSED','BUILTIN_JOURNAL_SEQUENCE_REFUSED',
- 'BUILTIN_JOURNAL_ENVELOPE_REFUSED','BUILTIN_JOURNAL_TERMINAL_ORDER_REFUSED','COLLECTION_OR_PREPARATION_FAILURE'}
+ 'BUILTIN_JOURNAL_ENVELOPE_REFUSED','BUILTIN_JOURNAL_TERMINAL_ORDER_REFUSED','COLLECTION_OR_PREPARATION_FAILURE',
+ 'CASE_BUDGET_EXHAUSTED','CASE_FINALIZATION_RESERVE_EXHAUSTED','CASE_BUDGET_TIMER_BUSY','CASE_BUDGET_TIMER_UNAVAILABLE'}
 DIAGNOSTIC_REFUSALS=R.REFUSALS|{'DNS_GUARD_INSTALL_REFUSED','DNS_GUARD_BINDING_REFUSED','INSTALLED_CONTENT_IDENTITY_REFUSED',
  'NATIVE_LOCK_RESULT_REFUSED','NATIVE_LOCK_CALLBACK_REFUSED','NATIVE_LOCK_BOUNDARY_REFUSED'}
+
+PREFLIGHT_KEYS={'caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches'}
+
+def boundary_valid(value):
+ return type(value) is dict and set(value)==PREFLIGHT_KEYS|{'status'} and type(value['status']) is str and (
+  value['status']=='CHECKED' and all(type(value[k]) is bool for k in PREFLIGHT_KEYS) or
+  value['status']=='NOT_CHECKED' and all(value[k] is None for k in PREFLIGHT_KEYS))
+
+def boundary_passed(value):
+ return boundary_valid(value) and value['status']=='CHECKED' and all(value[k] is True for k in PREFLIGHT_KEYS)
 
 def diagnostic_failure(code):
  return code if type(code) is str and code in DIAGNOSTIC_FAILURES else 'UNKNOWN'
@@ -25,6 +36,7 @@ def observation_diagnostic(journal,statuses,contract,pid):
  trace=journal.get('TRACE');target=journal.get('TARGET');assertion=journal.get('ASSERTION')
  trace=trace if type(trace) is dict else {};target=target if type(target) is dict else {};assertion=assertion if type(assertion) is dict else {}
  counts=contract.get('recordCounts');counts=counts if type(counts) is dict else {}
+ boundary=trace.get('preflightBoundary');boundary=boundary if type(boundary) is dict else {}
  terminal=None
  if type(pid) is int and 0<pid<2**31:
   try:terminal=terminal_valid(journal.get('TRACE'),pid,'builtin-dual')
@@ -36,6 +48,7 @@ def observation_diagnostic(journal,statuses,contract,pid):
   'recordCounts':{role:number(counts.get(role),1 if role=='TARGET' else 64) for role in ('TARGET','ASSERTION','TRACE')},
   'roles':{role:enum(statuses.get(role),{role+'_'+suffix for suffix in ('PRESENT','MISSING','INVALID','READ_FAILED')}) for role in ('TARGET','ASSERTION','TRACE')},
   'tracePresent':type(journal.get('TRACE')) is dict,'terminalValid':terminal,'trace':projection,
+  'preflightBoundary':{'status':enum(boundary.get('status'),{'CHECKED','NOT_CHECKED'}),**{key:boolean(boundary.get(key)) for key in sorted(PREFLIGHT_KEYS)}},
   'assertion':{'assertionId':enum(assertion.get('assertionId'),ASSERTION_IDS),'status':enum(assertion.get('status'),{'IN_PROGRESS','UNCAUGHT_FAILURE'}),'errorCode':enum(assertion.get('errorCode'),LABEL_CODES)},
   'target':{'pidMatches':type(target.get('pid')) is int and target.get('pid')==pid,'versionMatches':target.get('version')=='v24.19.0',
             'caseMatches':target.get('case')=='builtin-dual','targetMatches':target.get('targetId')=='CATCH_FALLBACK_IMMEDIATE_STOP'},
@@ -86,7 +99,8 @@ def original_terminal_valid(t,pid,case):
 
 
 def terminal_valid(t,pid,case):
- extra={'systemLoads':0,'narbLoads':0,'narbInfoQueries':0,'narbRequireCalls':0,'narbCalls':[],'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED','installedIdentity':None}
+ extra={'systemLoads':0,'narbLoads':0,'narbInfoQueries':0,'narbRequireCalls':0,'narbCalls':[],'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED','installedIdentity':None,
+  'preflightBoundary':{'status':'CHECKED',**{key:True for key in PREFLIGHT_KEYS}}}
  if type(t) is not dict or not all(k in t and exact(t[k],v) for k,v in extra.items()):return False
  core={k:v for k,v in t.items() if k not in extra};events=core.get('nativeAttempts')
  if type(events) is not list or len(events)!=1:return False

@@ -31,6 +31,7 @@ jobs:
           node scripts/test.mjs scripts/native-cold/policy.test.mjs
           env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/test_contract.py
           env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/test_run.py
+          env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/test_budget.py
           env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/test_installed_identity.py
           env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/contract.py
       - name: Static module and spec inventory checks
