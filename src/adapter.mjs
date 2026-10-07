@@ -1,5 +1,6 @@
 import { requireValue,text } from './errors.mjs';
 import { emptyPresetCatalog,normalizePresetCatalog,presetId } from './session-mode.mjs';
+import {freezeInitialSessionMode,isBlankInitialSessionEvents} from './initial-session-blank.mjs';
 export const REQUIRED_NATIVE=Object.freeze(['session_model','dispatch_freeze','operation_lookup','run_fence','resource_settlement','producer','scope_enforce','interaction_capacity']);
 // Cordis Service.tracker is public per-instance metadata; property reads create fresh proxies.
 // Compare that identity only. Keep calling through the traced service, never unwrap its implementation.
@@ -49,12 +50,12 @@ export class DshAdapter {
     return this.sessionModeCatalog();
   }
   /** Private owned entry only. No provider, prompt, model selection, or Session activation on lookup. */
-  ownedCreationPort(sessionIds,{scopeOf,durable=false}) {
+  ownedCreationPort(sessionIds,{scopeOf,durable=false,initialization}) {
     requireValue(Array.isArray(sessionIds) && sessionIds.length>0 && typeof scopeOf==='function','scope_denied');
     const owned=new Set(sessionIds.map(id=>text(id,'sessionId',200))),context=this.context;
     const check=i=>{requireValue(owned.has(i?.sessionId),'scope_denied');requireValue(context && this.context===context,'host_disconnected');};
-    requireValue(typeof durable==='boolean','invalid_creation_options');const acknowledged=new Map(),verified=new Set();
-    const readBlank=async i=>{const stat=await context.sessionPersistence.stat(i.sessionId);requireValue(stat?.sizeBytes>0,'native_creation_not_durable');const stored=await context.sessionPersistence.open(i.sessionId,'read');try{const read=await stored.read();requireValue(stored.header.id===i.sessionId && stored.header.cwd===i.cwd && stored.header.agentPreset===i.agentPreset && stored.header.isSeeded===false && read.events.length===0,'native_creation_not_durable');}finally{await stored.close();}};
+    requireValue(typeof durable==='boolean','invalid_creation_options');const acknowledged=new Map(),verified=new Set(),initialMode=initialization===undefined?undefined:freezeInitialSessionMode(initialization);
+    const readBlank=async i=>{const stat=await context.sessionPersistence.stat(i.sessionId);requireValue(stat?.sizeBytes>0,'native_creation_not_durable');const stored=await context.sessionPersistence.open(i.sessionId,'read');try{const read=await stored.read();requireValue(stored.header.id===i.sessionId && stored.header.cwd===i.cwd && stored.header.agentPreset===i.agentPreset && stored.header.isSeeded===false && isBlankInitialSessionEvents(read.events,initialMode),'native_creation_not_durable');}finally{await stored.close();}};
     const port=Object.freeze({
       createOwnedSession:async i=>{
         check(i);requireValue(typeof context.sessionController?.create==='function','unsupported_native_creation');
@@ -76,7 +77,7 @@ export class DshAdapter {
           check(i);requireValue(context.sessions.get(i.sessionId)===session && context.agents.get(i.sessionId)===agent,'scope_denied');
           if(context instanceof Context && context.sessions instanceof SessionStore && context.sessionPersistence instanceof Persistence && context.agents instanceof Agents && context.sessionController instanceof Controller && context.tools instanceof Tools && scopeOf===officialScopeOf)verified.add(i.operationId);
         }
-        return {sessionId:session.id,agentPreset:presetId(id),blank:session.seq===0,globalTools:context.tools.schemas().length,scopedTools:context.tools.schemas(scope).length};
+        return {sessionId:session.id,agentPreset:presetId(id),blank:isBlankInitialSessionEvents(session.snapshotEvents?.()??[],initialMode,session.seq),globalTools:context.tools.schemas().length,scopedTools:context.tools.schemas(scope).length};
       }
     });
     durablePorts.set(port,verified);return port;

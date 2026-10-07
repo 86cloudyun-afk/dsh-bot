@@ -1,10 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { scopeOf as nativeScopeOf } from '@deepseek-ai/dsh-scope';
 import type { AgentPresetCatalog,CreationIntent,OwnedCreationPort } from './contracts.js';
+import type {InitialSessionModeSnapshot} from './initial-session-blank.mjs';
 export declare const REQUIRED_NATIVE:readonly ['session_model','dispatch_freeze','operation_lookup','run_fence','resource_settlement','producer','scope_enforce','interaction_capacity'];
 export type RequiredNativeCapability = typeof REQUIRED_NATIVE[number];
 export interface AdapterSessionRecord {readonly sessionId?:string;readonly id?:string}
-export interface AdapterSession {readonly id:string;readonly seq:number}
+export interface AdapterSession {readonly id:string;readonly seq:number;readonly snapshotEvents?:()=>readonly unknown[]}
 export interface AdapterAgent {readonly id:string;readonly session:AdapterSession;readonly ctx:Context}
 export interface AdapterContext {
  sessionController?:{
@@ -35,7 +36,7 @@ export declare class DshAdapter {
  sessionModeCatalog():AgentPresetCatalog;
  refreshSessionModeCatalog():Promise<AgentPresetCatalog>;
  /** Private owned creation port; scopeOf must return the exact mounted Agent identity. */
- ownedCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;durable?:boolean}):OwnedCreationPort;
+ ownedCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;durable?:boolean;initialization?:InitialSessionModeSnapshot}):OwnedCreationPort;
  unsupported<T extends string>(operation:T):UnsupportedOperation<T>;
  selectSessionModel():UnsupportedOperation<'selectSessionModel'>;
  dispatch():UnsupportedOperation<'dispatchPermit'>;
