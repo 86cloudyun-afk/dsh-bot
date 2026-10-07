@@ -178,7 +178,7 @@ def run_case(case,ctx,prior=None):
                        '--import',(root/'companion.mjs').as_uri()+'?'+case,str(root/'builtin-harness.mjs'),'catch-fallback']
             else:
                 entry=json.loads((HERE/'partition.json').read_text())['migrations'][int(case[-1])-1]['to']
-                args+=['--allow-addons','--allow-fs-read='+str(SOURCE/'node_modules'),'--allow-fs-read='+str(SOURCE/'package-lock.json'),'--allow-fs-read='+str(ctx['current']),'--allow-fs-read='+str(root),'--allow-fs-write='+str(root),
+                args+=['--allow-addons','--allow-fs-read='+str(SOURCE),'--allow-fs-read='+str(ctx['current']),'--allow-fs-read='+str(root),'--allow-fs-write='+str(root),
                        '--experimental-test-isolation=none','--import',str(ctx['current']/'product/scripts/test-safety.mjs'),
                        '--import',(root/'companion.mjs').as_uri()+'?'+case,'--test','--test-reporter=tap',str(ctx['current']/'product'/entry)]
             R.atomic_create(paths['launch'],{'case':case,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'maximumChildRuns':1,
