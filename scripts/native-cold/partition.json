@@ -93,9 +93,9 @@
       "importChange": null
     },
     "test/bot-client-owner.test.mjs": {
-      "currentSHA256": "eb24f7fb821387162f131aa28045ebfe493fab3bfe1003389625bb65e982bd99",
+      "currentSHA256": "a26878c43e78442752444c67f49f54ca32acc96c83e1f2166f51e2548b0fa703",
       "originalPrefixBytes": 21431,
-      "appendSHA256": "f4b91bf85ec3b2d9ff0c8ae7062d8c944b4f5e571fe863e396ae9b1aa226b3f5",
+      "appendSHA256": "ea65b8faa07b461603190d4db8fb602533bdec77904c6f985ddd4d955a394787",
       "importChange": null
     },
     "test/package-snapshot.test.mjs": {
