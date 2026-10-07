@@ -78,7 +78,7 @@
   },
   "additionalPureFiles": {
     "test/bot-gui-bootstrap.test.mjs": "679179a0a397feb2c1dc1a7af0ed6cddea4c719a919d4d6b6b42ad47bcc26db1",
-    "test/bot-gui-controls.test.mjs": "4deed1d857017007597d12f58d725dbc25bfbaa27984a2564d4bd186f22a4400",
+    "test/bot-gui-controls.test.mjs": "d30c6fb51d5cc811942d07f209dc60c0298ac5d4bc42a16c5c2ce9a2ac01ac05",
     "test/bot-gui-generation-policy.test.mjs": "689b8af23f0c1636a1a18e24ec05993794345e65720ec5aba805c14a5714c82c",
     "test/bot-gui-profile.test.mjs": "a75275e47847a5fb4122fef9acb8146a32add4aea6953f0db86389716d60567d",
     "test/bot-gui-startup.test.mjs": "bd643a64a469b3498b2f7e43c0f38556ad4689d1889c9b05edf4387f146c0933",
