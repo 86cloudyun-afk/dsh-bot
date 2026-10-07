@@ -26,3 +26,5 @@ Use meaningful failing tests for profile isolation, authenticated owner bootstra
 ### Native controller and browser roster
 
 The stock Web SessionController browser face requires the file-upload client service. This owner profile keeps file intake closed. It mounts the exact stock native SessionController class through a host-only package subpath and disables the stock Session, Workspace, Conversation, and Sidebar browser rows. The official renderer, layout, locale, connection, and module Loader remain the browser shell. The owner panel selects itself only after its main slot has registered.
+
+The renderer's required optional Session scope uses `slots.installScope` with a stable, explicitly absent binding. It rejects any ordinary Session reference. Bot/main/work observations use only the private owner ports; this UI binding never activates or substitutes a native Session.

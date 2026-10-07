@@ -80,6 +80,11 @@ window.__ModuleLoader__.load({id:'dsh-bot',factory:require=>{
   async function rpc(channel,endpoint,payload,signal){if(closed||signal.aborted)throw cancelledRead;const controller=new AbortController(),abort=()=>controller.abort();pending.add(controller);signal.addEventListener('abort',abort,{once:true});try{const result=await ctx.connection.rpc.call(channel,endpoint,payload,controller.signal);if(closed||controller.signal.aborted)throw cancelledRead;return result;}finally{signal.removeEventListener('abort',abort);pending.delete(controller);}}
   const read=signal=>rpc('/dsh-bot','snapshot',{},signal),ownerCall=(endpoint,botId,payload,signal)=>rpc('/dsh-bot-owner',endpoint,{command:endpoint,botId,payload},signal);
   const guiCall=config.guiOwner===true?(endpoint,payload,signal)=>rpc('/dsh-bot-gui',endpoint,payload,signal):undefined;
+  if(guiCall){
+   const absent=Object.freeze({key:undefined,hooks:Object.freeze({session:undefined}),keyedHooks:Object.freeze({projection:undefined}),props:Object.freeze({sessionId:undefined})});
+   const source=Object.freeze({getSnapshot:()=>absent,subscribe:()=>()=>{}});
+   ctx.slots.installScope('session',{current:source,bindingSource:target=>{if(target!==undefined)throw Error('dsh-bot: ordinary Session UI unavailable');return source;},renderArea:(_binding,props)=>props.empty?.()??null});
+  }
   ctx.effect(()=>ctx.locale.register(namespace,{en,zh}),'dsh-bot: dictionaries');const t=ctx.locale.bind(namespace);
   ctx.slots.inject('main',()=>{const remove=ctx.slots.register({name:'main',key:panelId,locale:namespace,inject:()=>({hooks:{connection:ctx.connection.state,generation:ctx.connection.generation},read,ownerCall,guiCall})},BotPanel);if(guiCall)ctx.layout.selectPanel(panelId);return remove;});
   ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:panelId,order:70,label:()=>t('nav'),locale:namespace},BotIcon));

@@ -7,12 +7,17 @@ try {await import('../src/client/client.js?fixture=gui-bootstrap');} finally {gl
 const tick=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
 test('initial owner panel is selected after a delayed main slot registration',async()=>{
   const plugin=registration.factory(name=>{assert.equal(name,'react');return {createElement(){}};});
-  let mainReady,registered=false;const selections=[];
+  let mainReady,registered=false;const selections=[],scopes=new Map();
   const ctx={effect:fn=>fn(),locale:{register:()=>()=>{},bind:()=>key=>key},
     connection:{state:{},generation:{},rpc:{call(){throw Error('no browser calls before mount');}}},
     layout:{selectPanel(id){assert.equal(registered,true,'main slot must exist before selection');selections.push(id);}},
-    slots:{inject(name,fn){if(name==='main'){mainReady=fn;return()=>{};}return()=>{};},register(){registered=true;return()=>{};}}};
+    slots:{installScope(name,adapter){scopes.set(name,adapter);},inject(name,fn){if(name==='main'){mainReady=fn;return()=>{};}return()=>{};},register(){registered=true;return()=>{};}}};
   plugin.apply(ctx,{guiOwner:true});await tick();
+  const adapter=scopes.get('session');assert.ok(adapter,'stock renderer needs a truthful absent Session UI binding');
+  const absent=adapter.current.getSnapshot();assert.equal(absent.key,undefined);assert.equal(absent.props.sessionId,undefined);assert.equal(absent.hooks.session,undefined);
+  assert.equal(adapter.bindingSource(undefined).getSnapshot(),absent);
+  assert.throws(()=>adapter.bindingSource({sessionId:'unowned'}));
+  assert.equal(adapter.renderArea(absent,{empty:()=>null,children:'unowned'}),null);
   assert.deepEqual(selections,[]);
   mainReady();await tick();
   assert.deepEqual(selections,['dsh-bot']);
@@ -31,7 +36,7 @@ function fixture({storage=new Map(),server={created:false,lost:false}}={}) {
   finally {if(previousStorage)Object.defineProperty(globalThis,'localStorage',previousStorage);else delete globalThis.localStorage;if(previousNav)Object.defineProperty(globalThis,'navigator',previousNav);else delete globalThis.navigator;}
   const receipt=()=>({version:1,operationId:server.operation.operationId,nonce:server.operation.nonce,state:'created',botId:'one-bot',sessionId:'one-main',preciseNativeSettlementVerified:false});
   const ctx={effect(fn){const cleanup=fn();cleanups.push(cleanup);return cleanup;},layout:{selectPanel(){}},locale:{register:()=>()=>{},bind:()=>key=>key},
-    slots:{inject(_name,fn){return ctx.effect(fn);},register(options,component){const entry={options,component};entries.push(entry);return()=>{};}},
+    slots:{installScope(){},inject(_name,fn){return ctx.effect(fn);},register(options,component){const entry={options,component};entries.push(entry);return()=>{};}},
     connection:{state:{},generation:{},rpc:{async call(channel,endpoint,frame){calls.push({channel,endpoint,frame});
       if(channel==='/dsh-bot-gui') {
         if(endpoint==='bootstrap') return {ok:true,value:{version:1,status:'ready',ledgerId:'ledger-exact',selectedBotId:server.created?'one-bot':null,contactSessionId:server.created?'one-main':null,modelRequestsEnabled:false,creation:server.created?receipt():null,nativeGenerationTerminalSupported:false}};
