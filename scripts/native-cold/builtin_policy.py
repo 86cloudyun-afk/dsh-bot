@@ -7,6 +7,40 @@ ASSERTION_IDS={'C_SQLITE_ESM_IMPORT', 'C_IO_GUARDS_INSTALL', 'C_SQLITE_DESCRIPTO
 
 LABEL_CODES={'ERR_ASSERTION','ERR_ACCESS_DENIED','ERR_DLOPEN_DISABLED','ERR_DLOPEN_FAILED','SQLITE_GUARD_BINDING_REFUSED','SQLITE_GUARD_INSTALL_REFUSED','IMMEDIATE_NATIVE_EXIT_UNAVAILABLE','UNRECORDED'}
 
+DIAGNOSTIC_FAILURES={'BUILTIN_TRACE_REFUSED','BUILTIN_TARGET_REFUSED','BUILTIN_ASSERTION_REFUSED','BUILTIN_PROGRESS_REFUSED',
+ 'POST_DENIAL_MARKER_REFUSED','BUILTIN_PROOF_JSON_REFUSED','BUILTIN_JOURNAL_INVENTORY_REFUSED','BUILTIN_JOURNAL_SEQUENCE_REFUSED',
+ 'BUILTIN_JOURNAL_ENVELOPE_REFUSED','BUILTIN_JOURNAL_TERMINAL_ORDER_REFUSED','COLLECTION_OR_PREPARATION_FAILURE'}
+DIAGNOSTIC_REFUSALS=R.REFUSALS|{'DNS_GUARD_INSTALL_REFUSED','DNS_GUARD_BINDING_REFUSED','INSTALLED_CONTENT_IDENTITY_REFUSED',
+ 'NATIVE_LOCK_RESULT_REFUSED','NATIVE_LOCK_CALLBACK_REFUSED','NATIVE_LOCK_BOUNDARY_REFUSED'}
+
+def diagnostic_failure(code):
+ return code if type(code) is str and code in DIAGNOSTIC_FAILURES else 'UNKNOWN'
+
+def observation_diagnostic(journal,statuses,contract,pid):
+ """Fixed diagnostic projection only. It never authorizes admission or copies payload text."""
+ enum=lambda value,allowed:value if type(value) is str and value in allowed else 'UNKNOWN'
+ number=lambda value,maximum:value if type(value) is int and 0<=value<=maximum else None
+ boolean=lambda value:value if type(value) is bool else None
+ journal=journal if type(journal) is dict else {};statuses=statuses if type(statuses) is dict else {};contract=contract if type(contract) is dict else {}
+ trace=journal.get('TRACE');target=journal.get('TARGET');assertion=journal.get('ASSERTION')
+ trace=trace if type(trace) is dict else {};target=target if type(target) is dict else {};assertion=assertion if type(assertion) is dict else {}
+ counts=contract.get('recordCounts');counts=counts if type(counts) is dict else {}
+ terminal=None
+ if type(pid) is int and 0<pid<2**31:
+  try:terminal=terminal_valid(journal.get('TRACE'),pid,'builtin-dual')
+  except (TypeError,ValueError,KeyError,RecursionError):terminal=False
+ projection={key:number(trace.get(key),64) for key in ('nativeLoadAttempts','nativeLoads','nativeCalls','networkAttempts','spawnAttempts','workerAttempts','sqliteConstructAttempts')}
+ projection.update(stage=enum(trace.get('stage'),R.STAGES|{'NATIVE_ADMISSION_REFUSED'}),setupReady=boolean(trace.get('setupReady')),
+  setupFailureCode=enum(trace.get('setupFailureCode'),R.CODES),terminalRefusalCategory=enum(trace.get('terminalRefusalCategory'),DIAGNOSTIC_REFUSALS))
+ return {'schemaVersion':1,'scope':'BUILTIN_OBSERVATION_DIAGNOSTIC_ONLY','inventoryValid':boolean(contract.get('inventoryValid')),
+  'recordCounts':{role:number(counts.get(role),1 if role=='TARGET' else 64) for role in ('TARGET','ASSERTION','TRACE')},
+  'roles':{role:enum(statuses.get(role),{role+'_'+suffix for suffix in ('PRESENT','MISSING','INVALID','READ_FAILED')}) for role in ('TARGET','ASSERTION','TRACE')},
+  'tracePresent':type(journal.get('TRACE')) is dict,'terminalValid':terminal,'trace':projection,
+  'assertion':{'assertionId':enum(assertion.get('assertionId'),ASSERTION_IDS),'status':enum(assertion.get('status'),{'IN_PROGRESS','UNCAUGHT_FAILURE'}),'errorCode':enum(assertion.get('errorCode'),LABEL_CODES)},
+  'target':{'pidMatches':type(target.get('pid')) is int and target.get('pid')==pid,'versionMatches':target.get('version')=='v24.19.0',
+            'caseMatches':target.get('case')=='builtin-dual','targetMatches':target.get('targetId')=='CATCH_FALLBACK_IMMEDIATE_STOP'},
+  'validationFailureCategory':None}
+
 def exact(a,b):return json.dumps(a,sort_keys=True,separators=(',',':'))==json.dumps(b,sort_keys=True,separators=(',',':'))
 
 

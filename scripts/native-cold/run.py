@@ -137,8 +137,9 @@ def collect_cold(root,pid,case,helpers):
     R.require(T.trace_valid(value,pid),'COLD_TRACE_REFUSED')
     return value,{'recordCount':len(records),'inventoryValid':True,'scope':'ISOLATED_NATIVE_TEST_ONLY','durability':'NON_DURABLE'}
 
-def builtin_observation(root,pid):
+def builtin_observation(root,pid,diagnostic=None):
     journal,statuses,contract=B.collect_journal(root,pid,'builtin-dual')
+    if diagnostic is not None:diagnostic.update(B.observation_diagnostic(journal,statuses,contract,pid))
     trace=journal.get('TRACE');target=journal.get('TARGET');assertion=journal.get('ASSERTION')
     R.require(contract['inventoryValid'] and B.terminal_valid(trace,pid,'builtin-dual'),'BUILTIN_TRACE_REFUSED')
     R.require(B.exact(target,{'pid':pid,'version':'v24.19.0','case':'builtin-dual','targetId':'CATCH_FALLBACK_IMMEDIATE_STOP'}),'BUILTIN_TARGET_REFUSED')
@@ -163,6 +164,7 @@ def run_case(case,ctx,prior=None):
     evidence=ctx['evidence']; paths={name:evidence/(case+'-'+name+'.json') for name in ('launch','started','receipt','cleanup','terminal')}
     R.require(not any(p.exists() or p.is_symlink() for p in paths.values()),'ONE_SHOT_REFUSED')
     root=None;errors=[];trace=None;counts={};diagnostics=[];observation=None;startup=None;eligible=False
+    builtin_diagnostic=B.observation_diagnostic({}, {}, {}, None) if case=='builtin-dual' else None
     child=R.Capture(childCreated=False,childPID=None,returncode=None,processStopped=True,outputComplete=False,errorCategories=[])
     completion={'status':'PREPARATION_INCOMPLETE','diagnosticPersisted':False,'temporaryDirectoryRemoved':False,'safeToRunOtherApprovedCase':False}
     stop=R.SupervisorSignals();entered=False;start=time.monotonic()
@@ -180,7 +182,7 @@ def run_case(case,ctx,prior=None):
                 entry=json.loads((HERE/'partition.json').read_text())['migrations'][int(case[-1])-1]['to']
                 args+=['--allow-addons','--allow-fs-read='+str(SOURCE),'--allow-fs-read='+str(ctx['current']),'--allow-fs-read='+str(root),'--allow-fs-write='+str(root),
                        '--experimental-test-isolation=none','--import',str(ctx['current']/'product/scripts/test-safety.mjs'),
-                       '--import',(root/'companion.mjs').as_uri()+'?'+case,'--test','--test-reporter=tap',str(ctx['current']/'product'/entry)]
+                       '--import',(root/'companion.mjs').as_uri()+'?'+case,'--test','--test-reporter=tap',entry]
             R.atomic_create(paths['launch'],{'case':case,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'maximumChildRuns':1,
                 'deadlineSeconds':5 if case=='builtin-dual' else 20,'argv':args,'environmentKeys':sorted(R.ENV_KEYS),
                 'SDKReadGrant':case!='builtin-dual','allowAddons':case!='builtin-dual','modelNetworkDatabaseAllowed':False})
@@ -188,7 +190,7 @@ def run_case(case,ctx,prior=None):
                 allow_addons=case!='builtin-dual',supervisor_signals=stop,
                 on_started=lambda pid:R.atomic_create(paths['started'],{'pid':pid,'startUTC':R.now()}))
             errors.extend(child['errorCategories'])
-            if case=='builtin-dual':trace,observation=builtin_observation(root,child['childPID'])
+            if case=='builtin-dual':trace,observation=builtin_observation(root,child['childPID'],builtin_diagnostic)
             else:
                 trace,observation=collect_cold(root,child['childPID'],case,ctx['helpers'])
                 counts,diagnostics=R.parse_output(child.stdout)
@@ -203,8 +205,12 @@ def run_case(case,ctx,prior=None):
                 eligible=T.cold_eligible(trace=trace,counts=counts,diagnostics=diagnostics,returncode=child['returncode'],
                     stopped=child['processStopped'],complete=child['outputComplete'],errors=errors,pins=True)
             if not eligible:errors.append('OUTCOME_REFUSED')
-        except R.SafetyError as error:errors.append(error.code)
-        except BaseException:errors.append('COLLECTION_OR_PREPARATION_FAILURE')
+        except R.SafetyError as error:
+            errors.append(error.code)
+            if builtin_diagnostic is not None:builtin_diagnostic['validationFailureCategory']=B.diagnostic_failure(error.code)
+        except BaseException:
+            errors.append('COLLECTION_OR_PREPARATION_FAILURE')
+            if builtin_diagnostic is not None:builtin_diagnostic['validationFailureCategory']='COLLECTION_OR_PREPARATION_FAILURE'
         finally:stop.interruptible=False
         if stop.received is not None:errors.append('SUPERVISOR_SIGNAL');eligible=False
         if startup is None:
@@ -223,6 +229,7 @@ def run_case(case,ctx,prior=None):
         record={'case':case,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'endUTC':R.now(),'elapsedSeconds':time.monotonic()-start,
             'process':dict(child),'errors':list(errors),'runtimeTrace':trace,'testCounts':counts,'safeColdDiagnostics':diagnostics,
             'startupDiagnostic':startup,'boundedCaptureMetadata':metadata,'observationContract':observation,'supervisorSignal':stop.received,
+            'builtinObservationDiagnostic':builtin_diagnostic,
             'rawOutputSavedOrPrinted':False,'childDurability':'NON_DURABLE','productionDurabilityEstablished':False,
             'modelObservation':'UNKNOWN_NOT_INSTRUMENTED' if case=='builtin-dual' else trace['modelAttempts'] if trace else 'UNKNOWN',
             'parentReceiptDurability':'DURABLE_PARENT_AFTER_CHILD_EXIT'}

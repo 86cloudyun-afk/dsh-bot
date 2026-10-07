@@ -98,3 +98,6 @@ jobs:
       - name: Exact runtime-export module suite with offline guard
         # Includes controlled CLI child processes; guard counters are not a zero-child claim.
         run: node --import ./tools/runtime-export/offline-guard.mjs --test tools/runtime-export/export.test.mjs
+      - name: Bounded synthetic CLI discovery without SDK or addons
+        if: always()
+        run: env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/test_discovery.py

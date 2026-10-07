@@ -3,11 +3,119 @@ import copy
 import json
 import tempfile
 import unittest
+import shutil
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
 import run
 import supervisor as R
 from contract import select_platform
+
+class BuiltinDiagnosticTests(unittest.TestCase):
+    def terminal(self):
+        stamp='2026-10-07T00:00:00.000Z'
+        identity={'scope':'UNKNOWN','contentSHA256':None,'packageIdentity':'UNKNOWN','payloadIdentity':'UNKNOWN','pathRelation':'UNKNOWN','isPathAlias':None,'unknownReason':'OUT_OF_SCOPE'}
+        return {'pid':999,'startUTC':stamp,'endUTC':stamp,'stage':'NATIVE_ADMISSION_REFUSED','setupReady':False,
+          'explicitApprovedAddonFlag':False,'environmentRestricted':True,'sqliteGuardVerified':True,'resolveCalls':0,'resolveCompleted':False,
+          'resolveStartUTC':None,'resolveEndUTC':None,'resolveAgentPresent':None,'outerErrorCode':'UNRECORDED',
+          'nativeLoadAttempts':1,'nativeLoads':0,'nativeAttempts':[{'index':1,'targetId':'UNKNOWN','admission':'DENY','reason':'OTHER_ADDON_LOAD_REFUSED','outcome':'NOT_CALLED','identity':identity}],
+          'nativeCalls':0,'nativeCallStartUTC':None,'nativeCallEndUTC':None,'nativeCallbackErrno':None,'nativeReturnCategory':'UNRECORDED',
+          'nativeFdOwned':False,'nativeFdIdentity':None,'nativeFdClosedBeforeExit':None,'networkAttempts':0,'spawnAttempts':0,'workerAttempts':0,
+          'sqliteConstructAttempts':0,'modelAttempts':None,'boundaryRefusals':['OTHER_ADDON_LOAD_REFUSED'],'setupFailureCode':'NONE',
+          'targetSHA256':select_platform('linux','x86_64')['bindings'][0]['sha256'],'systemLoads':0,'narbLoads':0,'narbInfoQueries':0,'narbRequireCalls':0,'narbCalls':[],
+          'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED','installedIdentity':None}
+
+    def exercise(self,trace,*,invalid_envelope=False,read_failure=False,target_change=None,assertion_change=None,progress_change=None):
+        with tempfile.TemporaryDirectory() as d:
+            temp=Path(d).resolve(strict=True);evidence=temp/'evidence';evidence.mkdir()
+            ctx={'temp':temp,'evidence':evidence,'head':'a'*40,'tree':'b'*40,'node':Path('/synthetic/node')}
+            target={'pid':999,'version':'v24.19.0','case':'builtin-dual','targetId':'CATCH_FALLBACK_IMMEDIATE_STOP'}
+            assertion={'pid':999,'case':'builtin-dual','assertionId':'H_FIRST_DENIED_DLOPEN','status':'IN_PROGRESS','errorCode':'UNRECORDED'}
+            target.update(target_change or {});assertion.update(assertion_change or {})
+            def prepare(root,context):
+                for role,payload in [('TARGET',target),('ASSERTION',assertion),('TRACE',trace)]:
+                    if payload is None:continue
+                    directory=root/('builtin-observation-'+role+'-0001');directory.mkdir()
+                    envelope={'schemaVersion':2 if invalid_envelope and role=='TRACE' else 1,'scope':'ISOLATED_NATIVE_TEST_ONLY','durability':'NON_DURABLE',
+                              'pid':999,'case':'builtin-dual','role':role,'sequence':1,'payload':payload}
+                    (directory/'record.json').write_text(json.dumps(envelope))
+                progress={'pid':999,'version':'v24.19.0','mode':'catch-fallback','permission':True,'allowAddons':False,'actualNativeLoaderRetained':False,'syntheticSeededAttempts':0}
+                progress.update(progress_change or {});(root/'builtin-progress.json').write_text(json.dumps(progress))
+            child=R.Capture(childCreated=True,childPID=999,returncode=74,processStopped=True,outputComplete=True,errorCategories=[])
+            seen={};original=R.persist_and_cleanup
+            def persist(root,receipt,cleanup,record,stopped,eligible):
+                def remove(path):
+                    self.assertTrue(path.exists());self.assertTrue(receipt.is_file())
+                    seen['receiptBeforeCleanup']=json.loads(receipt.read_text())
+                    shutil.rmtree(path)
+                return original(root,receipt,cleanup,record,stopped,eligible,remover=remove)
+            failed_read=patch.object(run.B,'read_fixed',side_effect=OSError()) if read_failure else nullcontext()
+            with patch.object(run,'check_context'),patch.object(run,'prepare',side_effect=prepare),patch.object(R,'supervise_bounded',return_value=child),patch.object(R,'persist_and_cleanup',side_effect=persist),patch.object(run.B,'BUNDLE_PINS',{},create=True),patch.object(R,'NATIVE_SHA',select_platform('linux','x86_64')['bindings'][0]['sha256'],create=True),patch.dict(run.WITNESSES,{},clear=True),failed_read:
+                result=run.run_case('builtin-dual',ctx)
+                if result['status']!='PASS':
+                    with self.assertRaises(R.SafetyError):run.verify_prior('cold1',ctx,result)
+            self.assertTrue(result['completion']['diagnosticPersisted']);self.assertTrue(result['completion']['temporaryDirectoryRemoved'])
+            sealed=json.loads((evidence/'builtin-dual-receipt.json').read_text())
+            self.assertEqual(sealed,seen['receiptBeforeCleanup'])
+            self.assertIn('builtinObservationDiagnostic',sealed)
+            return result,sealed
+
+    def test_rejected_terminal_is_projected_before_cleanup_without_untrusted_text(self):
+        trace={'pid':999,'stage':'COMPANION_SETUP_FAILED','setupFailureCode':'ERR_ASSERTION','terminalRefusalCategory':'SQLITE_GUARD_BINDING_REFUSED',
+               'nativeLoadAttempts':0,'nativeLoads':0,'nativeCalls':0,'untrusted':'UNTRUSTED_TEXT_MUST_NOT_PERSIST'}
+        result,sealed=self.exercise(trace);diagnostic=sealed['builtinObservationDiagnostic']
+        self.assertEqual(result['status'],'BLOCKED_OR_FAIL');self.assertFalse(result['completion']['safeToRunOtherApprovedCase'])
+        self.assertIsNone(sealed['runtimeTrace']);self.assertFalse(diagnostic['terminalValid'])
+        self.assertTrue(diagnostic['inventoryValid']);self.assertEqual(diagnostic['recordCounts']['TRACE'],1)
+        self.assertEqual(diagnostic['roles']['TRACE'],'TRACE_PRESENT')
+        self.assertEqual(diagnostic['trace']['stage'],'COMPANION_SETUP_FAILED')
+        self.assertEqual(diagnostic['trace']['setupFailureCode'],'ERR_ASSERTION')
+        self.assertEqual(diagnostic['trace']['terminalRefusalCategory'],'SQLITE_GUARD_BINDING_REFUSED')
+        self.assertEqual(diagnostic['validationFailureCategory'],'BUILTIN_TRACE_REFUSED')
+        self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(sealed))
+
+    def test_missing_trace_retains_missing_role_and_keeps_cold_blocked(self):
+        result,sealed=self.exercise(None);diagnostic=sealed['builtinObservationDiagnostic']
+        self.assertEqual(result['status'],'BLOCKED_OR_FAIL')
+        self.assertEqual(diagnostic['roles']['TRACE'],'TRACE_MISSING');self.assertEqual(diagnostic['recordCounts']['TRACE'],0)
+        self.assertFalse(diagnostic['tracePresent']);self.assertFalse(diagnostic['terminalValid'])
+
+    def test_invalid_envelope_retains_invalid_status_without_payload(self):
+        result,sealed=self.exercise({'pid':999,'untrusted':'UNTRUSTED_TEXT_MUST_NOT_PERSIST'},invalid_envelope=True)
+        diagnostic=sealed['builtinObservationDiagnostic'];self.assertEqual(result['status'],'BLOCKED_OR_FAIL')
+        self.assertFalse(diagnostic['inventoryValid']);self.assertEqual(diagnostic['roles']['TRACE'],'TRACE_INVALID')
+        self.assertFalse(diagnostic['tracePresent']);self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(sealed))
+
+    def test_read_failure_retains_read_failed_role(self):
+        result,sealed=self.exercise({'pid':999},read_failure=True)
+        self.assertEqual(result['status'],'BLOCKED_OR_FAIL')
+        self.assertEqual(sealed['builtinObservationDiagnostic']['roles']['TRACE'],'TRACE_READ_FAILED')
+
+    def test_bad_types_and_ranges_are_unknown_and_never_admit(self):
+        result,sealed=self.exercise({'pid':999,'stage':{},'setupFailureCode':[],'terminalRefusalCategory':'UNTRUSTED_TEXT_MUST_NOT_PERSIST',
+                                    'nativeLoadAttempts':True,'nativeLoads':1000,'nativeCalls':-1})
+        trace=sealed['builtinObservationDiagnostic']['trace'];self.assertEqual(result['status'],'BLOCKED_OR_FAIL')
+        for key in ('stage','setupFailureCode','terminalRefusalCategory'):self.assertEqual(trace[key],'UNKNOWN')
+        for key in ('nativeLoadAttempts','nativeLoads','nativeCalls'):self.assertIsNone(trace[key])
+        self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(sealed))
+
+    def test_valid_synthetic_terminal_still_requires_the_original_complete_contract(self):
+        result,sealed=self.exercise(self.terminal());self.assertEqual(result['status'],'PASS')
+        self.assertTrue(sealed['builtinObservationDiagnostic']['terminalValid'])
+        self.assertIsNone(sealed['builtinObservationDiagnostic']['validationFailureCategory'])
+        for field,value in [('sqliteGuardVerified',False),('nativeLoads',1),('setupFailureCode','ERR_ASSERTION')]:
+            trace=self.terminal();trace[field]=value;result,sealed=self.exercise(trace)
+            self.assertEqual(result['status'],'BLOCKED_OR_FAIL',field)
+            self.assertFalse(sealed['builtinObservationDiagnostic']['terminalValid'])
+
+    def test_valid_terminal_never_authorizes_bad_target_assertion_or_progress(self):
+        for changes,category in [({'target_change':{'version':'UNTRUSTED_TEXT_MUST_NOT_PERSIST'}},'BUILTIN_TARGET_REFUSED'),
+                                 ({'assertion_change':{'assertionId':'C_SQLITE_CJS_IMPORT'}},'BUILTIN_ASSERTION_REFUSED'),
+                                 ({'progress_change':{'allowAddons':True}},'BUILTIN_PROGRESS_REFUSED')]:
+            result,sealed=self.exercise(self.terminal(),**changes);diagnostic=sealed['builtinObservationDiagnostic']
+            self.assertTrue(diagnostic['terminalValid']);self.assertEqual(diagnostic['validationFailureCategory'],category)
+            self.assertEqual(result['status'],'BLOCKED_OR_FAIL');self.assertFalse(result['completion']['safeToRunOtherApprovedCase'])
+            self.assertNotIn('UNTRUSTED_TEXT_MUST_NOT_PERSIST',json.dumps(sealed))
 
 class RunTests(unittest.TestCase):
     def test_preparation_failure_commits_diagnostic_before_removing_root(self):

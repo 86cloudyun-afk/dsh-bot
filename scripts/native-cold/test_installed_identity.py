@@ -1,14 +1,32 @@
 """Synthetic files and bytes only. No SDK/Node children or network."""
-import copy,hashlib,json,tempfile,unittest
+import copy,hashlib,json,stat,tempfile,unittest
 from pathlib import Path
 import installed_identity as I
 import supervisor as R
 
 class InstalledTests(unittest.TestCase):
+    def metadata_checks(self,path):
+        info=path.lstat()
+        return {'regular':stat.S_ISREG(info.st_mode),'nlinkOne':info.st_nlink==1,
+                'withinSize':info.st_size<=4*1024*1024,'canonicalEquality':path.resolve(strict=True)==path}
+
+    def test_owned_temporary_parent_alias_has_a_valid_canonical_baseline(self):
+        with tempfile.TemporaryDirectory() as d:
+            parent=Path(d).resolve(strict=True);owned=parent/'owned';owned.mkdir()
+            alias=parent/'temporary-parent-alias';alias.symlink_to(owned,target_is_directory=True)
+            source,sdk=self.fixture(alias)
+            try:inventory=I.sdk_inventory(source)
+            except R.SafetyError:
+                self.fail('SYNTHETIC_VALID_BASELINE_REFUSED '+json.dumps(self.metadata_checks(source/'package-lock.json'),sort_keys=True))
+            self.assertEqual(len(inventory['files']),2)
+            self.assertTrue(all(self.metadata_checks(source/'package-lock.json').values()))
+
     def fixture(self,d):
-        source=Path(d)/'source';sdk=source/'node_modules/synthetic-sdk';sdk.mkdir(parents=True)
+        source=Path(d).resolve(strict=True)/'source';sdk=source/'node_modules/synthetic-sdk';sdk.mkdir(parents=True)
         (source/'package-lock.json').write_text(json.dumps({'packages':{'node_modules/synthetic-sdk':{'version':'1.0.0','integrity':'sha512-synthetic-fixture'}}}))
         (sdk/'package.json').write_text(json.dumps({'name':'synthetic-sdk','version':'1.0.0'}));(sdk/'index.js').write_text('synthetic only')
+        self.assertTrue(all(self.metadata_checks(source/'package-lock.json').values()),json.dumps(self.metadata_checks(source/'package-lock.json'),sort_keys=True))
+        self.assertEqual(len(I.sdk_inventory(source)['files']),2)
         return source,sdk
 
     def test_same_version_drift_changes_inventory(self):
