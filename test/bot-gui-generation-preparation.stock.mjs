@@ -19,7 +19,7 @@ async function preparer(){
   return module.createGuiGenerationPreparation;
 }
 test('GUI preparation uses only an actual journal-capable SDK before any native Session or model side effect',async t=>{
-  const create=await preparer(),f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
+  const create=await preparer(),f=await generationFixture(t,undefined,{realWorkspace:true}),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
   const prepare=create({ownerCtx:f.ctx,host:f.host,homeDirectory:f.directory,cwd:f.directory,agentPreset:preset,
     route:{provider:route.provider,model:route.model,reasoning:'off'},isOwnerCurrent:()=>true,canModelDispatch:()=>false});
   t.after(()=>prepare.close());
@@ -37,7 +37,7 @@ test('GUI preparation uses only an actual journal-capable SDK before any native 
 });
 
 test('an altered original creation nonce cannot allocate a GUI journal or native preparation',async t=>{
- const create=await preparer(),f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
+ const create=await preparer(),f=await generationFixture(t,undefined,{realWorkspace:true}),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
  const prepare=create({ownerCtx:f.ctx,host:f.host,homeDirectory:f.directory,cwd:f.directory,agentPreset:preset,
   route:{provider:route.provider,model:route.model,reasoning:'off'},isOwnerCurrent:()=>true,canModelDispatch:()=>false});
  t.after(()=>prepare.close());assert.equal(typeof intent.nonce,'string');
@@ -47,7 +47,7 @@ test('an altered original creation nonce cannot allocate a GUI journal or native
 });
 
 test('the GUI retains the complete original pre-native creation snapshot after the mutable intent is marked created',async t=>{
- const create=await preparer(),f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
+ const create=await preparer(),f=await generationFixture(t,undefined,{realWorkspace:true}),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
  const prepare=create({ownerCtx:f.ctx,host:f.host,homeDirectory:f.directory,cwd:f.directory,agentPreset:preset,
   route:{provider:route.provider,model:route.model,reasoning:'off'},isOwnerCurrent:()=>true,canModelDispatch:()=>false});
  t.after(()=>prepare.close());let original,result;
@@ -65,7 +65,7 @@ test('the GUI retains the complete original pre-native creation snapshot after t
 const delegateDefinition=()=>defineTool({name:'dsh_bot_delegate',description:'Synthetic original parent work only',parameters:{},
   output:{schema:{type:'object',additionalProperties:true},render:()=>[]},async execute(){return{};}});
 async function parentPreparationFixture(t){
- const create=await preparer(),f=await generationFixture(t),prepare=create({ownerCtx:f.ctx,host:f.host,homeDirectory:f.directory,cwd:f.directory,
+ const create=await preparer(),f=await generationFixture(t,undefined,{realWorkspace:true}),prepare=create({ownerCtx:f.ctx,host:f.host,homeDirectory:f.directory,cwd:f.directory,
   agentPreset:preset,route:{provider:route.provider,model:route.model,reasoning:'off'},isOwnerCurrent:()=>true,canModelDispatch:()=>false});
  t.after(()=>prepare.close());
  const main=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
@@ -147,7 +147,7 @@ test('copied parent capabilities and JSON child lineage cannot open a child jour
  await assert.rejects(lstat(join(f.directory,'owned-generations',digest({botId:f.bot.botId,sessionId:work.sessionId,role:'work'}))),{code:'ENOENT'});
 });
 test('copied Context, changed native policy and a consumed preparation cannot allocate a replacement Session',async t=>{
-  const create=await preparer(),f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
+  const create=await preparer(),f=await generationFixture(t,undefined,{realWorkspace:true}),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
   const options={ownerCtx:f.ctx,host:f.host,homeDirectory:f.directory,cwd:f.directory,agentPreset:preset,
     route:{provider:route.provider,model:route.model,reasoning:'off'},isOwnerCurrent:()=>true,canModelDispatch:()=>false};
   assert.throws(()=>create({...options,ownerCtx:{...f.ctx}}),{code:'gui_native_owner_required'});

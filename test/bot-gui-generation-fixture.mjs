@@ -30,6 +30,12 @@ import {syntheticResponse,tick} from './work-generation-fixture.mjs';
 
 export const preset='gui-native/empty';
 export const initialization=Object.freeze({permissionPreset:'workspace-write',sandboxMode:'workspace-write',approvalPolicy:'ask'});
+export function syntheticGuiDelegation(task_id,goal){
+  const events=[{type:'message_start',message:{usage:{input_tokens:5}}},
+    {type:'content_block_start',index:0,content_block:{type:'tool_use',id:crypto.randomUUID(),name:'dsh_bot_delegate',input:{task_id,goal,completion_condition:'Keep the exact original task and session'}}},
+    {type:'content_block_stop',index:0},{type:'message_delta',delta:{stop_reason:'tool_use'},usage:{output_tokens:3}},{type:'message_stop'}];
+  return new Response(events.map(event=>'data: '+JSON.stringify(event)+'\n\n').join(''));
+}
 export async function guiGenerationRuntime(t,{directory,enabled=false,fetcher=()=>syntheticResponse(),initialMode=initialization}={}) {
   directory??=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-native-'));
   const cwd=join(directory,'work');await mkdir(cwd,{recursive:true});
@@ -61,6 +67,7 @@ export async function guiGenerationRuntime(t,{directory,enabled=false,fetcher=()
   }
   await ctx.plugin(child=>{new HostConnectionService(child,[],null);}).await();
   const traced=ctx.get('connection'),connection=traced[symbols.original]??traced;await connection.operator.ctx.fiber.await();
+  let nativeActivations=0;ctx.on('agent/created',()=>{nativeActivations++;});
   const handlers=new Map(),register=connection.register;
   connection.register=function(owner,channel,handler){handlers.set(channel,handler);return register.call(this,owner,channel,handler);};
   const app=await installBotGuiOwner({ownerCtx:ctx,homeDirectory:directory,cwd,agentPreset:preset,initialMode:initialMode??undefined,modelRequestsEnabled:enabled});
@@ -70,5 +77,5 @@ export async function guiGenerationRuntime(t,{directory,enabled=false,fetcher=()
   const call=(endpoint,payload={})=>handlers.get('/dsh-bot-gui')(endpoint,payload,new AbortController().signal,connection.operator);
   const ownerCall=(endpoint,botId,payload={})=>handlers.get('/dsh-bot-owner')(endpoint,{command:endpoint,botId,payload},new AbortController().signal,connection.operator);
   const waitRequest=async()=>{let timer;try{await Promise.race([started.promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('GUI_SYNTHETIC_DISPATCH_TIMEOUT '+JSON.stringify(ctx.sessions.list().map(session=>({sessionId:session.id,events:session.snapshotEvents().slice(-12)}))))),2000);})]);}finally{clearTimeout(timer);}};
-  return{Native,ctx,directory,cwd,call,ownerCall,hasOwner:()=>handlers.has('/dsh-bot-owner'),requests:()=>requests,waitRequest,close,tick};
+  return{Native,ctx,directory,cwd,call,ownerCall,hasOwner:()=>handlers.has('/dsh-bot-owner'),requests:()=>requests,nativeActivations:()=>nativeActivations,waitRequest,close,tick};
 }

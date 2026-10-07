@@ -17,6 +17,7 @@ import {createGuiGenerationPreparation} from './bot-gui-generation-preparation.m
 import {loadOwnedGenerationSdk} from './owned-generation-bridge.mjs';
 import {freezeGuiDelegationPolicy} from './bot-gui-delegation-policy.mjs';
 import {installBotGuiColdOwner} from './bot-gui-cold-owner.mjs';
+import {isOwnedBotLifecycleRestoreGrant,describeOwnedBotLifecycleRestore} from './owned-bot-lifecycle.mjs';
 
 export const name='dsh-bot-gui-owner-app';
 export const inject=['appReady','appExit','dshBotGuiStartup','connection','webServer','llm','deepseekProtectedProviders','sessions',
@@ -45,7 +46,9 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   const authorityEpoch=ledger.get('grant','native-owner')?.epoch;
   const generation=Object.freeze({activation:randomUUID()});
   let closed=false,selected=null,contactOwner=null,producer=null,creationTail=Promise.resolve(),readBinding=null,mainGenerationSource=null,generationSdk=null,closePromise=null,lifecyclePort=null;
-  const mainPorts=new Map(),pendingActions=new Set();
+  const mainPorts=new Map(),pendingActions=new Set(),restoreStages=new WeakMap();
+  let stagedMain=null;
+  let contactIsCold=false;
   // Only an exact SDK-minted, privately retained source may enable this main dialog.
   const nativeSourceAvailable=()=>mainGenerationSource!==null&&generationSdk?.isOwnedGenerationSource(mainGenerationSource,ownerCtx)===true;
   const delegationConfirmed=()=>selected!==null&&ledger.list('guiCreationOperation').some(row=>row.botId===selected.botId
@@ -109,6 +112,92 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
       :producer?.assertWorkAgentTools(event.agent)===true,'gui_agent_tools_denied');
     return next();
   });
+  function prepareProducer(intent,port,botEpoch,mode,lifecycleRestoreGrant){
+    return prepareOwnedBotProducer({ownerCtx,host,caller:owner,originSessionId:intent.sessionId,botId:intent.botId,botEpoch,
+      authorityEpoch,cwd,rootInstructionRef:'authenticated-single-bot-main-goal',...(lifecycleRestoreGrant?{lifecycleRestoreGrant}:{}),
+      execution:{isCurrent:dispatchCurrent,canExecute:()=>dispatchCurrent()&&modelStatus()==='available',beforeExecute:async()=>{current();},
+        generationControl:{initialization:mode,
+          prepareWorkGeneration:(work,options)=>generationPreparation.prepare(work,{role:'work',create:options.mode==='create',mainSessionId:intent.sessionId,
+            ...(options.delegateTool?{delegateTool:options.delegateTool}:{}),...(options.plannedBinding?{plannedBinding:options.plannedBinding}:{})}),
+          prepareChildGeneration:(work,options)=>generationPreparation.prepareChild(work,{create:options.mode==='create',mainSessionId:intent.sessionId,
+            parentSource:options.parentSource,parentGeneration:options.parentGeneration,parentBinding:options.parentBinding,plannedBinding:options.plannedBinding}),
+          bindMainDelegateTool:definition=>{current();const source=host.adapter.bindOwnedMainGeneration(port,intent,definition);
+            requireValue(generationSdk?.isOwnedGenerationSource(source,ownerCtx)===true,'gui_owned_source_required');mainGenerationSource=source;return source;}}}});
+  }
+  function installContact(agent,bot){
+    contactOwner?.dispose();
+    contactOwner=installSelectedBotContactOwner({ownerCtx,expectedHost:host,connection,peer,connectionGeneration:generation,
+      getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,
+      requireOwnedGeneration:true,generationSource:mainGenerationSource,canSend:()=>{current();return modelStatus()==='available';}});
+    contactIsCold=false;
+  }
+  function coldRead(bot,{keepProducer=false,keepLifecycle=true}={}){
+    lifetime();if(!keepProducer){producer?.dispose();producer=null;}
+    if(!keepLifecycle){lifecyclePort?.dispose?.();lifecyclePort=null;}
+    mainGenerationSource=null;
+    if(contactIsCold&&selected?.botId===bot.botId&&selected.botEpoch===bot.epoch&&selected.sessionId===bot.contactSessionId)return;
+    contactOwner?.dispose();
+    selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:bot.contactSessionId});selectRead(bot.botId);
+    contactOwner=installBotGuiColdOwner({ownerCtx,host,connection,peer,connectionGeneration:generation,getConnectionGeneration:currentGeneration,
+      botId:bot.botId,mainSessionId:bot.contactSessionId,isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}}});
+    contactIsCold=true;
+  }
+  async function prepareRestore(intent,options){
+    lifetime();requireValue(selected?.botId===intent.botId&&isOwnedBotLifecycleRestoreGrant(options.grant,host,owner,intent)===true,'gui_restore_grant_required');
+    const future=describeOwnedBotLifecycleRestore(options.grant,host,owner,intent);
+    const original=ledger.list('guiCreationOperation').find(row=>row.botId===intent.botId&&row.sessionId===future.mainSessionId);
+    requireValue(original,'gui_original_receipt_required');boundDelegationPolicy(original);const mode=boundInitialMode(original);
+    let stage=restoreStages.get(options.grant),port;
+    if(options.role==='main'){
+      requireValue(!stage&&intent.sessionId===future.mainSessionId,'gui_restore_binding_changed');
+      stage={grant:options.grant,future,intent,port:null,preparation:null,source:null};
+      port=host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'main',initialization:mode,
+        isCurrent:()=>{try{lifetime();return isOwnedBotLifecycleRestoreGrant(options.grant,host,owner,intent)===true;}catch{return false;}},
+        prepareGeneration:(actual,preparedOptions)=>generationPreparation.prepareRestore(actual,{...options,delegateTool:preparedOptions.delegateTool})});
+      stage.port=port;stage.preparation=prepareProducer(intent,port,future.botEpoch,mode,options.grant);restoreStages.set(options.grant,stage);
+      const definition=stage.preparation.delegateTool;
+      return Object.freeze({port,delegateTool:definition,bindDelegate:()=>{lifetime();
+        const source=stage.preparation.bindRestoredDelegate(ownerCtx.agents.get(intent.sessionId),intent,port);
+        requireValue(generationSdk?.isOwnedGenerationSource(source,ownerCtx)===true,'gui_owned_source_required');stage.source=source;stagedMain=stage;return source;}});
+    }
+    requireValue(stage&&stage.future.mainSessionId===options.mainSessionId&&stage.future.botEpoch===future.botEpoch,'gui_restore_binding_changed');
+    const definition=intent.workDepth===0?stage.preparation.workDelegateFor(intent):undefined;
+    port=host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'work',initialization:mode,...definition?{delegateTool:definition}:{},
+      isCurrent:()=>{try{lifetime();return isOwnedBotLifecycleRestoreGrant(options.grant,host,owner,intent)===true;}catch{return false;}},
+      prepareGeneration:actual=>generationPreparation.prepareRestore(actual,{...options,...definition?{delegateTool:definition}:{}})});
+    return Object.freeze({port,...definition?{delegateTool:definition,bindDelegate:()=>{lifetime();return stage.preparation.bindRestoredDelegate(ownerCtx.agents.get(intent.sessionId),intent,port);}}:{}});
+  }
+  async function releaseArchivedSessions(grant){
+    lifetime();const bot=host.object('bot',selected.botId),intent=ledger.get('creation',bot.creationIntentId);
+    requireValue(isOwnedBotLifecycleRestoreGrant(grant,host,owner,intent)===true,'gui_restore_grant_required');
+    // Cold preflight already owns the new exclusive journal and selectors; those remain unchanged.
+    if(describeOwnedBotLifecycleRestore(grant,host,owner,intent).cold)return;
+    const port=mainPorts.get(intent.operationId);requireValue(port,'gui_original_receipt_required');
+    await host.adapter.closeOwnedGenerationSession(port,intent,grant);lifetime();
+    producer?.dispose();producer=null;mainGenerationSource=null;
+    await generationPreparation.releaseArchivedJournals(grant);lifetime();
+  }
+  async function openLifecycle(bot,{port,intent}={}){
+    lifetime();requireValue(typeof host.openOwnedBotLifecyclePort==='function','gui_control_unavailable');
+    generationSdk??=await loadOwnedGenerationSdk();lifetime();
+    lifecyclePort=await host.openOwnedBotLifecyclePort(owner,{botId:bot.botId,botEpoch:bot.epoch,authorityEpoch,
+      isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}},...port?{mainCreationPort:port,mainCreationIntent:intent}:{},
+      readOriginalCreation:original=>generationPreparation.readOriginalCreation(original),
+      inspectOriginalHistory:(original,options)=>generationPreparation.inspectOriginalHistory(original,options),
+      releaseArchivedSessions,prepareRestore});lifetime();
+  }
+  function activateRestoredMain(){
+    lifetime();const stage=stagedMain;requireValue(stage&&stage.source&&generationSdk?.isOwnedGenerationSource(stage.source,ownerCtx)===true,'gui_owned_source_required');
+    const bot=host.object('bot',stage.intent.botId),agent=ownerCtx.agents.get(stage.intent.sessionId);
+    requireValue(bot.lifecycle==='active'&&bot.epoch===stage.future.botEpoch&&bot.configVersion===stage.future.configVersion
+      &&bot.contactSessionId===stage.intent.sessionId&&agent?.id===bot.contactSessionId&&agent.session?.id===bot.contactSessionId
+      &&scopeOf(agent.ctx)===agent&&ownerCtx.tools.schemas().length===0&&ownerCtx.tools.schemas(agent).length===1
+      &&ownerCtx.tools.get('dsh_bot_delegate',agent)===stage.preparation.delegateTool,'gui_restore_binding_changed');
+    selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:agent.id});current();
+    mainGenerationSource=stage.source;producer=stage.preparation.attach(agent);requireValue(nativeSourceAvailable(),'gui_owned_source_required');
+    installContact(agent,bot);mainPorts.set(stage.intent.operationId,stage.port);selectRead(bot.botId);
+    ledger.put('guiOwner','selected',{botId:bot.botId,sessionId:agent.id,configVersion:bot.configVersion,botEpoch:bot.epoch});stagedMain=null;
+  }
   async function bindMain(bot,checkpoint,{fresh=false}={}) {
     checkpoint();
     requireValue(bot.lifecycle === 'active' && bot.contactSessionId && ledger.get('config',bot.configVersion)?.agentPreset === agentPreset,'gui_main_binding_unconfirmed');
@@ -126,15 +215,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
       && !log.events.slice(prefixLength).some(event=>['permission/preset','sandbox/mode','approval/policy'].includes(event.type)),'gui_initial_mode_changed');
     if(fresh) requireValue(isBlankInitialSessionEvents(log.events,mode),'gui_main_not_blank');
     const port=mainPort(intent,original);
-    const preparedProducer=prepareOwnedBotProducer({ownerCtx,host,caller:owner,originSessionId:intent.sessionId,botId:bot.botId,botEpoch:bot.epoch,
-      authorityEpoch,cwd,rootInstructionRef:'authenticated-single-bot-main-goal',execution:{isCurrent:dispatchCurrent,canExecute:()=>dispatchCurrent()&&modelStatus()==='available',
-        beforeExecute:async()=>{current();},generationControl:{initialization:mode,
-          prepareWorkGeneration:(work,options)=>generationPreparation.prepare(work,{role:'work',create:options.mode==='create',mainSessionId:intent.sessionId,
-            ...(options.delegateTool?{delegateTool:options.delegateTool}:{}),...(options.plannedBinding?{plannedBinding:options.plannedBinding}:{})}),
-          prepareChildGeneration:(work,options)=>generationPreparation.prepareChild(work,{create:options.mode==='create',mainSessionId:intent.sessionId,
-            parentSource:options.parentSource,parentGeneration:options.parentGeneration,parentBinding:options.parentBinding,plannedBinding:options.plannedBinding}),
-          bindMainDelegateTool:definition=>{current();const source=host.adapter.bindOwnedMainGeneration(port,intent,definition);
-            requireValue(generationSdk?.isOwnedGenerationSource(source,ownerCtx)===true,'gui_owned_source_required');mainGenerationSource=source;return source;}}}});
+    const preparedProducer=prepareProducer(intent,port,bot.epoch,mode);
     if(!fresh) {
       requireValue(ownerCtx.agents.get(intent.sessionId)===undefined,'gui_unprotected_main_active');
       await port.resumeOwnedSession(intent,{delegateTool:preparedProducer.delegateTool});checkpoint();
@@ -152,13 +233,8 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     current();
     producer=preparedProducer.attach(agent);
     requireValue(nativeSourceAvailable(),'gui_owned_source_required');
-    contactOwner=installSelectedBotContactOwner({ownerCtx,expectedHost:host,connection,peer,connectionGeneration:generation,
-      getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,requireOwnedGeneration:true,generationSource:mainGenerationSource,
-      canSend:()=>{current();return modelStatus()==='available';}});
-    if(typeof host.openOwnedBotLifecyclePort==='function'){
-      lifecyclePort=await host.openOwnedBotLifecyclePort(owner,{botId:bot.botId,botEpoch:bot.epoch,authorityEpoch,
-        isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}},mainCreationPort:port,mainCreationIntent:intent});checkpoint();
-    }
+    installContact(agent,bot);
+    await openLifecycle(bot,{port,intent});checkpoint();
     selectRead(bot.botId);
     ledger.put('guiOwner','selected',{botId:bot.botId,sessionId:agent.id,configVersion:bot.configVersion,botEpoch:bot.epoch});
   }
@@ -241,8 +317,15 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     if(!inspect)requireValue(Number.isSafeInteger(payload.botEpoch)&&payload.botEpoch>0,'gui_payload_invalid');
     const method=inspect?'inspectOriginalBotLifecycle':endpoint==='archiveBot'?'archiveOriginalBot':'restoreOriginalBot';
     requireValue(lifecyclePort&&typeof lifecyclePort[method]==='function','gui_control_unavailable');
-    checkpoint();const value=await lifecyclePort[method](Object.freeze({...payload}),signal);checkpoint();
-    requireValue(value?.operationId===payload.operationId&&value.nonce===payload.nonce&&value.botId===selected.botId,'gui_control_unconfirmed');
+    let value;
+    try{
+      checkpoint();value=await lifecyclePort[method](Object.freeze({...payload}),signal);checkpoint();
+      requireValue(value?.operationId===payload.operationId&&value.nonce===payload.nonce&&value.botId===selected.botId,'gui_control_unconfirmed');
+      if(value.state==='accepted'&&value.nativeRestoreVerified===true&&stagedMain)activateRestoredMain();
+    }finally{
+      lifetime();const live=host.object('bot',selected.botId);
+      if(live.lifecycle==='archived')coldRead(live,{keepProducer:true});
+    }
     const bot=host.object('bot',selected.botId);
     return{version:1,operationId:payload.operationId,nonce:payload.nonce,botId:bot.botId,botEpoch:bot.epoch,lifecycle:bot.lifecycle,
       state:value.state==='accepted'?'accepted':'unknown',preciseNativeSettlementVerified:false};
@@ -299,17 +382,23 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
       const bot=host.object('bot',saved.botId);
       requireValue(saved.sessionId === bot.contactSessionId && saved.configVersion === bot.configVersion
         && Number.isSafeInteger(saved.botEpoch)&&saved.botEpoch>0&&saved.botEpoch<=bot.epoch,'gui_saved_identity_changed');
-      const coldRead=()=>{
-        lifetime();contactOwner?.dispose();producer?.dispose();lifecyclePort?.dispose?.();
-        contactOwner=null;producer=null;lifecyclePort=null;mainGenerationSource=null;
-        selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:bot.contactSessionId});selectRead(bot.botId);
-        contactOwner=installBotGuiColdOwner({ownerCtx,host,connection,peer,connectionGeneration:generation,getConnectionGeneration:currentGeneration,
-          botId:bot.botId,mainSessionId:bot.contactSessionId,isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}}});
-      };
-      if(bot.lifecycle==='active'&&saved.botEpoch===bot.epoch){
+      try{generationSdk=await loadOwnedGenerationSdk();lifetime();}catch{lifetime();}
+      if(typeof generationSdk?.selectOwnedGenerationHistory==='function'){
+        // Complete original tree preflight precedes every native resume; an UNKNOWN descendant keeps the entire Bot read-only.
+        coldRead(bot);
+        try{
+          await openLifecycle(bot);
+          if(bot.lifecycle==='active'){
+            const recovered=await lifecyclePort.recoverOriginalBot();lifetime();
+            requireValue(recovered?.botId===bot.botId&&recovered.botEpoch===bot.epoch&&recovered.lifecycle==='active'&&recovered.state==='accepted','gui_recovery_unconfirmed');
+            activateRestoredMain();
+          }
+        }catch{coldRead(host.object('bot',bot.botId));}
+      }else if(bot.lifecycle==='active'&&saved.botEpoch===bot.epoch){
+        // Earlier journal SDKs remain internal diagnostics; they do not qualify the final M2 owner path.
         try {await bindMain(bot,()=>current());current();}
-        catch {coldRead();}
-      }else coldRead();
+        catch {coldRead(bot);}
+      }else coldRead(bot);
     }
     bootstrap();
     return Object.freeze({dispose});
