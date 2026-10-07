@@ -26,6 +26,11 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Fresh current-source package snapshots and guarded offline tests
         run: npm test
+      - name: Fresh package and owned filesystem GUI installer tests
+        # Real owned-directory dependency links require fs.symlink, which Node
+        # refuses with path-scoped permission grants. This separate entry keeps
+        # the fresh environment and network/listener/process denial fuses.
+        run: node scripts/test-bot-gui-profile.mjs
       - name: Guarded pure native admission policies and exact original test partition
         run: |
           node scripts/test.mjs scripts/native-cold/policy.test.mjs

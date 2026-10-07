@@ -80,7 +80,7 @@
     "test/bot-gui-bootstrap.test.mjs": "679179a0a397feb2c1dc1a7af0ed6cddea4c719a919d4d6b6b42ad47bcc26db1",
     "test/bot-gui-controls.test.mjs": "097a2ba7e224fc545d7e094e68c2f0454c6cd2b1682135400e64ac213fb611c5",
     "test/bot-gui-generation-policy.test.mjs": "689b8af23f0c1636a1a18e24ec05993794345e65720ec5aba805c14a5714c82c",
-    "test/bot-gui-profile.test.mjs": "acabf1aa591c10170a234299aa9cd419a5a0e531296fb2a7fcaceecf3cebd0e9",
+    "test/bot-gui-profile.test.mjs": "a75275e47847a5fb4122fef9acb8146a32add4aea6953f0db86389716d60567d",
     "test/bot-gui-startup.test.mjs": "bd643a64a469b3498b2f7e43c0f38556ad4689d1889c9b05edf4387f146c0933",
     "test/initial-session-blank.test.mjs": "315e2857ce0e2fb7801411f46bf4cbfe5fdfc6d09998cb3c646854c67b0142d0",
     "test/work-generation-bridge.test.mjs": "0ba751f360658532e4c241b8a4a6804bd4763320b4d6ca3c99a95b083ece80f9",

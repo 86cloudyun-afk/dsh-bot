@@ -39,6 +39,15 @@ refused; the two admitted cold files remain byte-for-byte bound to their origina
 hashes. These read-only Python checks execute no JavaScript or native cases and
 do not establish native acceptance or the running-budget performance margin.
 
+`test/bot-gui-profile.test.mjs` retains the pure argument and stock-class cases.
+Its three installer filesystem cases are preserved separately in
+`scripts/install-bot-gui-profile.test.mjs`, alongside two dependency-binding
+regressions, and run through `node scripts/test-bot-gui-profile.mjs` in CI.
+That fresh-package entry uses an empty environment and the existing network,
+listener and process denial fuses. Node requires full filesystem permission for
+the owned dependency symlink; this entry therefore makes no filesystem sandbox
+claim. The original pure launcher and two native case permissions are unchanged.
+
 ## Running budget and required finalization
 
 The builtin proof shares a 5-second monotonic running budget starting before the
