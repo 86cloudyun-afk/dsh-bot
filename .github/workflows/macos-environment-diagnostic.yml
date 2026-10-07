@@ -1,0 +1,34 @@
+name: Private Mac environment diagnosis
+on:
+  push:
+    branches: [ci/macos-env-diagnostic-20261007]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.event.repository.private == true
+    runs-on: macos-15
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.19.0
+      - name: One isolated key-presence probe with fixed Node identity
+        run: >-
+          python3 -B scripts/native-cold/probe-macos-environment.py
+          --node "$(command -v node)"
+          --temp-dir "$RUNNER_TEMP"
+          --evidence-dir "$RUNNER_TEMP/mac-environment-diagnostic"
+          --expected-sha "${{ github.sha }}"
+      - name: Retain boolean diagnosis and cleanup confirmation
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mac-environment-diagnostic-${{ github.sha }}
+          path: ${{ runner.temp }}/mac-environment-diagnostic/*.json
+          if-no-files-found: error
+          retention-days: 7
