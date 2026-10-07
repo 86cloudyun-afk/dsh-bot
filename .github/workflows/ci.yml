@@ -67,9 +67,18 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.19.0
+      - name: Use a short canonical physical source directory
+        run: |
+          dsh_native_source="$(mktemp -d /tmp/dsh-nc.XXXXXX)"
+          dsh_native_source="$(cd "$dsh_native_source" && pwd -P)"
+          git worktree add --detach "$dsh_native_source" "${{ github.sha }}"
+          test "$(git -C "$dsh_native_source" rev-parse HEAD)" = "${{ github.sha }}"
+          printf 'DSH_NATIVE_SOURCE=%s\n' "$dsh_native_source" >> "$GITHUB_ENV"
       - name: Install locked public dependencies without lifecycle scripts
+        working-directory: ${{ env.DSH_NATIVE_SOURCE }}
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: One builtin denial proof then two real cold cases with pinned native identities
+        working-directory: ${{ env.DSH_NATIVE_SOURCE }}
         run: |
           node scripts/native-cold/prepare-current.mjs "$RUNNER_TEMP/native-cold-current" "${{ github.sha }}"
           python3 -B scripts/native-cold/run.py \

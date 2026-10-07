@@ -93,3 +93,13 @@ Pure regressions use owned synthetic files, synthetic clocks and fake children;
 two CLI-discovery tests launch bounded Node children without SDK/native/model
 access. These tests do not establish real native acceptance. Real acceptance is
 reported separately from the artifacts of the single authorized CI attempt.
+
+The native CI job installs the same locked SDK into a fresh detached worktree
+under a short, physically canonical temporary path. The triggering commit is
+checked before installation, and all source, package, SDK, file, mode and hash
+checks still run inside their original case budgets. This changes the actual
+directory layout to reduce repeated ancestor traversal by genuine strict
+`Path.resolve`; it does not cache filesystem observations, warm the case,
+raise its five-second budget or move identity checks outside the timer. The
+recorded binding config and receipts contain that actual source path. macOS
+resolves its temporary-directory alias before the worktree is created.
