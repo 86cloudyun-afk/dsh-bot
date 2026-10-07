@@ -13,7 +13,7 @@
 ## Global constraints
 
 - Only new installer/tests/plan/first-install documentation; frozen consumer and GUI helpers are unchanged.
-- Supported targets: `linux-x64`, `darwin-arm64`; official CLI `0.2.0-rc.2`; core 74; external 28.
+- Exactly Node `24.19.0`, admitted before artifact bytes/output/npm; supported targets `linux-x64`, `darwin-arm64`; official CLI `0.2.0-rc.2`; core 74; external 28.
 - Caller-provided descriptor SHA-256; canonical/O_NOFOLLOW reads; every provided needed selected file binds hash, bytes and mode.
 - No complete official SDK bytes in the thin artifact, no lifecycle/native/model/CLI startup during installation.
 - Fresh empty npm cache/config/Home; strict TLS and fixed HTTPS registry; filtered child environment and bounded timeout.
@@ -45,15 +45,21 @@
 
 **Interfaces:** Existing `assembleDistributionRuntime(options)`, `verifyDistributionRuntime(options)`, `decodePackageArchive(bytes)`, `validatePackageClosure(files)`, `installBotGuiProfile(options)` with `packageSourceMode:'verified-export'`.
 
-- [ ] Write real child fixtures asserting fresh empty cache/config/Home, exact ignore-scripts/TLS flags, excluded secret/config environment, nonzero/timeout categories and owned-directory replacement preservation.
-- [ ] Write coherent actual-consumer/GUI integration fixtures with 74 peers and 28 exact registry snapshots; assert original source root/head/tree, exact packed product bytes/modes, private qualification and manual startup with model gate false.
-- [ ] Observe these tests fail before their implementation, then implement the bounded npm group, product extraction and the existing APIs in that order.
-- [ ] Run the complete installer suite and unchanged package/GUI suites appropriate to the new integration.
+- [x] Write real child fixtures asserting fresh empty cache/config/Home, exact ignore-scripts/TLS flags, excluded secret/config environment, nonzero/timeout categories and owned-directory replacement preservation.
+- [x] Write coherent actual-consumer/GUI integration fixtures with 74 peers and 28 exact registry snapshots; assert original source root/head/tree, exact packed product bytes/modes, private qualification and manual startup with model gate false.
+- [x] Observe these tests fail before their implementation, then implement the bounded npm group, product extraction and the existing APIs in that order.
+- [x] Run the complete installer suite and unchanged package/GUI suites appropriate to the new integration.
 
 ### Task 3: First installation contract and handoff
 
 **Files:** Create `docs/first-install-v1.md`; update checkboxes in this plan.
 
-- [ ] Document the exact descriptor/CLI format, Node/npm prerequisites, independently obtained pin, fresh install command, result paths and manual startup, without Git or old dependencies.
-- [ ] State credential references/default model gate and remaining final product/M1, fresh OS, native enforcement and release qualification gates.
-- [ ] Run fresh tests and `git diff --check`; commit only the new owned files and send the exact commit/hash/test evidence for independent review.
+- [x] Document the exact descriptor/CLI format, Node/npm prerequisites, independently obtained pin, fresh install command, result paths and manual startup, without Git or old dependencies.
+- [x] State credential references/default model gate and remaining final product/Host generation, fresh OS, native enforcement and release qualification gates.
+- [x] Run fresh tests and `git diff --check`; commit only the new owned files and send the exact commit/hash/test evidence for independent review.
+
+## Verification handoff
+
+Fresh installer tests pass 34/34 without a worktree `node_modules`; unchanged exporter tests pass 65/65; unchanged dependency-independent GUI startup/bootstrap/package snapshot tests pass 15/15. Evidence is under `/workspace/dsh-v1-evidence/distribution-consumer/thin-*.log`, including all RED runs for input, continuation, exact Node admission, SDK resolution, CA/output-mode and late descriptor/npm-entry mode boundaries.
+
+The attempted full project suite reports 371/413 passing, with 42 failures caused by absent stock SDK imports and their dependent guard/producer assertions. The GUI profile suite likewise cannot load `@deepseek-ai/cordis-plugin-include` in this SDK-absent worktree. These failures remain recorded; the actual new installer fixture exercises the unchanged GUI helper after synthetic fresh SDK installation. No existing source, test runner, dependency manifest or frozen consumer code was changed. Full integrated-source/real-SDK validation belongs to the later parent-owned integration gate, together with final coherent product/Host pins and a real thin first install.
