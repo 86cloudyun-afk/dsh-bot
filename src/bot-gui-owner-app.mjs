@@ -16,6 +16,7 @@ import {freezeInitialSessionMode,isBlankInitialSessionEvents} from './initial-se
 import {createGuiGenerationPreparation} from './bot-gui-generation-preparation.mjs';
 import {loadOwnedGenerationSdk} from './owned-generation-bridge.mjs';
 import {freezeGuiDelegationPolicy} from './bot-gui-delegation-policy.mjs';
+import {installBotGuiColdOwner} from './bot-gui-cold-owner.mjs';
 
 export const name='dsh-bot-gui-owner-app';
 export const inject=['appReady','appExit','dshBotGuiStartup','connection','webServer','llm','deepseekProtectedProviders','sessions',
@@ -300,6 +301,8 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
         lifetime();contactOwner?.dispose();producer?.dispose();lifecyclePort?.dispose();
         contactOwner=null;producer=null;lifecyclePort=null;mainGenerationSource=null;
         selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:bot.contactSessionId});selectRead(bot.botId);
+        contactOwner=installBotGuiColdOwner({ownerCtx,host,connection,peer,connectionGeneration:generation,getConnectionGeneration:currentGeneration,
+          botId:bot.botId,mainSessionId:bot.contactSessionId,isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}}});
       };
       if(bot.lifecycle==='active'&&saved.botEpoch===bot.epoch){
         try {await bindMain(bot,()=>current());current();}

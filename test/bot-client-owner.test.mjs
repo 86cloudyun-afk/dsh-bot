@@ -88,3 +88,24 @@ test('pending native observations refresh through selected reads and stop schedu
   assert.equal(f.calls.filter(call=>['sendContactText','requestContactStop','requestWorkStop'].includes(call[1])).length,0);
  }finally{await f.dispose();globalThis.setTimeout=timeout;globalThis.clearTimeout=clear;}
 });
+
+test('cold owner history remains visible while send and stop allocate no original operation',async()=>{
+ const f=fixture(),view=structuredClone(selected),observation={local:'unknown',remote:'UNKNOWN',usageKnown:false,usage:null,settlementVerified:false};
+ view.readOnly=true;view.contact={...view.contact,status:'unknown',generation:1,generationObservation:observation,preciseNativeSettlementVerified:false};
+ view.work[0]={...view.work[0],generationObservation:observation};
+ try{f.setResponder(nativeResponder(view));let tree=await f.settle();assert.ok(find(tree,'data-dsh-bot-work-detail'));
+  assert.ok(find(tree,'data-dsh-bot-main-reply'));assert.equal(find(tree,'data-dsh-bot-work-generation').props['data-dsh-bot-work-generation'],'UNKNOWN');
+  assert.equal(find(tree,'data-dsh-bot-work-stop').props.disabled,true);assert.equal(find(tree,'data-dsh-bot-submit').props.disabled,true);
+  find(tree,'data-dsh-bot-goal').props.onChange({target:{value:'Never allocate a cold history input'}});tree=f.render();
+  await find(tree,'data-dsh-bot-goal-form').props.onSubmit({preventDefault(){}});await find(tree,'data-dsh-bot-work-stop').props.onClick();
+  assert.equal(f.calls.filter(call=>['sendContactText','requestContactStop','requestWorkStop'].includes(call[1])).length,0);
+  assert.equal(f.storage.size,0);
+ }finally{await f.dispose();}
+});
+test('a cold history DTO cannot display a cached native settlement claim',async()=>{
+ const f=fixture(),view=structuredClone(selected);view.readOnly=true;
+ view.contact={...view.contact,status:'unknown',generation:1,generationObservation:nativeSettled,preciseNativeSettlementVerified:true};
+ try{f.setResponder(nativeResponder(view));const tree=await f.settle();assert.equal(find(tree,'data-dsh-bot-work-detail'),undefined);
+  assert.equal(find(tree,'data-dsh-bot-submit').props.disabled,true);assert.doesNotMatch(texts(tree),/native_settled/);
+ }finally{await f.dispose();}
+});
