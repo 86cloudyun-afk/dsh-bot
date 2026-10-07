@@ -48,7 +48,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        include:
+          - os: ubuntu-24.04
+            python: '3.12.14'
+          - os: macos-15
+            python: '3.12.10'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
@@ -59,7 +63,7 @@ jobs:
       - name: Select the verified identity interpreter
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, verified public tag
         with:
-          python-version: '3.12.14'
+          python-version: ${{ matrix.python }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.19.0
