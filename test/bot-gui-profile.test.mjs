@@ -36,6 +36,8 @@ test('fresh GUI profile installs packed owner with real BrowserAuth and an empty
   const added = patch.flatMap(p => p.insert ?? []);
   assert.deepEqual(added.find(p => p.id === 'bot-gui-preset').config, {id:'dsh-bot/empty',plugins:[]});
   assert.equal(added.find(p => p.id === 'bot-gui-owner').name, 'dsh-bot/bot-gui-owner-app');
+  assert.equal(added.find(p => p.id === 'bot-gui-protected-providers')?.name,'dsh-bot/owner-protected-provider',
+    'protected preparation must look up the actual native provider directory; a route label cannot grant authority');
   assert.equal(added.find(p => p.id === 'dsh-bot').name, 'dsh-bot');
   assert.equal(added.find(p => p.id === 'bot-gui-surface')?.name,'dsh-bot-gui-surface');
   const surface=JSON.parse(await readFile(join(profileDir,'node_modules','dsh-bot-gui-surface','package.json'),'utf8'));

@@ -26,7 +26,7 @@ DSH_HOME=/absolute/new-installation/home \
   --profile dsh-bot-gui --port 3080 --no-open
 ```
 
-默认启动为查看模式，不发模型请求。正式发送目标需要运行时支持已保护的代次入口，并显式添加 `--enable-model-requests`。官方 provider 使用环境变量引用 `DEEPSEEK_API_KEY`；安装器和产品 Home 不写入模型密钥值。能力尚未确认时，界面保持只读并保留已有 Bot 和对话身份。
+默认启动为查看模式，不发模型请求。此 profile 需要已审核 runtime 提供官方的保护执行入口和 provider 注册服务；不支持该服务的旧 runtime 会拒绝启动。正式发送目标还需原会话通过能力和历史校验，并显式添加 `--enable-model-requests`。官方 provider 使用环境变量引用 `DEEPSEEK_API_KEY`；安装器和产品 Home 不写入模型密钥值。能力尚未确认时，界面保持只读并保留已有 Bot 和对话身份。
 
 “消息已保存”表示原消息已持久入队；“停止请求已接受”表示已请求停止。回复、空闲状态和已接受的停止都不能单独证明工作已结束。状态为 UNKNOWN 时保留原代次和工作槽位，查询原回执，不重复发送。只有原生入口提供精确、可核对的终态证据后，才能回收对应槽位。
 
