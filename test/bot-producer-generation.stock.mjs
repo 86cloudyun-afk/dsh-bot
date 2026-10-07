@@ -3,8 +3,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {scopeOf} from '@deepseek-ai/dsh-scope';
 import {SessionCreationDriver} from '../src/session-creation.mjs';
-import {installOwnedBotProducer} from '../src/bot-producer.mjs';
+import {installOwnedBotProducer,prepareOwnedBotProducer} from '../src/bot-producer.mjs';
 import {generationFixture,syntheticResponse,tick,observeUntil} from './work-generation-fixture.mjs';
+
+test('restored definition registration requires an exact private lifecycle grant before touching the native registry',async t=>{
+ const f=await generationFixture(t),i=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},1),p=f.host.adapter.ownedGenerationCreationPort([i.sessionId],{scopeOf,role:'main',prepareGeneration:x=>f.prepareGeneration(x,'main'),isCurrent:()=>true}),created=await new SessionCreationDriver({host:f.host,caller:f.caller,port:p}).run(f.caller,i.operationId),agent=f.ctx.agents.get(i.sessionId);
+ const preparation=prepareOwnedBotProducer({ownerCtx:f.ctx,host:f.host,caller:f.caller,originSessionId:i.sessionId,botId:f.bot.botId,botEpoch:1,authorityEpoch:1,cwd:f.directory,rootInstructionRef:'synthetic-restored-registration'});
+ assert.equal(typeof preparation.bindRestoredDelegate,'function');assert.throws(()=>preparation.bindRestoredDelegate(agent,created,p),{code:'unsupported_owned_bot_restore'});
+ assert.equal(f.ctx.tools.schemas(agent).length,0);assert.equal(f.requests(),0);
+});
 
 test('actual SDK synthetic producer prepares work before create and routes original result through protected main',async t=>{
  const f=await generationFixture(t,()=>syntheticResponse()),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);

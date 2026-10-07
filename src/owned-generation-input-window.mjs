@@ -12,7 +12,7 @@ export async function ownedGenerationInputWindow(source,ownerCtx,receipt,binding
 }
 export function projectOwnedGenerationEvents(window,events,{delegate=false}={}){
  requireValue(windows.has(window)&&Array.isArray(events),'owned_input_window_required');
- const scoped=events.filter(e=>e.seq>=window.startSeq&&e.seq<=window.endSeq),contexts=new Set();
+ const scoped=events.filter(e=>e.seq>=window.startSeq&&e.seq<window.endSeq),contexts=new Set();
  for(const context of window.runtimeContexts){const matches=scoped.filter(e=>e.seq===context.seq&&e.type==='user/message'&&e.data.id===context.messageId&&digest(e.data)===context.messageDigest);requireValue(matches.length===1,'owned_input_window_changed');contexts.add(context.seq);}
  requireValue(new Set(window.runtimeContexts.map(row=>row.seq)).size===window.runtimeContexts.length,'owned_input_window_changed');
  let projected=scoped.filter(e=>!contexts.has(e.seq));
