@@ -1,6 +1,6 @@
 """Synthetic files and bytes only. No SDK/Node children or network."""
-import copy,hashlib,importlib.util,json,os,stat,tempfile,types,unittest
-from contextlib import contextmanager
+import copy,errno,hashlib,importlib.util,json,os,stat,tempfile,types,unittest
+from contextlib import ExitStack,contextmanager
 from pathlib import Path,PosixPath
 from unittest.mock import patch
 import installed_identity as I
@@ -231,6 +231,99 @@ class PrefixPathTests(unittest.TestCase):
 
     def test_c93_reference_helpers_retain_verified_source_pin(self):
         self.assertEqual(hashlib.sha256(_C93_HELPERS_SOURCE.encode()).hexdigest(),_C93_HELPERS_SHA256)
+
+    def compare_resolver_dependency(self,kind):
+        for before_import in (False,True):
+            with self.subTest(beforeImport=before_import,dependency=kind),self.owned() as root:
+                self.write(root/'nested/inside.js',b'owned live resolver dependency');observed=[]
+                for implementation in (_C93,None):
+                    module=implementation if implementation is not None else None if before_import else self.identity_copy()
+                    calls=[];changes=[];realpath=os.path.realpath;original_lstat=os.lstat
+                    def denied(value,*args,**kwargs):
+                        calls.append(('realpath',type(value),value.as_posix(),args,kwargs.copy()))
+                        raise PermissionError(13,'SYNTHETIC_RESOLVER_DEPENDENCY_DENIED',os.fspath(value))
+                    class Resolver:
+                        def __init__(self,original):self.original=original
+                        def __getattr__(self,name):return getattr(self.original,name)
+                        def realpath(self,value,*args,**kwargs):return denied(value,*args,**kwargs)
+                    class CurrentOS:
+                        path=Resolver(os.path)
+                        def __getattr__(self,name):return getattr(os,name)
+                    def helper(*args,**kwargs):
+                        calls.append(('resolver-helper',args,kwargs.copy()))
+                        raise PermissionError(13,'SYNTHETIC_RESOLVER_HELPER_DENIED',str(root))
+                    class IterativeResolverOS:
+                        def __getattr__(self,name):return getattr(os,name)
+                        def lstat(self,value,*args,**kwargs):
+                            if os.fspath(value)=='/'+root.parts[1]:return helper(value,*args,**kwargs)
+                            return original_lstat(value,*args,**kwargs)
+                    def looping(value,*args,**kwargs):
+                        if os.fspath(value)==str(root):
+                            calls.append(('lstat-eloop',os.fspath(value)))
+                            raise OSError(errno.ELOOP,'SYNTHETIC_RESOLVER_LOOP',str(root))
+                        return original_lstat(value,*args,**kwargs)
+                    def changing(value,*args,**kwargs):
+                        info=original_lstat(value,*args,**kwargs)
+                        if os.fspath(value)==str(root) and not changes:
+                            changes.append(str(root));os.path.realpath=denied
+                        return info
+                    with ExitStack() as stack:
+                        if kind=='realpath':stack.enter_context(patch.object(os.path,'realpath',denied))
+                        elif kind=='realpath-code':
+                            replacement={}
+                            exec("def changed(value,*args,**kwargs):\n return _dsh_identity_realpath_control(value,*args,**kwargs)\n",replacement)
+                            stack.enter_context(patch.dict(realpath.__globals__,{'_dsh_identity_realpath_control':denied}))
+                            stack.callback(setattr,realpath,'__code__',realpath.__code__)
+                            realpath.__code__=replacement['changed'].__code__
+                        elif kind=='resolver-binding':
+                            if '_flavour' in PosixPath.resolve.__code__.co_names:
+                                stack.enter_context(patch.object(PosixPath,'_flavour',Resolver(PosixPath._flavour)))
+                            else:
+                                # 3.13+ resolves through its current os.path binding.
+                                stack.enter_context(patch.dict(PosixPath.resolve.__globals__,{'os':CurrentOS()}))
+                        elif kind=='recursive-helper':
+                            if '_joinrealpath' in realpath.__code__.co_names:
+                                stack.enter_context(patch.object(os.path,'_joinrealpath',helper))
+                            else:
+                                # 3.13+ iterates in realpath itself, consulting
+                                # its own live OS binding for ancestor lstat.
+                                stack.enter_context(patch.dict(realpath.__globals__,{'os':IterativeResolverOS()}))
+                        elif kind=='exception-global':
+                            stack.enter_context(patch.dict(PosixPath.resolve.__globals__,{'ELOOP':-999}))
+                            stack.enter_context(patch.object(os,'lstat',looping))
+                        else:
+                            stack.enter_context(patch.object(os.path,'realpath',realpath))
+                            stack.enter_context(patch.object(os,'lstat',changing))
+                        if module is None:module=self.identity_copy()
+                        result=self.outcome(lambda:module.files_under(root))
+                    observed.append((result,calls,changes))
+                self.assertEqual(observed[1],observed[0])
+                self.assertEqual(observed[0][0]['errno'],errno.ELOOP if kind=='exception-global' else 13)
+                self.assertEqual(observed[0][0]['error'],'OSError' if kind=='exception-global' else 'PermissionError')
+                if kind=='exception-global':self.assertTrue(observed[0][1]);self.assertTrue(all(call==('lstat-eloop',str(root)) for call in observed[0][1]))
+                else:self.assertEqual(len(observed[0][1]),1)
+                if kind in ('realpath','realpath-code','resolver-binding','mid-resolution-change'):
+                    self.assertIs(observed[0][1][0][1],PosixPath)
+                    self.assertEqual(observed[0][1][0][-1],{'strict':True})
+                self.assertEqual(observed[0][2],[str(root)] if kind=='mid-resolution-change' else [])
+
+    def test_live_realpath_replacement_keeps_actual_path_and_strict_argument(self):
+        self.compare_resolver_dependency('realpath')
+
+    def test_live_realpath_function_code_keeps_runtime_binding(self):
+        self.compare_resolver_dependency('realpath-code')
+
+    def test_live_resolver_flavour_or_os_binding_keeps_runtime_behavior(self):
+        self.compare_resolver_dependency('resolver-binding')
+
+    def test_live_recursive_resolver_helper_keeps_current_calls(self):
+        self.compare_resolver_dependency('recursive-helper')
+
+    def test_live_resolve_exception_global_keeps_original_errno_mapping(self):
+        self.compare_resolver_dependency('exception-global')
+
+    def test_realpath_replaced_during_lstat_is_used_at_next_resolution(self):
+        self.compare_resolver_dependency('mid-resolution-change')
 
     def test_preimport_iterator_replacements_keep_empty_and_outside_results(self):
         for outside in (False,True):
@@ -638,12 +731,14 @@ class PrefixPathTests(unittest.TestCase):
             self.assertEqual(observed[1],observed[0]);self.assertEqual(len(opened),2);self.assertEqual(len(fstats),4)
             self.assertTrue(all(flags & os.O_NOFOLLOW and flags & os.O_NONBLOCK for _,flags in opened))
             self.assertEqual(hashed,[values['a.js'],values['nested/b.js']])
-            if I._FAST_POSIX and I._STANDARD_METHODS['resolve'] is not None:
-                expected=[]
-                for path in (root,root/'a.js',root/'nested',root/'nested/b.js'):
-                    parent=Path('/')
-                    for part in path.parts[1:]:parent=parent/part;expected.append(str(parent))
-                self.assertEqual(resolved,expected)
+            expected=[]
+            for path in (root,root/'a.js',root/'nested',root/'nested/b.js'):
+                parent=Path('/')
+                for part in path.parts[1:]:parent=parent/part;expected.append(str(parent))
+            # Runtime-specific predicate/lstat calls may add observations.
+            # Exact order/counts match c93 above; every resolution must also
+            # re-observe every ancestor rather than reuse filesystem results.
+            self.assertTrue(all(resolved.count(path)>=expected.count(path) for path in set(expected)))
 
     def test_canonical_fresh_calls_observe_each_ancestor_again(self):
         with self.owned() as root:
@@ -660,7 +755,6 @@ class PrefixPathTests(unittest.TestCase):
             parent=Path('/');expected=[]
             for part in path.parts[1:]:parent=parent/part;expected.append(str(parent))
             self.assertTrue(set(expected)<=set(first))
-            if I._FAST_POSIX and I._STANDARD_METHODS['resolve'] is not None:self.assertEqual(first,expected)
 
     def test_directory_alias_after_confirmation_is_refused_before_file_open(self):
         with self.owned() as parent:
@@ -680,7 +774,7 @@ class PrefixPathTests(unittest.TestCase):
             self.write(root/'file.js',b'owned resolver fallback')
             original=PosixPath.resolve;observed=[]
             def resolve(path,*args,**kwargs):observed.append((path,kwargs));return original(path,*args,**kwargs)
-            with patch.object(I,'_FAST_POSIX',False),patch.object(PosixPath,'resolve',resolve):I.files_under(root)
+            with patch.object(PosixPath,'resolve',resolve):I.files_under(root)
             self.assertEqual(observed,[(root,{'strict':True}),(root/'file.js',{'strict':True})])
 
     def test_full_check_avoids_relative_construction_and_retains_record_reopen(self):

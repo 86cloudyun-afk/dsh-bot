@@ -1,94 +1,18 @@
 """Pure read-only public SDK/current-installation identity. Never launch Node or SDK."""
-import errno,hashlib,json,os,pathlib,re,stat,sys,types
+import hashlib,json,os,re,stat
 from pathlib import Path,PosixPath
-from functools import lru_cache
 import supervisor as R
 
-_FAST_POSIX=sys.implementation.name=='cpython' and sys.version_info[:2]==(3,12) and hasattr(os.path,'_joinrealpath')
 _VALID_PATH=re.compile(r'(?!(?:\.{1,2})(?:/|$))[^/\\\t\r\n\x00]+(?:/(?!(?:\.{1,2})(?:/|$))[^/\\\t\r\n\x00]+)*')
 _SDK_SUFFIXES=('.js','.mjs','.cjs','.json','.wasm')
-_POSIX_MEMBERS=PosixPath.__dict__
-_PATH_MEMBERS=Path.__dict__
-
-_PATH_CODE_SHA256={
-    'iterdir':'1fdd935c3653b6e5321324e1ecf2f2792f6a670a33857905837d296173e61e4d',
-    'stat':'16cc8b5a4b4757f23bd611e1ddcb3b784f031f18edd57376590d629facb321ac',
-    'lstat':'f3ccf22149a1ac2857dd543851eabad929ff0bd5dedadd398a233dfc5d643fc8',
-    'is_dir':'16d9327835765192304253bbfd4c158eca7b596a5c37de6fb629a1994b062a7e',
-    'is_file':'9a30aebdbfcb9f830897f3d1f1c5088ba5e712c9b60bdfe85ac313077e213ed7',
-    'is_symlink':'6daaccb38bbe0c7bc3d2691566a86c87ee43c6820a2391a2c34de33130ff6146',
-    'resolve':'d3096335bb76cf1d7b0888828ab0c775b31ed40712eb3869e5f35b06debbffaa',
-}
-
-def _path_code_signature(code):
-    constants=[_path_code_signature(value) if type(value) is types.CodeType else value for value in code.co_consts]
-    if constants and type(constants[0]) is str:constants[0]=None
-    return [code.co_code.hex(),code.co_exceptiontable.hex(),code.co_names,code.co_varnames,code.co_argcount,code.co_posonlyargcount,code.co_kwonlyargcount,code.co_flags,code.co_stacksize,code.co_freevars,code.co_cellvars,constants]
-
-def _raw_path_method(name):
-    # Live namespace views avoid invoking unknown descriptors just to inspect
-    # them. All recognized methods are defined by Path or overridden by PosixPath.
-    try:return _POSIX_MEMBERS[name] if name in _POSIX_MEMBERS else _PATH_MEMBERS[name]
-    except KeyError:return None
-
-def _standard_path_method(name):
-    """Recognize the concrete 3.12 stdlib code, never an import-time replacement.
-
-    Fingerprints omit locations and optional docstrings, but include bytecode,
-    exception tables, constants and call shape. Unknown patch versions fall
-    back. This checks pure code only and adds no filesystem observations.
-    """
-    method=_raw_path_method(name)
-    if not _FAST_POSIX or type(method) is not types.FunctionType or method.__globals__ is not vars(pathlib) or method.__module__!='pathlib' or method.__qualname__!='Path.'+name:return None
-    try:digest=hashlib.sha256(json.dumps(_path_code_signature(method.__code__),separators=(',',':')).encode()).hexdigest()
-    except (TypeError,ValueError):return None
-    return method if digest==_PATH_CODE_SHA256[name] else None
-
-_STANDARD_METHODS={name:_standard_path_method(name) for name in _PATH_CODE_SHA256}
-_STANDARD_CODES={name:method.__code__ if method is not None else None for name,method in _STANDARD_METHODS.items()}
-
-@lru_cache(maxsize=32768)
-def lexical_prefixes(spelling):
-    """Cache immutable strings only; no filesystem observations or resolution."""
-    if spelling=='/':return ()
-    if spelling.count('/')>128:
-        return tuple(spelling[:match.start()] for match in re.finditer('/',spelling) if match.start())+(spelling,)
-    parent=spelling.rpartition('/')[0] or '/'
-    return lexical_prefixes(parent)+(spelling,)
 
 def canonical(path):
-    """Fresh strict resolution, with less lexical work on standard 3.12 POSIX paths.
+    """Observe strict resolution through the path's current bound runtime API.
 
-    Every ancestor is still lstat'ed in the runtime resolver's order. Only the
-    string joins and the final already-canonical Path construction are elided.
-    The runtime's own recursive resolver handles links with the same current
-    ancestor, remaining suffix, and per-resolution link state. Other runtimes
-    and custom paths retain their original resolve implementation.
+    Resolver helpers, globals and error handling remain live throughout every
+    filesystem observation, including changes made by an observation callback.
     """
-    standard_resolve=_STANDARD_METHODS['resolve'] is not None and _raw_path_method('resolve') is _STANDARD_METHODS['resolve'] and _STANDARD_METHODS['resolve'].__code__ is _STANDARD_CODES['resolve'] and _STANDARD_METHODS['resolve'].__globals__.get('os') is os
-    if type(path) is not PosixPath or not _FAST_POSIX or not standard_resolve:
-        return path.resolve(strict=True)==path
-    spelling=str(path)
-    if not spelling.startswith('/') or '//' in spelling or spelling!='/' and spelling.endswith('/') or '/..' in spelling:
-        return path.resolve(strict=True)==path
-    prefixes=lexical_prefixes(spelling)
-    try:
-        for index,entry in enumerate(prefixes):
-            observed=os.lstat(entry)
-            if stat.S_ISLNK(observed.st_mode):
-                parent=prefixes[index-1] if index else '/'
-                seen={entry:None}
-                resolved,ok=os.path._joinrealpath(parent,os.readlink(entry),True,seen)
-                rest=spelling[len(entry)+1:]
-                if not ok:resolved=os.path.join(resolved,rest)
-                else:
-                    seen[entry]=resolved
-                    resolved,_=os.path._joinrealpath(resolved,rest,True,seen)
-                return Path(os.path.abspath(resolved))==path
-    except OSError as error:
-        if error.errno==errno.ELOOP:raise RuntimeError('Symlink loop from %r'%error.filename)
-        raise
-    return True
+    return path.resolve(strict=True)==path
 
 def fixed(path,maximum=512*1024*1024):
     path=path if type(path) is PosixPath else Path(path);before=path.lstat()
