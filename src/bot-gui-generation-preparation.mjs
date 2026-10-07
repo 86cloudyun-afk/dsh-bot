@@ -8,10 +8,11 @@ import {freezeInitialSessionMode} from './initial-session-blank.mjs';
 import {createGuiGenerationPolicy} from './bot-gui-generation-policy.mjs';
 
 const identity=value=>value?.[symbols.original]??value;
-const coordinates=intent=>canonical(['operationId','sessionId','cwd','agentPreset','kind','botId','botEpoch',
+const coordinates=intent=>canonical(['operationId','nonce','sessionId','cwd','agentPreset','kind','botId','botEpoch',
   'configVersion','authorityEpoch','taskId','taskEpoch','taskRevision','workBinding','workDepth','parentBinding','plannedBinding'].map(key=>intent?.[key]??null));
 const positive=value=>Number.isSafeInteger(value)&&value>0;
 const same=(a,b)=>canonical(a??null)===canonical(b??null);
+const freezeJSON=value=>{if(value&&typeof value==='object'){for(const child of Object.values(value))freezeJSON(child);Object.freeze(value);}return value;};
 const fullWorkBinding=binding=>binding&&Object.getPrototypeOf(binding)===Object.prototype
   &&['botId','taskId','sessionId','configVersion','operationId','nonce','inputMessageId'].every(key=>typeof binding[key]==='string'&&binding[key].length>0)
   &&['generation','botEpoch','taskEpoch','taskRevision','authorityEpoch'].every(key=>positive(binding[key]))
@@ -87,6 +88,20 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
       &&parent.botEpoch===intent.botEpoch&&parent.configVersion===intent.configVersion&&parent.authorityEpoch===intent.authorityEpoch
       &&sdk.isOwnedGenerationSource(options.parentSource,ownerCtx)===true&&typeof sdk.prepareOwnedChildGenerationSource==='function','gui_child_source_required');
   }
+  function originalCreation(intent,options){
+    requireValue(typeof intent.nonce==='string'&&intent.nonce.length>0&&intent.nonce.length<=200,'gui_original_creation_required');
+    const key=canonical([intent.botId,intent.sessionId,options.role]),retained=host.ledger.get('guiNativeCreationOriginal',key);
+    if(options.create){
+      const snapshot=freezeJSON(JSON.parse(canonical({binding:intent,operationId:intent.operationId,nonce:intent.nonce})));
+      requireValue(!retained||same(retained,snapshot),'gui_original_creation_changed');
+      if(!retained)host.ledger.put('guiNativeCreationOriginal',key,snapshot);
+      return snapshot;
+    }
+    // Persisted JSON is only the exact policy selector; the SDK independently verifies sealed native history.
+    requireValue(retained&&Object.keys(retained).length===3&&retained.operationId===intent.operationId&&retained.nonce===intent.nonce
+      &&coordinates(retained.binding)===coordinates(intent)&&['prepared','creating'].includes(retained.binding.state),'gui_original_creation_required');
+    return freezeJSON(JSON.parse(canonical(retained)));
+  }
   async function prepare(intent,options,child=false){
       original(intent,options);const consumedKey=canonical([options.role,intent.sessionId]);
       if(!child&&options.role==='work'&&options.delegateTool!==undefined)parentPlan(intent,options);
@@ -101,9 +116,10 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
         &&directory.lookup(nativeRoute.provider)===providerFactory,'gui_protected_provider_changed');};
       if(!options.create&&options.role==='main')requireValue(options.delegateTool?.name==='dsh_bot_delegate','gui_resume_delegate_required');
       unchanged();
+      const creationIntent=originalCreation(intent,options);
       const journal=await sdk.openOwnedGenerationJournal({ownerCtx,directory:join(homeDirectory,'owned-generations',digest({botId:intent.botId,sessionId:intent.sessionId,role:options.role})),
         create:options.create,sessionId:intent.sessionId,role:options.role,...options.role==='work'?{toolPolicy:!child&&options.delegateTool?'delegate':'zero'}:{},
-        route:nativeRoute,initialization:mode,session:{cwd,agentPreset}});
+        route:nativeRoute,initialization:mode,session:{cwd,agentPreset},creationIntent});
       try{
         unchanged();requireValue(sdk.isOwnedGenerationJournal(journal,ownerCtx,intent.sessionId,options.role)===true,'gui_owned_journal_required');
         const policy=createGuiGenerationPolicy({ledger:host.ledger,ledgerId:host.ledgerInstanceId,botId:intent.botId,botEpoch:intent.botEpoch,
@@ -120,7 +136,7 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
               :options.delegateTool?{delegateTool:options.delegateTool}:{})});
         unchanged();requireValue(sdk.isPreparedOwnedGenerationSource(prepared,ownerCtx,intent.sessionId,options.role)===true
           &&prepared.mode===(options.create?'create':'resume'),'gui_owned_preparation_required');
-        journals.add(journal);return Object.freeze({prepared,route:nativeRoute});
+        journals.add(journal);return Object.freeze({prepared,route:nativeRoute,creationIntent});
       }catch(error){await journal.close();throw error;}
   }
   return Object.freeze({
