@@ -109,11 +109,20 @@ window.__ModuleLoader__.load({id:'dsh-bot',factory:require=>{
  function BotPanel({t,useConnection,useGeneration,read,ownerCall,guiCall}){
   const state=useConnection(v=>v),generation=useGeneration(v=>v)?.id,connected=state==='connected'&&Number.isSafeInteger(generation);
   const[view,setView]=useState({status:'waiting'}),[selectedId,setSelectedId]=useState(''),[owned,setOwned]=useState({status:'owner_unavailable'}),[goal,setGoal]=useState(''),[receipt,setReceipt]=useState(null),[stopReceipts,setStopReceipts]=useState({}),[refresh,setRefresh]=useState(0),[identityReady,setIdentityReady]=useState(false);
-  const memory=useRef({controllers:new Set(),busy:false,epoch:null,operation:null,live:null});memory.current.live={connected,generation,botId:selectedId};
+  const memory=useRef({controllers:new Set(),busy:false,epoch:null,operation:null,live:null,guiIdentity:null});memory.current.live={connected,generation,botId:selectedId};
   const[gui,setGui]=useState({status:'owner_unavailable'}),[botName,setBotName]=useState(guiCall?'我的 Bot':'My Bot'),[createOp,setCreateOp]=useState(null),[creating,setCreating]=useState(false),[catalogRevision,setCatalogRevision]=useState(0),[guiRefresh,setGuiRefresh]=useState(0);
   const[controlOperations,setControlOperations]=useState({}),[controlReady,setControlReady]=useState(false),[controlBusy,setControlBusy]=useState(false);
-  useEffect(()=>{memory.current.epoch=generation;if(!connected){setView({status:'waiting'});return;}const controller=new AbortController();setView({status:'loading',generation});void read(controller.signal).then(result=>{if(controller.signal.aborted)return;const next=readView(result);setView({...next,generation});if(next.status==='ready')setSelectedId(id=>next.bot.some(b=>b.botId===id)?id:next.bot[0]?.botId??'');},()=>{if(!controller.signal.aborted)setView({status:'read_failed',generation});});return()=>{controller.abort();for(const c of memory.current.controllers)c.abort();memory.current.controllers.clear();memory.current.busy=false;const op=memory.current.operation;if(op?.state==='sending'){const unknown={...op,state:'unknown'};memory.current.operation=unknown;setReceipt(unknown);}};},[state,generation,read,catalogRevision]);
-  useEffect(()=>{setGui({status:'owner_unavailable'});if(!guiCall||!connected)return;const controller=new AbortController();void guiCall('bootstrap',{},controller.signal).then(async result=>{if(controller.signal.aborted)return;const next=guiView(result);if(next.status!=='ready')return;const original=await bootstrapCreate(next,controller.signal);if(controller.signal.aborted||!memory.current.live.connected||memory.current.live.generation!==generation)return;setCreateOp(original);setGui({...next,generation});setCatalogRevision(n=>n+1);}).catch(()=>{if(!controller.signal.aborted)setGui({status:'owner_unavailable'});});return()=>controller.abort();},[state,generation,guiCall,guiRefresh]);
+  useEffect(()=>{memory.current.epoch=generation;return()=>{
+   for(const c of memory.current.controllers)c.abort();memory.current.controllers.clear();memory.current.busy=false;
+   const op=memory.current.operation;if(op?.state==='sending'){const unknown={...op,state:'unknown'};memory.current.operation=unknown;setReceipt(unknown);}
+  };},[state,generation,selectedId]);
+  useEffect(()=>{if(!connected){setView({status:'waiting'});return;}const controller=new AbortController();setView({status:'loading',generation});void read(controller.signal).then(result=>{if(controller.signal.aborted)return;const next=readView(result);setView({...next,generation});if(next.status==='ready')setSelectedId(id=>next.bot.some(b=>b.botId===id)?id:next.bot[0]?.botId??'');},()=>{if(!controller.signal.aborted)setView({status:'read_failed',generation});});return()=>controller.abort();},[state,generation,read,catalogRevision]);
+  useEffect(()=>{setGui({status:'owner_unavailable'});if(!guiCall||!connected)return;const controller=new AbortController();void guiCall('bootstrap',{},controller.signal).then(async result=>{if(controller.signal.aborted)return;const next=guiView(result);if(next.status!=='ready'||!memory.current.live.connected||memory.current.live.generation!==generation)return;
+   const identity=memory.current.guiIdentity;
+   if(identity?.generation===generation&&identity.ledgerId!==next.ledgerId){memory.current.guiIdentity={generation,ledgerId:null};throw cancelledRead;}
+   const original=await bootstrapCreate(next,controller.signal);if(controller.signal.aborted||!memory.current.live.connected||memory.current.live.generation!==generation)return;
+   memory.current.guiIdentity={generation,ledgerId:next.ledgerId};
+   setCreateOp(original);setGui({...next,generation});setCatalogRevision(n=>n+1);}).catch(()=>{if(!controller.signal.aborted)setGui({status:'owner_unavailable'});});return()=>controller.abort();},[state,generation,guiCall,guiRefresh]);
   useEffect(()=>{if(!connected||!selectedId){setOwned({status:'owner_unavailable'});return;}const controller=new AbortController();setOwned({status:'loading',generation,botId:selectedId});void ownerCall('selectedView',selectedId,{},controller.signal).then(result=>{if(!controller.signal.aborted){setOwned({...ownerView(result,selectedId),generation});if(guiCall)setGuiRefresh(n=>n+1);}},()=>{if(!controller.signal.aborted){setOwned({status:'owner_unavailable',generation,botId:selectedId});if(guiCall)setGuiRefresh(n=>n+1);}});return()=>controller.abort();},[state,generation,selectedId,refresh,ownerCall,guiCall]);
   useEffect(()=>{
    if(!connected||owned.status!=='ready'||owned.generation!==generation||owned.botId!==selectedId)return;
@@ -143,7 +152,9 @@ window.__ModuleLoader__.load({id:'dsh-bot',factory:require=>{
     ??Object.values(controlOperations).filter(op=>op.kind!=='continue').sort((a,b)=>b.botEpoch-a.botEpoch)[0];
   const canContinue=w=>current&&guiCurrent&&gui.modelRequestsEnabled&&w.preciseNativeSettlementVerified===true&&!w.held&&w.stop.state==='none'
     &&controls?.work.some(row=>row.taskId===w.taskId&&row.sessionId===w.sessionId&&row.generation===w.generation&&row.canContinue===true);
-  memory.current.live={...memory.current.live,ledgerId:gui.ledgerId,controls,work:current?owned.work:[],modelEnabled:guiCurrent&&gui.modelRequestsEnabled};
+  // A pending read may disable new controls; it cannot replace the exact receipt identity.
+  // This connection-scoped anchor grants no native authority and contains no capability.
+  memory.current.live={...memory.current.live,ledgerId:memory.current.guiIdentity?.generation===generation?memory.current.guiIdentity.ledgerId:undefined,controls,work:current?owned.work:[],modelEnabled:guiCurrent&&gui.modelRequestsEnabled};
   async function controlAction(kind,work,inspect=false){
    if(!guiCurrent||!controlReady||!identityReady||controlBusy||memory.current.busy||!selectedId)return;
    const previous=kind==='continue'?workOriginal(work):lifecycleOriginal,lookup=inspect||previous?.state==='unknown';
