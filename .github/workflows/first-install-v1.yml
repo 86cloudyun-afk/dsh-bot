@@ -1,0 +1,62 @@
+name: Private fresh first-install viewing GUI qualification
+on:
+  push:
+    branches: [ci/first-install-v1-20261007]
+permissions:
+  contents: read
+jobs:
+  first-install:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/ci/first-install-v1-20261007' &&
+      github.event.repository.private == true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x64
+            arch: x64
+          - os: macos-15
+            target: darwin-arm64
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact private source and frozen external thin input before effects
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          dsh_first_root="$(python3 -B ci/first-install/transport.py --target '${{ matrix.target }}' --runner-temp "$RUNNER_TEMP")"
+          printf 'DSH_FIRST_ROOT=%s\n' "$dsh_first_root" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.19.0
+          architecture: ${{ matrix.arch }}
+      - name: Verify the actual Node target and pin public browser dependency installation
+        run: node ci/first-install/public-browser.mjs prepare "$DSH_FIRST_ROOT"
+      - name: Install normal Linux Chinese fonts and public Chromium dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+          node ci/first-install/public-browser.mjs linux-deps "$DSH_FIRST_ROOT"
+      - name: Download official Chromium with the original pinned Playwright CLI
+        run: node ci/first-install/public-browser.mjs download "$DSH_FIRST_ROOT"
+      - name: Fresh official SDK installation and independent complete readback
+        run: node ci/first-install/install.mjs "$DSH_FIRST_ROOT"
+      - name: Documented stock browser auth, native Bot creation and same-Home cold restart
+        run: node ci/first-install/gui-baseline.mjs "$DSH_FIRST_ROOT"
+      - name: Retain typed evidence and screenshots from authenticated clean URLs only
+        if: always() && env.DSH_FIRST_ROOT != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: first-install-view-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            ${{ env.DSH_FIRST_ROOT }}/receipts/*.json
+            ${{ env.DSH_FIRST_ROOT }}/screenshots/*.png
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,8 @@
+{
+  "name": "private-first-install-browser",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

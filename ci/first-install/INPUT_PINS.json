@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "classification": "PRIVATE_FIRST_INSTALL_EXTERNAL_INPUT_PINS",
+  "frozen": true,
+  "sourceHead": "af3f246c4157f2489215fc1de034704d86109a17",
+  "sourceTree": "501c2b0a3beda8b91eec33b9be6050e66ac45582",
+  "archive": {
+    "path": "inputs/final-thin.tar.gz",
+    "bytes": 15541555,
+    "sha256": "f5d80350c18d13a1145ca1291f4c01add8558ae77ede5bae3916d6b3e4051818"
+  },
+  "descriptor": {
+    "path": "thin-install-descriptor.json",
+    "bytes": 635464,
+    "sha256": "406e8bda96ff04d07cce613fd6209f3626ef8caeaae75845e9aba74acdf0d675",
+    "mode": 384
+  },
+  "productBuildId": "0cef9bff-9dcb-4685-b096-f4cdfe733f21",
+  "sourceIndexSha256": "a948c323757b4fdae2ec6e98c143336ce3afc71e91e635e4a00e1f0ff2fc3f05",
+  "node": {
+    "linux-x64": {
+      "bytes": 125989464,
+      "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12"
+    },
+    "darwin-arm64": {
+      "bytes": 121306800,
+      "sha256": "27db838bb204ef7c21df2931f5656e4c8fb32e6e947f363a402b49714d32b5b1"
+    }
+  },
+  "browserLockSha256": "13af1c77584c39ab559f7df92227633400e93026a2ec2a87020fdc587dcdde72",
+  "transportReceiptSha256": "5178d99db23be763991769dc8e882f1ad06efd33ef4894014dc1e27e1fc24ea3",
+  "assemblyHandoffSha256": "d0f96adbffa735d7cc05bd0bea9d3956615abb0621d82a862a261dcbdbb2fad4"
+}
