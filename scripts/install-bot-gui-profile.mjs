@@ -12,7 +12,7 @@ const disabled = [
   'agent-instructions','skill-filesystem','compaction-basic','command-compact','workflow-ptc',
   'session-title-llm','llm-deepseek-account','llm-pi-ai','deepseek-account',
   'file-upload','session-controller','ui-session','ui-workspace','ui-conversation','ui-sidebar',
-  'cordis-client-runner','workspace-controller','ui-settings',
+  'cordis-client-runner','workspace-controller',
   'open-in-app','ui-open-in-app','directory-picker',
   'plugin-manager','plugin-package-inventory-deepseek','cordis-host-runner','web-startup',
   'cordis-inspect-providers','job-controller','terminal-controller','workspace-files',
