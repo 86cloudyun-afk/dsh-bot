@@ -7,11 +7,12 @@ import re
 import stat
 import sys
 
-# These pins are filled only after the final M2 source packet is frozen and reviewed.
-INDEX_NAME = 'M2_CI_INPUTS.json'
-EXPECTED_INDEX_SHA256 = 'aa5c798ea09f8afc5a962c6bfca6dfaa23218cf980febd91904929afd0a4e7e5'
+# Caller pins bind the frozen M3 source packet; prior M2 evidence remains separate.
+INDEX_NAME = 'M3_CI_INPUTS.json'
+EXPECTED_INDEX_SHA256 = '93510c7358e9182b2c67ccd22053327acef264a887dc678341150b3222d44a2b'
 REQUIRED_METADATA = {
     'format': 1,
+    'milestone': 'M3',
     'publicBaseCommit': '639ed015397290b3745d163aafe02ffee4aa3f84',
     'sourceOnly': True,
     'localPatchRights': 'UNKNOWN',

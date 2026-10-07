@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "milestone": "M2",
+  "milestone": "M3",
   "publicBaseCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
   "sourceOnly": true,
   "localPatchRights": "UNKNOWN",
@@ -11,12 +11,12 @@
   ],
   "qualifiedTargetEvidenceSeparate": true,
   "sourcePosixModesClaimed": false,
-  "sourceIdentityLinuxLocalSha256": "714b741c1fb60d2ce6ef1d7bcf7d2a9f5059c6422613290a5eae570ea75376c4",
-  "sourceIndexLinuxLocalSha256": "9c789c12d710da0253cbc486c4d8135b41b19f5c9e76526b52146b54d0ab421e",
-  "overlayLinuxLocalManifestSha256": "dc29d12b1cb17c62ca9e73efb718d08a6406175729b1f953d960b760fc67d6b8",
-  "finalSourceTransportSha256": "459c9fbb18b04fb39e69c08f09b06e73bff41f2805f4f446c4f8360f2947e0c4",
-  "finalLayerDeltaSha256": "ca60c5189f54a3444765c6dd949dd9a393d3f571514df07740226d298e4ab5cb",
-  "cumulativeDeltaSha256": "4f6b45e510c4b23bc48622ce35e529a4970f4c557a53daa89edef233b2ce39ea",
+  "sourceIdentityLinuxLocalSha256": "fda5273c118db53f948bb22b0cc4f75ab995bc449d6c6e22b4138abb8f4e7c5a",
+  "sourceIndexLinuxLocalSha256": "a948c323757b4fdae2ec6e98c143336ce3afc71e91e635e4a00e1f0ff2fc3f05",
+  "overlayLinuxLocalManifestSha256": "d95eea13b25590731d95962c4f3ce616a3b6d82eb3b8e98d778a9b652d2ac667",
+  "finalSourceTransportSha256": "16d41393406bc232a257f3e8719ecbc001cbdc617ade43a5a1d30d738c16e62e",
+  "finalLayerDeltaSha256": "47e6d4a4754ce5128a7de0d06db18ce2886929bb2b6f4a173617d2a764728417",
+  "cumulativeDeltaSha256": "050c54eb32b3c070f3985248d727bf3709c436c30004f5634e236f6fb2cefb78",
   "dependencyLockSha256": "1ab8a87180402f185db8fe354c0764976365c7ffefecebc80f30c7464574d7f9",
   "bootstrapLockSha256": "681fe4ad8fa0c4603ef4771243f33af9387db5d0e4e624b6478a95ee5cd70ad8",
   "sourceMaterialCommit": "616b511b4358dd7c173601816fc1f79f92f2a010",
@@ -819,6 +819,36 @@
       "sha256": "1ab8a87180402f185db8fe354c0764976365c7ffefecebc80f30c7464574d7f9"
     },
     {
+      "path": "materials/host-source-packet/generation-m3-delta/manifest.json",
+      "bytes": 2119,
+      "sha256": "16d41393406bc232a257f3e8719ecbc001cbdc617ade43a5a1d30d738c16e62e"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m3-delta/source/packages/experimental/native-run/README.i18n.yaml",
+      "bytes": 415,
+      "sha256": "84cce76d67cddc1428be830c9ef6756508a2e33b04da0e80bfe05e07f2823d45"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m3-delta/source/packages/experimental/native-run/README.md",
+      "bytes": 11154,
+      "sha256": "515694d73801df098c71850e65139f02453a2136aece92a65b16ea9c2e98e382"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m3-delta/source/packages/experimental/native-run/README.zh.md",
+      "bytes": 9509,
+      "sha256": "2baced4949790e78afb144094f12cffb5a545ac63eeacae2ed6796ae7c05f3c3"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m3-delta/source/packages/experimental/native-run/src/generation-source.ts",
+      "bytes": 56032,
+      "sha256": "87ea69a97e9b83f05be84f0d06f06897c00f96ec59746f30319511977b031481"
+    },
+    {
+      "path": "materials/host-source-packet/generation-m3-delta/source/packages/experimental/native-run/tests/generation-known-child.spec.ts",
+      "bytes": 12958,
+      "sha256": "8de8f8a8a53cac788fad4a7e5493a4034a78fc7c0ec157e3a699bd3a7a2424eb"
+    },
+    {
       "path": "materials/host-source-packet/host-consumption-supplement/CONSUMPTION-PLAN.md",
       "bytes": 3233,
       "sha256": "c0c4004bc95aa1199561869e104a68c4584b795ad6f2c64d32cbaa501d663b5b"
@@ -890,8 +920,8 @@
     },
     {
       "path": "recipes/README.md",
-      "bytes": 5919,
-      "sha256": "93a7fbe804fd118d9aeb3c53c9d382c12784fa8b8b80ca849a717f6c1b41ca59"
+      "bytes": 6407,
+      "sha256": "5af6462525746d6c630743d3a3e83b7dbcdb84308378975d1a46f1ef2582a7c7"
     },
     {
       "path": "recipes/bootstrap/package-lock.json",
@@ -940,8 +970,8 @@
     },
     {
       "path": "recipes/generation-delta.json",
-      "bytes": 8504,
-      "sha256": "4f6b45e510c4b23bc48622ce35e529a4970f4c557a53daa89edef233b2ce39ea"
+      "bytes": 8486,
+      "sha256": "050c54eb32b3c070f3985248d727bf3709c436c30004f5634e236f6fb2cefb78"
     },
     {
       "path": "recipes/historical-packages-projection.json",
@@ -975,13 +1005,13 @@
     },
     {
       "path": "recipes/prepare-cold.py",
-      "bytes": 15543,
-      "sha256": "9a09a1af6445c0977b876a73f098c591619743e0dbe8e701052a202135fd4ad8"
+      "bytes": 16680,
+      "sha256": "10df5fa0edb70338a18eab7b214c8014c3c017cb1bf8604cee87c59af2d6cfc6"
     },
     {
       "path": "recipes/source-identity.mjs",
-      "bytes": 5737,
-      "sha256": "24b90f116fe1adf0ec3b2585fee096570a39bad87eda74e0ecfd165d34aff6b4"
+      "bytes": 5844,
+      "sha256": "8708cd11b21383ae964914dc437dbd02b7f1c628a69b9dc9acc631b2aa05d483"
     }
   ]
 }

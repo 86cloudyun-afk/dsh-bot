@@ -152,6 +152,24 @@ for item in json.loads(delta_bytes)['files']:
     target.parent.mkdir(parents=True,exist_ok=True)
     target.write_bytes(data)
     checks.append({'path':item['path'],'sha256':item['sha256'],'bytes':len(data),'pass':True,'milestone':'M2'})
+delta_manifest = packet / 'generation-m3-delta/manifest.json'
+delta_bytes = delta_manifest.read_bytes()
+if hashlib.sha256(delta_bytes).hexdigest() != '16d41393406bc232a257f3e8719ecbc001cbdc617ade43a5a1d30d738c16e62e':
+    raise SystemExit('Pinned generation M3 delta transport mismatch')
+for item in json.loads(delta_bytes)['files']:
+    rel = Path(item['path'])
+    if rel.is_absolute() or '..' in rel.parts:
+        raise SystemExit('Unsafe generation M3 delta path')
+    data = (packet / 'generation-m3-delta/source' / rel).read_bytes()
+    if hashlib.sha256(data).hexdigest() != item['sha256'] or len(data) != item['bytes']:
+        raise SystemExit('Generation M3 source digest mismatch: ' + str(rel))
+    target = source / rel
+    previous = hashlib.sha256(target.read_bytes()).hexdigest() if target.exists() else None
+    if previous != item['previousSha256']:
+        raise SystemExit('Generation M3 predecessor mismatch: ' + str(rel))
+    target.parent.mkdir(parents=True,exist_ok=True)
+    target.write_bytes(data)
+    checks.append({'path':item['path'],'sha256':item['sha256'],'bytes':len(data),'pass':True,'milestone':'M3'})
 (evidence / 'source-verification.json').write_text(json.dumps({'checks':checks,'pass':True,'snapshotOnly':True},indent=2)+'\n')
 tool = source / '.tools'
 download = tool / 'downloads'

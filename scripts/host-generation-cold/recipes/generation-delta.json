@@ -1,20 +1,18 @@
 {
   "format": 1,
   "publicBaseCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
-  "parentSourceIdentitySha256": "722b1ddc0fe9b12b4ef77d22ab160edf8969c3ef91c8303284315c7012b5bb74",
-  "parentFrozenOverlaySha256": "48a2c4339cc585748a9d5504afce04069693e687d65147d8b34bf7ce00ed2ae4",
-  "classification": "PRIVATE_OWNED_NATIVE_GENERATION_M2_CUMULATIVE_SOURCE_INDEX",
+  "parentSourceIdentitySha256": "714b741c1fb60d2ce6ef1d7bcf7d2a9f5059c6422613290a5eae570ea75376c4",
+  "parentFrozenOverlaySha256": "dc29d12b1cb17c62ca9e73efb718d08a6406175729b1f953d960b760fc67d6b8",
+  "classification": "PRIVATE_OWNED_NATIVE_GENERATION_M3_SOURCE_DELTA",
   "localPatchRights": "UNKNOWN",
-  "predecessorMilestone": "M1",
+  "predecessorMilestone": "M2",
   "historicalResumeSupported": true,
   "knownChildSameIdResumeSupported": true,
-  "archiveNativeGateSupported": true,
-  "completeFrozenToolPolicy": true,
-  "nativeBrandedRuntimeContextWindow": true,
-  "nativeJournalFormat": 2,
+  "knownChildAfterOwnedParentContinuationSupported": true,
+  "unknownOrUnownedParentContinuationRefused": true,
   "sourcePosixModesClaimed": false,
+  "nativeJournalFormat": 2,
   "modelsRequested": false,
-  "finalSourceTransportSha256": "459c9fbb18b04fb39e69c08f09b06e73bff41f2805f4f446c4f8360f2947e0c4",
   "files": [
     {
       "path": "docs/architecture.i18n.yaml",
@@ -88,18 +86,18 @@
     },
     {
       "path": "packages/experimental/native-run/README.i18n.yaml",
-      "sha256": "5dfee414287239c0c9021ece94a4f419978fb2329b89aad721a586114e44b9b3",
+      "sha256": "84cce76d67cddc1428be830c9ef6756508a2e33b04da0e80bfe05e07f2823d45",
       "bytes": 415
     },
     {
       "path": "packages/experimental/native-run/README.md",
-      "sha256": "da8447d161f49b07cf310a0854489c621b5bc94b2808c3b66077e6de4d2bcc63",
-      "bytes": 10815
+      "sha256": "515694d73801df098c71850e65139f02453a2136aece92a65b16ea9c2e98e382",
+      "bytes": 11154
     },
     {
       "path": "packages/experimental/native-run/README.zh.md",
-      "sha256": "26a5f58aed5d645e07d294db98f565cdacafc0387acde0ddab4605dff8f64714",
-      "bytes": 9206
+      "sha256": "2baced4949790e78afb144094f12cffb5a545ac63eeacae2ed6796ae7c05f3c3",
+      "bytes": 9509
     },
     {
       "path": "packages/experimental/native-run/package.json",
@@ -123,8 +121,8 @@
     },
     {
       "path": "packages/experimental/native-run/src/generation-source.ts",
-      "sha256": "4e70c8997c8eb50405857106ac0335cb847ecebf9dd84fdd67a90aac9d196028",
-      "bytes": 54559
+      "sha256": "87ea69a97e9b83f05be84f0d06f06897c00f96ec59746f30319511977b031481",
+      "bytes": 56032
     },
     {
       "path": "packages/experimental/native-run/src/generation-tool-policy.ts",
@@ -153,8 +151,8 @@
     },
     {
       "path": "packages/experimental/native-run/tests/generation-known-child.spec.ts",
-      "sha256": "e1f771ca86288bad96783537d7c19080494be7097fb4154e8691428442495f30",
-      "bytes": 11337
+      "sha256": "8de8f8a8a53cac788fad4a7e5493a4034a78fc7c0ec157e3a699bd3a7a2424eb",
+      "bytes": 12958
     },
     {
       "path": "packages/experimental/native-run/tests/generation-runtime-context.spec.ts",
@@ -226,5 +224,6 @@
       "sha256": "1ab8a87180402f185db8fe354c0764976365c7ffefecebc80f30c7464574d7f9",
       "bytes": 1023999
     }
-  ]
+  ],
+  "finalSourceTransportSha256": "16d41393406bc232a257f3e8719ecbc001cbdc617ade43a5a1d30d738c16e62e"
 }
