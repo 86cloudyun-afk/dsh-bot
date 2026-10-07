@@ -2,10 +2,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {scopeOf} from '@deepseek-ai/dsh-scope';
+import {createUserMessage} from '@deepseek-ai/dsh-llm';
 import {SessionCreationDriver} from '../src/session-creation.mjs';
 import {installOwnedBotProducer,prepareOwnedBotProducer} from '../src/bot-producer.mjs';
 import {generationFixture,syntheticResponse,tick,observeUntil} from './work-generation-fixture.mjs';
 import {createOwnedMainGenerationBridge} from '../src/owned-main-generation.mjs';
+
+test('Continue waits for the original work result to enter main before allocating a new operation',async t=>{
+ let source;
+ const f=await generationFixture(t,()=>syntheticResponse()),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision),mainPort=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'main',prepareGeneration:i=>f.prepareGeneration(i,'main'),isCurrent:()=>true}),created=await new SessionCreationDriver({host:f.host,caller:f.caller,port:mainPort}).run(f.caller,intent.operationId);
+ const producer=installOwnedBotProducer({ownerCtx:f.ctx,host:f.host,caller:f.caller,originAgent:f.ctx.agents.get(intent.sessionId),botId:f.bot.botId,botEpoch:1,authorityEpoch:1,cwd:f.directory,rootInstructionRef:'synthetic-result-before-continue',execution:{beforeExecute:async()=>{},generationControl:{prepareWorkGeneration:i=>f.prepareGeneration(i),bindMainDelegateTool:d=>{source=f.host.adapter.bindOwnedMainGeneration(mainPort,created,d);return source;}}}});t.after(()=>producer.dispose());
+ const bridge=createOwnedMainGenerationBridge({host:f.host,ownerCtx:f.ctx,source,botId:f.bot.botId,botEpoch:1,authorityEpoch:1,sessionId:intent.sessionId,configVersion:f.bot.configVersion}),admission=await bridge.admit(()=>{}),prior=admission.start({kind:'contact',taskId:f.bot.botId,taskEpoch:1,taskRevision:1,operationId:'prior-main-contact',nonce:'prior-main-contact',message:createUserMessage({content:[{type:'text',text:'Prior actual main receipt'}],source:{kind:'user'}})},()=>{});admission.release();await observeUntil(()=>bridge.inspect(prior.binding,()=>{}),r=>r.generationObservation.settlementVerified);
+ const work=await producer.delegate({operationId:'before-route-work',nonce:'before-route-work',task_id:'before-route-work',goal:'Original work before asynchronous result routing',completion_condition:'Deliver its exact original result to main'}),blocked=Promise.withResolvers(),release=Promise.withResolvers();t.after(()=>release.resolve());
+ // Hold the real durable flush after the SDK receipt, without changing its return value or evidence.
+ const sessions=f.ctx.sessions,flush=sessions.flush;let didBlock=false;
+ sessions.flush=async function(session){if(!didBlock&&session.id===work.sessionId&&f.ledger.list('workGeneration').some(g=>g.sessionId===work.sessionId&&g.generationObservation.settlementVerified)&&new Error().stack.includes('/src/bot-producer.mjs')){didBlock=true;blocked.resolve();await release.promise;}return flush.call(this,session);};t.after(()=>{sessions.flush=flush;});
+ await producer.execute({task_id:work.task_id,generation:1});let timer;try{await Promise.race([blocked.promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('SYNTHETIC_PRE_ROUTE_BARRIER_NOT_REACHED')),2000);})]);}finally{clearTimeout(timer);}
+ const request={operationId:'before-route-continue',nonce:'before-route-continue',taskId:work.taskId,sessionId:work.sessionId,generation:1},beforeGenerations=f.ledger.list('workGeneration'),beforeInputs=f.ledger.list('workInput'),beforeRequests=f.requests();
+ try{assert.equal(producer.query({}).work[0].nativeRuntimeVerified,true);assert.equal(f.ledger.list('workObservedResponse').length,0);assert.equal(producer.canContinueOriginalWork(request),false);await assert.rejects(()=>producer.continueOriginalWork(request),{code:'work_result_route_unconfirmed'});assert.equal(f.ledger.list('workContinuation').length,0);assert.deepEqual(f.ledger.list('workGeneration'),beforeGenerations);assert.deepEqual(f.ledger.list('workInput'),beforeInputs);assert.equal(f.requests(),beforeRequests);}finally{release.resolve();}
+ await observeUntil(async()=>{const route=f.ledger.list('workObservedResponse')[0];return route?.generationBinding&&route.routing==='durably-queued'?bridge.inspect(route.generationBinding,()=>{}):null;},r=>r?.generationObservation.settlementVerified);
+ assert.equal(producer.canContinueOriginalWork(request),true);assert.equal((await producer.continueOriginalWork(request)).generation,2);
+});
 
 test('Continue waits for the exact pending main result receipt before allocating a new work generation',async t=>{
  const mainResponse=Promise.withResolvers();t.after(()=>mainResponse.resolve(syntheticResponse()));let calls=0,source;
