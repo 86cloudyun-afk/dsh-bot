@@ -63,3 +63,15 @@
 Fresh installer tests pass 34/34 without a worktree `node_modules`; unchanged exporter tests pass 65/65; unchanged dependency-independent GUI startup/bootstrap/package snapshot tests pass 15/15. Evidence is under `/workspace/dsh-v1-evidence/distribution-consumer/thin-*.log`, including all RED runs for input, continuation, exact Node admission, SDK resolution, CA/output-mode and late descriptor/npm-entry mode boundaries.
 
 The attempted full project suite reports 371/413 passing, with 42 failures caused by absent stock SDK imports and their dependent guard/producer assertions. The GUI profile suite likewise cannot load `@deepseek-ai/cordis-plugin-include` in this SDK-absent worktree. These failures remain recorded; the actual new installer fixture exercises the unchanged GUI helper after synthetic fresh SDK installation. No existing source, test runner, dependency manifest or frozen consumer code was changed. Full integrated-source/real-SDK validation belongs to the later parent-owned integration gate, together with final coherent product/Host pins and a real thin first install.
+
+### Authorized review repair: bounded process-group stop confirmation
+
+Independent exact `ce43756` review rejected I1: EPERM on both group and child termination left the timeout pending until the external owned harness stopped the child. The original report and exact source remain frozen. This repair retains the trusted files/npm/SDK boundaries.
+
+- [x] Independently replay the review's one-child guarded EPERM reproduction and preserve it in `thin-timeout-repair/independent-original-repro-qualified.log`.
+- [x] Record meaningful RED regressions for denied stop, leader-exit/group-presence, changed PID and replaced output; exact denied termination remains pending past the test bound until emergency teardown.
+- [x] Implement immutable PID/group, owned output checks, TERM/KILL requests, a final 750ms confirmation deadline and `SDK_INSTALL_STOP_UNKNOWN` preservation; require group absence as well as leader exit.
+- [x] Verify real guarded child API and actual CLI exit, changed/unavailable PID and output replacement without foreign destructive signals; external harness owns final teardown.
+- [x] Run fresh complete installer tests (40/40) and unchanged GUI/package tests (15/15), then commit exact source for parent-owned fresh independent review.
+
+Group remainder is simulated at the OS query boundary after a real leader exits; it is not claimed as an actual descendant-process reproduction. API harness teardown confirms each actual group is absent. The Linux CLI teardown separately checks captured process-start identity and confirms the exact orphaned child is stopped (including zombie state, which is not group-absence evidence); it makes no claim of native sandbox enforcement. New repair evidence is separate from all original reports and logs. No real SDK, native, model or network operations are performed.

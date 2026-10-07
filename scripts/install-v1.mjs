@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 
 const CLI_VERSION='0.2.0-rc.2',NODE_VERSION='24.19.0',ownErrors=new WeakSet();
+const TERM_GRACE_MS=250,STOP_CONFIRMATION_MS=750;
 const fail=code=>{const cause=Object.assign(new Error(code),{code});ownErrors.add(cause);return cause;};
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const inside=(root,path)=>path===root||path.startsWith(root+sep);
@@ -82,7 +83,54 @@ async function npmEnvironment(output,checkOwnership){
  }
  return environment;
 }
-async function installSdk({output,npmCliPath,npmCliBytes,lockBytes,lock,timeout,checkOwnership}){
+async function runNpmChild({outputIdentity,arguments_,environment,sdk,timeout,checkOwnership}){
+ return new Promise((resolvePromise,reject)=>{
+  let child,pid,timer,killTimer,confirmationTimer,pollTimer,confirming=false,timedOut=false,finished=false,leaderExited=false,exitCode,reason='GROUP_REMAINS',spawnFailed=false;
+  const finish=cause=>{
+   if(finished)return;finished=true;for(const token of [timer,killTimer,confirmationTimer,pollTimer])clearTimeout(token);
+   if(cause?.code==='SDK_INSTALL_STOP_UNKNOWN')try{child?.unref();}catch{}
+   cause?reject(cause):resolvePromise(Object.freeze({pid,processGroupId:pid,state:'STOPPED',leaderExitObserved:true,processGroupEmpty:true,confirmationBoundMs:STOP_CONFIRMATION_MS}));
+  };
+  const unknown=why=>{
+   const cause=fail('SDK_INSTALL_STOP_UNKNOWN');cause.stopConfirmation=Object.freeze({state:'UNKNOWN',reason:why,pid:Number.isInteger(pid)?pid:null,processGroupId:Number.isInteger(pid)?pid:null,confirmationBoundMs:STOP_CONFIRMATION_MS,outputIdentity:Object.freeze({...outputIdentity})});finish(cause);
+  };
+  const identityMatches=()=>{
+   try{if(Number.isInteger(pid)&&pid>0&&child.pid===pid)return true;}catch{}
+   unknown('PROCESS_IDENTITY_CHANGED');return false;
+  };
+  const probeGroup=()=>{
+   if(!identityMatches())return null;
+   try{process.kill(-pid,0);return true;}catch(cause){if(cause.code==='ESRCH')return false;unknown('GROUP_QUERY_DENIED');return null;}
+  };
+  const poll=()=>{
+   if(finished)return;const remains=probeGroup();if(finished)return;
+   if(remains===false&&leaderExited){finish(timedOut?fail('SDK_INSTALL_TIMEOUT'):spawnFailed?fail('SDK_INSTALL_SPAWN_FAILED'):exitCode===0?null:fail('SDK_INSTALL_FAILED'));return;}
+   pollTimer=setTimeout(poll,25);
+  };
+  const beginConfirmation=()=>{
+   if(confirming||finished)return;confirming=true;
+   confirmationTimer=setTimeout(()=>unknown(reason),STOP_CONFIRMATION_MS);poll();
+  };
+  const signalOwned=async signal=>{
+   if(finished||!identityMatches())return;
+   try{await checkOwnership();}catch{unknown('OUTPUT_OWNERSHIP_CHANGED');return;}
+   if(finished||!identityMatches()||leaderExited||child.exitCode!==null||child.signalCode!==null)return;
+   const remains=probeGroup();if(finished||remains!==true)return;
+   // A live original leader anchors this group. Do not follow mutable PID
+   // metadata, use a positive-PID fallback, or signal after that anchor exits.
+   try{process.kill(-pid,signal);}catch(cause){if(cause.code!=='ESRCH')reason='STOP_SIGNAL_DENIED';}
+  };
+  const stopOwned=()=>{
+   beginConfirmation();if(finished)return;void signalOwned('SIGTERM');killTimer=setTimeout(()=>{void signalOwned('SIGKILL');},TERM_GRACE_MS);
+  };
+  try{child=spawn(process.execPath,arguments_,{cwd:sdk,env:environment,stdio:'ignore',detached:true});}catch{finish(fail('SDK_INSTALL_SPAWN_FAILED'));return;}
+  child.once('error',()=>{if(finished)return;if(!Number.isInteger(pid)){finish(fail('SDK_INSTALL_SPAWN_FAILED'));return;}spawnFailed=true;stopOwned();});
+  child.once('exit',code=>{leaderExited=true;exitCode=code;beginConfirmation();});
+  try{pid=child.pid;}catch{unknown('PROCESS_IDENTITY_CHANGED');return;}
+  timer=setTimeout(()=>{timedOut=true;stopOwned();},timeout);
+ });
+}
+async function installSdk({output,outputIdentity,npmCliPath,npmCliBytes,lockBytes,lock,timeout,checkOwnership}){
  const sdk=join(output,'sdk'),cache=join(output,'npm-cache'),userconfig=join(output,'empty-user.npmrc'),globalconfig=join(output,'empty-global.npmrc');
  for(const path of [sdk,cache,join(output,'npm-home'),join(output,'npm-home/config'),join(output,'npm-tmp')])await fs.mkdir(path,{mode:0o700});
  const writeJson=(path,value)=>fs.writeFile(path,JSON.stringify(value,null,2)+'\n',{flag:'wx',mode:0o600});
@@ -95,18 +143,10 @@ async function installSdk({output,npmCliPath,npmCliBytes,lockBytes,lock,timeout,
  const source=`import Module from 'node:module';\nimport {dirname} from 'node:path';\nconst filename=${JSON.stringify(npmCliPath)};\nconst entry=new Module(filename);entry.filename=filename;entry.paths=Module._nodeModulePaths(dirname(filename));process.argv=[process.execPath,filename,...process.argv.slice(2)];process.mainModule=entry;Module._cache[filename]=entry;entry._compile(Buffer.from(${JSON.stringify(npmCliBytes.toString('base64'))},'base64').toString('utf8'),filename);entry.loaded=true;\n`;
  await fs.writeFile(wrapper,source,{flag:'wx',mode:0o600});await checkOwnership();
  const environment=await npmEnvironment(output,checkOwnership),arguments_=[wrapper,'ci','--ignore-scripts','--no-audit','--no-fund','--strict-ssl=true','--userconfig',userconfig,'--globalconfig',globalconfig,'--cache',cache,'--registry','https://registry.npmjs.org/','--include=dev','--include=optional'];
- await new Promise((resolvePromise,reject)=>{
-  let timer,killTimer,timedOut=false,finished=false,child;
-  const signal=name=>{if(!child?.pid||finished)return;try{process.kill(-child.pid,name);}catch(cause){if(cause.code!=='ESRCH')try{child.kill(name);}catch{}}};
-  const finish=cause=>{if(finished)return;finished=true;clearTimeout(timer);clearTimeout(killTimer);cause?reject(cause):resolvePromise();};
-  try{child=spawn(process.execPath,arguments_,{cwd:sdk,env:environment,stdio:'ignore',detached:true});}catch{finish(fail('SDK_INSTALL_SPAWN_FAILED'));return;}
-  child.once('error',()=>finish(fail('SDK_INSTALL_SPAWN_FAILED')));
-  child.once('exit',code=>finish(timedOut?fail('SDK_INSTALL_TIMEOUT'):code===0?null:fail('SDK_INSTALL_FAILED')));
-  timer=setTimeout(()=>{timedOut=true;signal('SIGTERM');killTimer=setTimeout(()=>signal('SIGKILL'),250);},timeout);
- });
+ const npmProcess=await runNpmChild({outputIdentity,arguments_,environment,sdk,timeout,checkOwnership});
  await checkOwnership();
  await readSafe(join(sdk,'package-lock.json'),{bytes:lockBytes.length,sha256:sha(lockBytes),mode:0o600});
- return{sdk,evidence:{cliVersion:CLI_VERSION,lockSha256:sha(lockBytes),npmCliSha256:sha(npmCliBytes),freshCache:true,emptyConfigs:true,strictTls:true,registry:'https://registry.npmjs.org/',lifecycleScriptsExecuted:false,timeoutMs:timeout}};
+ return{sdk,evidence:{cliVersion:CLI_VERSION,lockSha256:sha(lockBytes),npmCliSha256:sha(npmCliBytes),freshCache:true,emptyConfigs:true,strictTls:true,registry:'https://registry.npmjs.org/',lifecycleScriptsExecuted:false,timeoutMs:timeout,npmProcess}};
 }
 async function unpackProduct({materials,descriptor,records,output,checkOwnership}){
  const metadata=await import(pathToFileURL(join(materials,tools.packageSnapshot))),{bytes:manifestBytes}=await readSafe(join(materials,descriptor.product.manifest),records.get(descriptor.product.manifest)),manifest=parseJson(manifestBytes);
@@ -150,7 +190,7 @@ export async function installV1(options){
   if(overlay.format!==2||overlay.platform!==process.platform||overlay.arch!==process.arch||overlay.corePackageCount!==74||overlay.packages?.length!==74||overlay.externalPackages?.length!==28)throw fail('THIN_OVERLAY_INVALID');
   const product=await unpackProduct({materials,descriptor,records:selection.records,output,checkOwnership});
   const lockFile=selection.records.get(descriptor.officialSdk.lock),{bytes:lockBytes}=await readSafe(join(materials,lockFile.path),lockFile),lock=parseJson(lockBytes);
-  const{sdk,evidence:sdkInstallation}=await installSdk({output,npmCliPath:options.npmCliPath,npmCliBytes,lockBytes,lock,timeout,checkOwnership});
+  const{sdk,evidence:sdkInstallation}=await installSdk({output,outputIdentity:{directory:output,ino:claimed.ino,dev:claimed.dev,mode:claimed.mode&0o777},npmCliPath:options.npmCliPath,npmCliBytes,lockBytes,lock,timeout,checkOwnership});
   const path=key=>join(materials,key),pin=key=>selection.records.get(key).sha256,consumer=await import(pathToFileURL(path(tools.consumer)));
   await checkOwnership();
   const runtime=await consumer.assembleDistributionRuntime({officialRoot:sdk,officialLockPath:join(sdk,'package-lock.json'),expectedOfficialLockSha256:sha(lockBytes),overlayDirectory:path(target.overlayDirectory),expectedManifestSha256:pin(overlayManifestPath),sourceIdentityPath:path(target.sourceIdentity),expectedSourceIdentitySha256:pin(target.sourceIdentity),sourceLockPath:path(target.sourceLock),registryDirectory:path(descriptor.registry.directory),registryReceiptsPath:path(descriptor.registry.receipts),productRoot:product.product,outputDirectory:join(output,'runtime'),publicLicensePath:path(descriptor.licenses.public),expectedPublicLicenseSha256:pin(descriptor.licenses.public),nativeLicensePath:path(descriptor.licenses.native),expectedNativeLicenseSha256:pin(descriptor.licenses.native),muslCopyrightPath:path(descriptor.licenses.muslCopyright),expectedMuslCopyrightSha256:pin(descriptor.licenses.muslCopyright),muslSourceNoticesPath:path(descriptor.licenses.muslSourceNotices),expectedMuslSourceNoticesSha256:pin(descriptor.licenses.muslSourceNotices)});
@@ -163,6 +203,7 @@ export async function installV1(options){
   const resultBytes=Buffer.from(JSON.stringify(result,null,2)+'\n'),manifestPath=join(output,'installation-manifest.json');await fs.writeFile(manifestPath,resultBytes,{flag:'wx',mode:0o600});await checkOwnership();
   return{...result,installationManifestPath:manifestPath,installationManifestSha256:sha(resultBytes),ownership:{ino:claimed.ino,dev:claimed.dev}};
  }catch(cause){
+  if(ownErrors.has(cause)&&cause.code==='SDK_INSTALL_STOP_UNKNOWN'){cause.cleanupErrorCategory='SDK_CHILD_STOP_UNKNOWN';throw cause;}
   if(created&&!claimed)cause.cleanupErrorCategory='OUTPUT_OWNERSHIP_UNAVAILABLE';
   if(claimed)try{await checkOwnership();await fs.rm(output,{recursive:true,force:true});}catch(cleanup){if(cleanup.code!=='ENOENT')cause.cleanupErrorCategory=cleanup.code==='OUTPUT_OWNERSHIP_CHANGED'?cleanup.code:'CLEANUP_FAILED';}
   throw cause;
@@ -178,5 +219,5 @@ export function parseV1InstallArguments(values){
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{process.stdout.write(JSON.stringify(await installV1(parseV1InstallArguments(process.argv.slice(2))))+'\n');}
- catch(cause){const io=new Set(['ENOENT','EACCES','EPERM','EEXIST','ENOTDIR','EIO','ENOMEM','ELOOP','ERR_ACCESS_DENIED']);const errorCategory=ownErrors.has(cause)?cause.code:io.has(cause?.code)?'THIN_IO_FAILED':'THIN_INSTALL_FAILED';const cleanupErrorCategory=cause?.cleanupErrorCategory===undefined?undefined:['OUTPUT_OWNERSHIP_UNAVAILABLE','OUTPUT_OWNERSHIP_CHANGED','CLEANUP_FAILED'].includes(cause.cleanupErrorCategory)?cause.cleanupErrorCategory:'CLEANUP_FAILED';process.stderr.write(JSON.stringify({errorCategory,cleanupErrorCategory})+'\n');process.exitCode=1;}
+ catch(cause){const io=new Set(['ENOENT','EACCES','EPERM','EEXIST','ENOTDIR','EIO','ENOMEM','ELOOP','ERR_ACCESS_DENIED']);const errorCategory=ownErrors.has(cause)?cause.code:io.has(cause?.code)?'THIN_IO_FAILED':'THIN_INSTALL_FAILED';const cleanupErrorCategory=cause?.cleanupErrorCategory===undefined?undefined:['OUTPUT_OWNERSHIP_UNAVAILABLE','OUTPUT_OWNERSHIP_CHANGED','CLEANUP_FAILED','SDK_CHILD_STOP_UNKNOWN'].includes(cause.cleanupErrorCategory)?cause.cleanupErrorCategory:'CLEANUP_FAILED';const stopUnknown=ownErrors.has(cause)&&cause.code==='SDK_INSTALL_STOP_UNKNOWN',message=JSON.stringify({errorCategory,cleanupErrorCategory,...stopUnknown?{stopConfirmation:cause.stopConfirmation}:{}})+'\n';if(stopUnknown){const deadline=setTimeout(()=>process.exit(1),100);process.stderr.write(message,()=>{clearTimeout(deadline);process.exit(1);});}else{process.stderr.write(message);process.exitCode=1;}}
 }

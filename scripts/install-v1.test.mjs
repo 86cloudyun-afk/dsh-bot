@@ -9,6 +9,7 @@ import {gzipSync} from 'node:zlib';
 import {spawnSync} from 'node:child_process';
 import mutableChild from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {once} from 'node:events';
 import {planRuntime,exportRuntime} from '../tools/runtime-export/export.mjs';
 
 const module=await import('./install-v1.mjs').catch(cause=>{if(cause.code==='ERR_MODULE_NOT_FOUND')return {};throw cause;});
@@ -226,4 +227,80 @@ test('CLI sanitizes unknown delegated errors even when their code imitates an in
  const flags={'--bundle':'bundleDirectory','--descriptor':'descriptorPath','--descriptor-sha256':'expectedDescriptorSha256','--output':'outputDirectory','--npm-cli':'npmCliPath','--npm-timeout-ms':'npmTimeoutMs'},args=[join(import.meta.dirname,'install-v1.mjs'),...Object.entries(flags).flatMap(([flag,key])=>[flag,String(options[key])])];
  const result=spawnSync(process.execPath,args,{env:{PATH:'/usr/local/bin:/usr/bin:/bin',LANG:'C'},encoding:'utf8',timeout:15000});
  assert.equal(result.status,1);assert.equal(result.stdout,'');assert.deepEqual(JSON.parse(result.stderr),{errorCategory:'THIN_INSTALL_FAILED'});assert.equal(result.stderr.includes('PRIVXYZ'),false);await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+});
+
+const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function bounded(promise,ms){let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('OWNED_TEST_BOUND_EXCEEDED')),ms);})]);}finally{clearTimeout(timer);}}
+async function guardedNpmHarness(t,f,{live=false}={}){
+ if(live)await write(f.options.npmCliPath,"const fs=require('node:fs');const path=require('node:path');process.on('SIGTERM',()=>{});fs.writeFileSync(path.join(process.cwd(),'owned-npm-running.json'),JSON.stringify({pid:process.pid}));setInterval(()=>{},1000);\n");
+ const guard=join(f.root,'owned-stop-child-guard.mjs'),observation=join(f.options.outputDirectory,'sdk/owned-stop-guard.json');
+ await write(guard,`import fs from 'node:fs';import net from 'node:net';import http from 'node:http';import https from 'node:https';import tls from 'node:tls';import child from 'node:child_process';import dgram from 'node:dgram';import http2 from 'node:http2';import {syncBuiltinESMExports} from 'node:module';
+ const counters={network:0,model:0,native:0,extraChild:0};const save=()=>fs.writeFileSync(${JSON.stringify(observation)},JSON.stringify({guardLoaded:true,pid:process.pid,counters}));const deny=kind=>()=>{counters[kind]++;save();throw Error('OWNED_CHILD_SIDE_EFFECT_DENIED');};globalThis.fetch=deny('model');process.dlopen=deny('native');
+ for(const[mod,names]of [[net,['connect','createConnection','createServer']],[http,['request','get','createServer']],[https,['request','get','createServer']],[tls,['connect','createServer']],[dgram,['createSocket']],[http2,['connect','createServer','createSecureServer']]])for(const name of names)mod[name]=deny('network');net.Socket.prototype.connect=deny('network');net.Server.prototype.listen=deny('network');dgram.Socket.prototype.send=deny('network');dgram.Socket.prototype.connect=deny('network');for(const name of ['spawn','spawnSync','exec','execSync','execFile','execFileSync','fork'])child[name]=deny('extraChild');syncBuiltinESMExports();save();\n`);
+ const spawn=mutableChild.spawn,realKill=process.kill.bind(process);let captured,exited,resolveSpawn;const spawned=new Promise(resolve=>resolveSpawn=resolve);
+ t.mock.method(mutableChild,'spawn',(executable,args,options)=>{
+  assert.equal(captured,undefined);assert.equal(executable,process.execPath);assert.equal(args[0],join(f.options.outputDirectory,'npm-entry.mjs'));assert.equal(options.cwd,join(f.options.outputDirectory,'sdk'));assert.equal(options.detached,true);assert.equal(options.stdio,'ignore');
+  const child=spawn(executable,['--permission','--allow-fs-read='+f.root,'--allow-fs-write='+f.options.outputDirectory,'--import',guard,...args],options),pid=child.pid;
+  captured={child,pid,spawnedAt:Date.now()};exited=once(child,'exit');resolveSpawn(captured);return child;
+ });syncBuiltinESMExports();
+ const stop=async()=>{
+  if(!captured)return;try{realKill(-captured.pid,'SIGKILL');}catch(cause){if(cause.code!=='ESRCH')throw cause;}await bounded(exited,3000);
+  let groupGone=false;try{realKill(-captured.pid,0);}catch(cause){if(cause.code==='ESRCH')groupGone=true;else throw cause;}assert.equal(groupGone,true,'owned group must be gone before fixture teardown');
+  process.stdout.write(JSON.stringify({ownedNpmTeardown:{pid:captured.pid,groupGone,network:0,model:0,native:0,extraChild:0}})+'\n');
+ };
+ const ready=async()=>{await bounded(spawned,5000);for(let i=0;i<100;i++){try{const record=JSON.parse(await fs.readFile(observation));assert.equal(record.pid,captured.pid);assert.deepEqual(record.counters,{network:0,model:0,native:0,extraChild:0});if(live)assert.equal(JSON.parse(await fs.readFile(join(f.options.outputDirectory,'sdk/owned-npm-running.json'))).pid,captured.pid);return captured;}catch(cause){if(cause.code!=='ENOENT')throw cause;await delay(10);}}throw Error('OWNED_GUARD_NOT_READY');};
+ return{ready,stop,realKill,get captured(){return captured;}};
+}
+test('denied npm termination returns bounded STOP_UNKNOWN and preserves the live-child output',async t=>{
+ const f=await fullFixture(t,{hang:true}),h=await guardedNpmHarness(t,f,{live:true}),signals=[],originalKill=process.kill;let pending;
+ process.kill=(pid,signal)=>{if(h.captured&&pid===-h.captured.pid&&signal!==0){signals.push(signal);throw Object.assign(Error('owned synthetic denial'),{code:'EPERM'});}return h.realKill(pid,signal);};
+ try{
+  pending=module.installV1(f.options).then(()=>assert.fail('live child cannot pass'),cause=>cause);const child=await h.ready();t.mock.method(child.child,'kill',()=>{throw Object.assign(Error('owned synthetic child denial'),{code:'EPERM'});});const cause=await bounded(pending,2300);
+  assert.equal(cause.code,'SDK_INSTALL_STOP_UNKNOWN');assert.equal(cause.cleanupErrorCategory,'SDK_CHILD_STOP_UNKNOWN');assert.deepEqual(signals,['SIGTERM','SIGKILL']);assert.ok(Date.now()-child.spawnedAt<2300);
+  assert.equal(cause.stopConfirmation.pid,child.pid);assert.equal(cause.stopConfirmation.processGroupId,child.pid);assert.equal(cause.stopConfirmation.state,'UNKNOWN');assert.equal((await fs.stat(f.options.outputDirectory)).mode&0o777,0o700);h.realKill(child.pid,0);
+ }finally{process.kill=originalKill;await h.stop();await pending;}
+});
+test('leader exit with a still-present group is STOP_UNKNOWN and cannot trigger output cleanup',async t=>{
+ const f=await fullFixture(t,{failure:true}),h=await guardedNpmHarness(t,f),originalKill=process.kill,signals=[];let pending;
+ process.kill=(pid,signal)=>{if(h.captured&&pid===-h.captured.pid){signals.push(signal);if(signal===0)return true;throw Error('leader exited: destructive signal forbidden');}return h.realKill(pid,signal);};
+ try{
+  pending=module.installV1(f.options).then(()=>assert.fail('group presence cannot pass'),cause=>cause);const child=await h.ready(),cause=await bounded(pending,2300);
+  assert.equal(cause.code,'SDK_INSTALL_STOP_UNKNOWN');assert.equal(cause.cleanupErrorCategory,'SDK_CHILD_STOP_UNKNOWN');assert.equal(cause.stopConfirmation.pid,child.pid);assert.ok(signals.length>0);assert.equal(signals.every(signal=>signal===0),true);assert.equal((await fs.stat(f.options.outputDirectory)).mode&0o777,0o700);
+ }finally{process.kill=originalKill;await h.stop();await pending;}
+});
+for(const kind of ['changed','unavailable'])test(kind+' npm PID metadata never redirects a signal to a foreign process',async t=>{
+ const f=await fullFixture(t,{hang:true}),h=await guardedNpmHarness(t,f,{live:true}),originalKill=process.kill,signals=[];let pending;
+ process.kill=(pid,signal)=>{signals.push({pid,signal});if(pid===process.pid||pid===-process.pid)throw Error('FOREIGN_PROCESS_SIGNAL_FORBIDDEN');return h.realKill(pid,signal);};
+ try{
+  pending=module.installV1(f.options).then(()=>assert.fail('changed process identity cannot pass'),cause=>cause);const child=await h.ready();if(kind==='changed')child.child.pid=process.pid;else Object.defineProperty(child.child,'pid',{configurable:true,get(){throw Error('PRIVXYZ');}});const cause=await bounded(pending,2300);
+  assert.equal(cause.code,'SDK_INSTALL_STOP_UNKNOWN');assert.equal(cause.stopConfirmation.pid,child.pid);assert.equal(signals.some(item=>item.pid===process.pid||item.pid===-process.pid),false);assert.equal(signals.some(item=>item.signal!==0),false);assert.equal((await fs.stat(f.options.outputDirectory)).mode&0o777,0o700);
+ }finally{process.kill=originalKill;await h.stop();await pending;}
+});
+test('a replaced output during live npm is preserved without any destructive child signal',async t=>{
+ const f=await fullFixture(t,{hang:true}),h=await guardedNpmHarness(t,f,{live:true}),originalKill=process.kill,signals=[];let pending;
+ process.kill=(pid,signal)=>{signals.push({pid,signal});return h.realKill(pid,signal);};
+ try{
+  pending=module.installV1(f.options).then(()=>assert.fail('changed output cannot pass'),cause=>cause);await h.ready();await fs.rename(f.options.outputDirectory,f.options.outputDirectory+'.owned-retained');await fs.mkdir(f.options.outputDirectory,{mode:0o700});await write(join(f.options.outputDirectory,'caller.txt'),'CALLER_FOREIGN_OUTPUT_REMAINS');
+  const cause=await bounded(pending,2300);assert.equal(cause.code,'SDK_INSTALL_STOP_UNKNOWN');assert.equal(cause.cleanupErrorCategory,'SDK_CHILD_STOP_UNKNOWN');assert.equal(signals.some(item=>item.signal!==0),false);assert.equal(await fs.readFile(join(f.options.outputDirectory,'caller.txt'),'utf8'),'CALLER_FOREIGN_OUTPUT_REMAINS');assert.equal((await fs.stat(f.options.outputDirectory+'.owned-retained')).mode&0o777,0o700);
+ }finally{process.kill=originalKill;await h.stop();await pending;}
+});
+test('actual CLI exits bounded on STOP_UNKNOWN while retaining its guarded live npm child and output',{skip:process.platform!=='linux'?'owned Linux process-start identity teardown is qualified on Linux only':false},async t=>{
+ const f=await fullFixture(t),guard=join(f.root,'owned-cli-launcher-guard.mjs'),childGuard=join(f.root,'owned-cli-child-guard.mjs'),identityPath=join(f.root,'owned-cli-child-identity.json'),observation=join(f.options.outputDirectory,'sdk/owned-cli-child-guard.json');
+ await write(f.options.npmCliPath,"const fs=require('node:fs');const path=require('node:path');process.on('SIGTERM',()=>{});fs.writeFileSync(path.join(process.cwd(),'owned-npm-running.json'),JSON.stringify({pid:process.pid}));setInterval(()=>{},1000);\n");
+ const sideEffectGuard=`import fs from 'node:fs';import net from 'node:net';import http from 'node:http';import https from 'node:https';import tls from 'node:tls';import child from 'node:child_process';import dgram from 'node:dgram';import http2 from 'node:http2';import {syncBuiltinESMExports} from 'node:module';
+ const counters={network:0,model:0,native:0,extraChild:0};const deny=kind=>()=>{counters[kind]++;throw Error('OWNED_CLI_SIDE_EFFECT_DENIED');};globalThis.fetch=deny('model');process.dlopen=deny('native');for(const[mod,names]of [[net,['connect','createConnection','createServer']],[http,['request','get','createServer']],[https,['request','get','createServer']],[tls,['connect','createServer']],[dgram,['createSocket']],[http2,['connect','createServer','createSecureServer']]])for(const name of names)mod[name]=deny('network');net.Socket.prototype.connect=deny('network');net.Server.prototype.listen=deny('network');dgram.Socket.prototype.send=deny('network');dgram.Socket.prototype.connect=deny('network');`;
+ await write(childGuard,sideEffectGuard+`for(const name of ['spawn','spawnSync','exec','execSync','execFile','execFileSync','fork'])child[name]=deny('extraChild');syncBuiltinESMExports();fs.writeFileSync(${JSON.stringify(observation)},JSON.stringify({guardLoaded:true,pid:process.pid,counters}));\n`);
+ await write(guard,sideEffectGuard+`const realSpawn=child.spawn,realKill=process.kill.bind(process);let captured;child.spawn=(exe,args,options)=>{if(captured||exe!==process.execPath||args[0]!==${JSON.stringify(join(f.options.outputDirectory,'npm-entry.mjs'))}||options.cwd!==${JSON.stringify(join(f.options.outputDirectory,'sdk'))}||options.detached!==true||options.stdio!=='ignore')return deny('extraChild')();const owned=realSpawn(exe,['--permission','--allow-fs-read='+${JSON.stringify(f.root)},'--allow-fs-write='+${JSON.stringify(f.options.outputDirectory)},'--import',${JSON.stringify(childGuard)},...args],options);captured=owned.pid;const stat=fs.readFileSync('/proc/'+captured+'/stat','utf8'),fields=stat.slice(stat.lastIndexOf(')')+2).split(' ');fs.writeFileSync(${JSON.stringify(identityPath)},JSON.stringify({pid:captured,group:Number(fields[2]),start:fields[19],counters}));owned.kill=()=>{throw Object.assign(Error('owned child stop denied'),{code:'EPERM'});};return owned;};process.kill=(pid,signal)=>{if(pid===-captured&&signal!==0)throw Object.assign(Error('owned group stop denied'),{code:'EPERM'});return realKill(pid,signal);};for(const name of ['spawnSync','exec','execSync','execFile','execFileSync','fork'])child[name]=deny('extraChild');syncBuiltinESMExports();\n`);
+ const flags={'--bundle':'bundleDirectory','--descriptor':'descriptorPath','--descriptor-sha256':'expectedDescriptorSha256','--output':'outputDirectory','--npm-cli':'npmCliPath','--npm-timeout-ms':'npmTimeoutMs'},args=['--no-warnings','--permission','--allow-fs-read='+f.root,'--allow-fs-read=/proc','--allow-fs-write='+f.root,'--allow-child-process','--import',guard,join(f.options.bundleDirectory,'scripts/install-v1.mjs'),...Object.entries(flags).flatMap(([flag,key])=>[flag,String(f.options[key])])];
+ let identity;
+ const ownState=async()=>{try{const text=await fs.readFile('/proc/'+identity.pid+'/stat','utf8'),fields=text.slice(text.lastIndexOf(')')+2).split(' ');assert.equal(fields[19],identity.start,'only the captured process start identity may be stopped');assert.equal(Number(fields[2]),identity.group);return fields[0];}catch(cause){if(cause.code==='ENOENT')return 'GONE';throw cause;}};
+ try{
+  const start=Date.now(),result=spawnSync(process.execPath,args,{env:{PATH:'/usr/local/bin:/usr/bin:/bin',LANG:'C'},encoding:'utf8',timeout:5000});identity=JSON.parse(await fs.readFile(identityPath));
+  assert.equal(result.error,undefined);assert.equal(result.status,1);assert.ok(Date.now()-start<4500);assert.equal(result.stdout,'');const report=JSON.parse(result.stderr);assert.equal(report.errorCategory,'SDK_INSTALL_STOP_UNKNOWN');assert.equal(report.cleanupErrorCategory,'SDK_CHILD_STOP_UNKNOWN');assert.equal(report.stopConfirmation.pid,identity.pid);assert.equal(report.stopConfirmation.outputIdentity.directory,f.options.outputDirectory);assert.deepEqual(identity.counters,{network:0,model:0,native:0,extraChild:0});
+  assert.equal((await fs.stat(f.options.outputDirectory)).mode&0o777,0o700);assert.equal(JSON.parse(await fs.readFile(observation)).guardLoaded,true);assert.equal(JSON.parse(await fs.readFile(join(f.options.outputDirectory,'sdk/owned-npm-running.json'))).pid,identity.pid);assert.notEqual(await ownState(),'GONE');assert.notEqual(await ownState(),'Z');
+ }finally{
+  identity??=JSON.parse(await fs.readFile(identityPath));assert.equal(identity.pid,identity.group);const before=await ownState();if(before!=='GONE'&&before!=='Z')process.kill(-identity.pid,'SIGKILL');let stopped=false,state;
+  for(let i=0;i<150;i++){state=await ownState();if(state==='GONE'||state==='Z'){stopped=true;break;}await delay(20);}assert.equal(stopped,true,'external harness must confirm the exact guarded child can no longer write');
+  process.stdout.write(JSON.stringify({ownedCliNpmTeardown:{pid:identity.pid,group:identity.group,startIdentityMatched:true,state,stopped,network:0,model:0,native:0,extraChild:0}})+'\n');
+ }
 });
