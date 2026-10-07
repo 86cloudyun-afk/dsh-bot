@@ -1,0 +1,15 @@
+{
+  "finalResponse": "Offline native answer",
+  "finishReasons": ["completed", "completed"],
+  "assistantCount": 2,
+  "userCount": 2,
+  "journalState": "settled",
+  "receipts": 2,
+  "usage": {
+    "inputTokens": 10,
+    "outputTokens": 6,
+    "totalTokens": 16,
+    "cacheReadTokens": 0,
+    "cacheWriteTokens": 0
+  }
+}

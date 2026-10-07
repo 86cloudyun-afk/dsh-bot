@@ -1,0 +1,54 @@
+{
+  "classification": "SOURCE_HISTORY_AND_LICENSE_FACTS_NOT_LEGAL_RIGHTS_ATTESTATION",
+  "publicBaseCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "localHEAD": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+  "rootLicenseSHA256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+  "publicBaseLicenseSHA256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+  "rootMITByteEqualPublicBase": true,
+  "nativeRunDeclaredLicense": "MIT",
+  "localCommits": [
+    {
+      "commit": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+      "parents": [
+        "d49ba1787045a30cd1dae0c8922530c3bb6981a3"
+      ],
+      "authorMetadataFingerprint": "092d6229ec11bf8c2f3319407a34d322a40c50700f096085612ceb30e407323b",
+      "committerMetadataFingerprint": "092d6229ec11bf8c2f3319407a34d322a40c50700f096085612ceb30e407323b",
+      "recordedSignatureStatus": "N",
+      "recordedCommitTime": "2026-10-04T19:04:34Z",
+      "identityOrMetadataProvesLegalRights": false
+    },
+    {
+      "commit": "d49ba1787045a30cd1dae0c8922530c3bb6981a3",
+      "parents": [
+        "fba93b59a4980172407d5ab46ccbdbf09f94e7bd"
+      ],
+      "authorMetadataFingerprint": "092d6229ec11bf8c2f3319407a34d322a40c50700f096085612ceb30e407323b",
+      "committerMetadataFingerprint": "092d6229ec11bf8c2f3319407a34d322a40c50700f096085612ceb30e407323b",
+      "recordedSignatureStatus": "N",
+      "recordedCommitTime": "2026-10-04T18:37:15Z",
+      "identityOrMetadataProvesLegalRights": false
+    },
+    {
+      "commit": "fba93b59a4980172407d5ab46ccbdbf09f94e7bd",
+      "parents": [
+        "639ed015397290b3745d163aafe02ffee4aa3f84"
+      ],
+      "authorMetadataFingerprint": "fa6ebaeaa09b5ffff67cfb5fcd67bee4420ef4652bb12445e2f4382fe49b6225",
+      "committerMetadataFingerprint": "fa6ebaeaa09b5ffff67cfb5fcd67bee4420ef4652bb12445e2f4382fe49b6225",
+      "recordedSignatureStatus": "N",
+      "recordedCommitTime": "2026-10-04T17:14:56Z",
+      "identityOrMetadataProvesLegalRights": false
+    }
+  ],
+  "rawIdentityOrEmailCopied": false,
+  "dirtyWorkingTreeAuthorship": "UNKNOWN",
+  "allLocalPatchCopyrightOwnershipLicenseCoverage": "UNKNOWN",
+  "assertionUnpublishedOrPrivateImpliesIllegality": false,
+  "fixtureUUIDLastCommittedFileChange": {
+    "commit": "d49ba1787045a30cd1dae0c8922530c3bb6981a3",
+    "recordedCommitTime": "2026-10-04T18:37:15Z",
+    "sourceFile": "packages/experimental/native-run/tests/native-session.spec.ts",
+    "runtimeUUIDValuesCopiedIntoReport": false
+  }
+}

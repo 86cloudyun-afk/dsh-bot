@@ -1,0 +1,21 @@
+{
+  "documentOnly": true,
+  "classification": "NO_KEY_OFFLINE_TEST_CONSUMPTION_CONTRACT",
+  "actualTestConfig": "vitest.protected.config.ts",
+  "exactSelectedSpecs": [
+    "packages/experimental/native-run/tests/protected-factory.spec.ts",
+    "packages/experimental/native-run/tests/native-session.spec.ts"
+  ],
+  "transport": "source mock fetch; external network/subprocess blocked by source no-io setup",
+  "environmentRequirements": {
+    "modelKeyValues": "ABSENT",
+    "existingDSH_HOME": "NOT_INHERITED",
+    "HOME": "new disposable consumer directory",
+    "XDG_CONFIG_HOME": "new disposable consumer directory"
+  },
+  "placeholderAPIKey": false,
+  "applicationLaunch": "NONE",
+  "requiresPublicBaseAnd85SourcePacket": true,
+  "commandsExecutedByAuditor": false,
+  "notDSHProfileSchema": true
+}

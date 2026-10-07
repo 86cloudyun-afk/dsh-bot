@@ -1,0 +1,74 @@
+name: Private Host cold qualification
+on:
+  push:
+    branches: [ci/host-cold-qualification-20261007]
+permissions:
+  contents: read
+jobs:
+  linux-host:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/ci/host-cold-qualification-20261007' &&
+      github.event.repository.private == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Bind exact source and recipe to this private commit
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+          python3 -B scripts/host-cold/verify-packet.py scripts/host-cold
+          cc --version
+          make --version
+          python3 --version
+      - name: Build fixed public source with one verified source overlay in a new Home
+        run: |
+          python3 -B scripts/host-cold/recipes/prepare-cold.py \
+            --source "$RUNNER_TEMP/host-source" \
+            --evidence "$RUNNER_TEMP/host-evidence" \
+            --source-packet "$GITHUB_WORKSPACE/scripts/host-cold/materials/host-source-packet"
+      - name: Required sandbox, native flock and protected native contract tests
+        run: |
+          python3 -B scripts/host-cold/recipes/offline-tests.py \
+            --source "$RUNNER_TEMP/host-source" \
+            --evidence "$RUNNER_TEMP/host-evidence"
+      - name: Archive core output with hidden payload and executable permissions intact
+        if: always()
+        run: |
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import gzip, hashlib, json, os, tarfile
+          evidence = Path(os.environ['RUNNER_TEMP']) / 'host-evidence'
+          core = evidence / 'core-overlay'
+          manifest = core / 'artifact-manifest.json'
+          if manifest.is_file():
+              assert core.resolve(strict=True) == core and not core.is_symlink()
+              archive = evidence / 'core-overlay.tar.gz'
+              with archive.open('xb') as raw:
+                  with gzip.GzipFile(fileobj=raw, mode='wb', filename='', mtime=0) as compressed:
+                      with tarfile.open(fileobj=compressed, mode='w|') as output:
+                          output.add(core, arcname='core-overlay', recursive=True)
+              receipt = {'archive': archive.name, 'bytes': archive.stat().st_size,
+                         'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
+                         'manifestSHA256': hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                         'hiddenFilesRetained': True, 'originalModesRetained': True,
+                         'differentCompilerByteEqualityClaimed': False}
+              (evidence / 'core-overlay-archive.json').write_text(json.dumps(receipt, indent=2) + '\n')
+              print(json.dumps(receipt))
+          else:
+              print('NO_COMPLETED_CORE_OVERLAY_ARCHIVE')
+          PY
+      - name: Preserve exact cold output and native test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: host-cold-linux-x64-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/host-evidence/*.json
+            ${{ runner.temp }}/host-evidence/*.log
+            ${{ runner.temp }}/host-evidence/core-overlay.tar.gz
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,139 @@
+{
+  "classification": "PRIVATE_SYNTHETIC_PROTECTED_TEST_CONSUMPTION_SUPPLEMENT_NOT_APP_RUNTIME_PROOF",
+  "publicBaseRepository": "https://github.com/deepseek-ai/deepseek-harness.git",
+  "publicBaseCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "localHEAD": "3fbedc25d3626caf4e401b14c31a7f0326a19ec7",
+  "original85ArchiveSha256": "d69d20da4a583664d7d3ad0fe5c149fba935b0e18b9f3869a713500ffde54894",
+  "original85TransferManifestSha256": "870b4c97065ba07b08a0712d4fe93cf0e2c928830a833f80edac6c0c65697e38",
+  "original85PatchSha256": "5b05935224731cf6e2dbc03b94619119664185b21d5de001db0b1b7f786592fd",
+  "original85SourceMatchNow": "PASS85/85",
+  "driverMapSha256": "6d38c98ada858ce686f6efc5106b036e6299e420738847044ec151964c4bfcc9",
+  "fiveDirectFiles": [
+    "packages/experimental/native-run/tests/protected-fixture.ts",
+    "packages/experimental/native-run/tests/protected-factory.spec.ts",
+    "packages/experimental/native-run/tests/native-session.spec.ts",
+    "packages/experimental/native-run/tests/no-io.ts",
+    "packages/experimental/native-run/tests/loopback-only.ts"
+  ],
+  "files": [
+    {
+      "path": "packages/experimental/native-run/tests/protected-fixture.ts",
+      "sha256": "66396578036b08613f9bae887ef50a0e093cc0f9c828045dfcd1bb3c4fb7567f",
+      "bytes": 5226,
+      "role": "direct_protected_spec_or_helper",
+      "publicBasePresent": false,
+      "publicBaseSha256": null,
+      "headSha256": "66396578036b08613f9bae887ef50a0e093cc0f9c828045dfcd1bb3c4fb7567f",
+      "dirtyFromHEAD": false
+    },
+    {
+      "path": "packages/experimental/native-run/tests/protected-factory.spec.ts",
+      "sha256": "d57c5264fe7f8c56c3655a9b479debec785eb775bcefc69d8edc48da4d5c36f9",
+      "bytes": 9331,
+      "role": "direct_protected_spec_or_helper",
+      "publicBasePresent": false,
+      "publicBaseSha256": null,
+      "headSha256": "d57c5264fe7f8c56c3655a9b479debec785eb775bcefc69d8edc48da4d5c36f9",
+      "dirtyFromHEAD": false
+    },
+    {
+      "path": "packages/experimental/native-run/tests/native-session.spec.ts",
+      "sha256": "51d0ad8c3be6d62de02387e7d86758612d3eadda8299a1362d32d6efc19687b3",
+      "bytes": 20113,
+      "role": "direct_protected_spec_or_helper",
+      "publicBasePresent": false,
+      "publicBaseSha256": null,
+      "headSha256": "59eadbaf4ba5e2a4c86bd71356ca485b8a847f9d3adf04752afd6f101cd7af75",
+      "dirtyFromHEAD": true
+    },
+    {
+      "path": "packages/experimental/native-run/tests/no-io.ts",
+      "sha256": "c5053c61d61958841178393a723e066a989a733952916dbe2eedd3f0a228914e",
+      "bytes": 1595,
+      "role": "direct_protected_spec_or_helper",
+      "publicBasePresent": false,
+      "publicBaseSha256": null,
+      "headSha256": "c5053c61d61958841178393a723e066a989a733952916dbe2eedd3f0a228914e",
+      "dirtyFromHEAD": false
+    },
+    {
+      "path": "packages/experimental/native-run/tests/loopback-only.ts",
+      "sha256": "9a5aad989de4a200f56a3da5b291f0ca5e99d9920699e003a469a70a1480082e",
+      "bytes": 2261,
+      "role": "direct_protected_spec_or_helper",
+      "publicBasePresent": false,
+      "publicBaseSha256": null,
+      "headSha256": "9a5aad989de4a200f56a3da5b291f0ca5e99d9920699e003a469a70a1480082e",
+      "dirtyFromHEAD": false
+    },
+    {
+      "path": "packages/experimental/native-run/tests/expected/native-session.json",
+      "sha256": "06eb3ed9d7367b40814817b73b1741b248d58dd88fbf11c96db58ce41ddea144",
+      "bytes": 320,
+      "role": "required_expected_data",
+      "publicBasePresent": false,
+      "publicBaseSha256": null,
+      "headSha256": "06eb3ed9d7367b40814817b73b1741b248d58dd88fbf11c96db58ce41ddea144",
+      "dirtyFromHEAD": false
+    },
+    {
+      "path": "vitest.protected.config.ts",
+      "sha256": "629337cd9c278179a59bd6278fa4c7a475d92ce14af296e4d466b7f223ae153f",
+      "bytes": 564,
+      "role": "actual_vitest_consumption_config_or_dependency",
+      "publicBasePresent": false,
+      "publicBaseSha256": null,
+      "headSha256": "629337cd9c278179a59bd6278fa4c7a475d92ce14af296e4d466b7f223ae153f",
+      "dirtyFromHEAD": false
+    },
+    {
+      "path": "vitest.protected-loopback.config.ts",
+      "sha256": "ac8a60b61b9d7ffc7e10ab24850ffca56d26416718c8c37305a416d3f9b2bf48",
+      "bytes": 391,
+      "role": "actual_vitest_consumption_config_or_dependency",
+      "publicBasePresent": false,
+      "publicBaseSha256": null,
+      "headSha256": "ac8a60b61b9d7ffc7e10ab24850ffca56d26416718c8c37305a416d3f9b2bf48",
+      "dirtyFromHEAD": false
+    },
+    {
+      "path": "vitest.shared.ts",
+      "sha256": "3e8900b7471bffab582974b3a0a6413140d8143d41f62f19a348c41ad3a316a0",
+      "bytes": 1482,
+      "role": "actual_vitest_consumption_config_or_dependency",
+      "publicBasePresent": true,
+      "publicBaseSha256": "3e8900b7471bffab582974b3a0a6413140d8143d41f62f19a348c41ad3a316a0",
+      "headSha256": "3e8900b7471bffab582974b3a0a6413140d8143d41f62f19a348c41ad3a316a0",
+      "dirtyFromHEAD": false
+    }
+  ],
+  "minimumExecutionDataDependency": "packages/experimental/native-run/tests/expected/native-session.json",
+  "notRequiredByFive": [
+    "packages/experimental/native-run/tests/artifact-consumer.mts",
+    "packages/experimental/native-run/tests/sdk-projection.py",
+    "packages/experimental/native-run/tests/native-run.spec.ts"
+  ],
+  "optionalLoopbackExtraSpecNotSupplied": "packages/llm/llm-deepseek/tests/prepared-call.spec.ts",
+  "keyPolicy": {
+    "literalAPIKeyOrBearerCopied": false,
+    "placeholderKeyCopiedOrWritten": false,
+    "authResolverDefault": "empty source headers map",
+    "environmentNameReferenceOnly": true,
+    "actualEnvironmentValuesRead": false,
+    "note": "officialPlugin branch references an environment name; consumer must not inherit any model-key environment."
+  },
+  "profileType": "Exact source Vitest configs; no new DSH application profile or credentials/config copied.",
+  "DSHHomeCaveat": "native-session spec line60 reads DSH_HOME and optionally writes synthetic evidence at61; consumer must not inherit an existing private Home.",
+  "syntheticUUID": {
+    "path": "packages/experimental/native-run/tests/native-session.spec.ts",
+    "line": 22,
+    "field": "target.sessionBinding.sessionId",
+    "literalAlreadyInHEAD": true,
+    "usedAsFixedTempFixtureBinding": true,
+    "valueNotRetainedInReport": true
+  },
+  "testsModelsServicesInstallExecuted": false,
+  "preciseGenerationStopSettlement": "UNSUPPORTED",
+  "rootMITDoesNotProveLocalPatchRights": true,
+  "localPatchRights": "UNKNOWN"
+}
