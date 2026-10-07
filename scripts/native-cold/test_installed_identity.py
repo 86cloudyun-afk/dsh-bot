@@ -318,20 +318,24 @@ class PrefixPathTests(unittest.TestCase):
                 self.assertEqual(fired,[True])
 
     def test_fresh_calls_reject_changed_added_removed_or_aliased_files(self):
-        for change in ('sdk-change','sdk-add','sdk-remove','sdk-symlink','product-add','product-remove'):
+        for change in ('sdk-change','sdk-add','sdk-remove','sdk-symlink','product-change','product-add','product-remove','product-symlink'):
             with self.subTest(change=change),self.owned() as root:
                 source,sdk,product,ctx,_=self.installation(root);I.check(ctx,source)
                 if change=='sdk-change':self.write(sdk/'index.js',b'owned changed SDK')
                 elif change=='sdk-add':self.write(sdk/'added.js',b'owned added SDK')
                 elif change=='sdk-remove':(sdk/'index.js').unlink()
                 elif change=='sdk-symlink':(sdk/'index.js').unlink();(sdk/'index.js').symlink_to('package.json')
+                elif change=='product-change':
+                    path=product/'src/index.js';data=path.read_bytes();self.write(path,bytes([data[0]^1])+data[1:])
                 elif change=='product-add':self.write(product/'src/added.js',b'owned added product')
-                else:(product/'src/index.js').unlink()
+                elif change=='product-remove':(product/'src/index.js').unlink()
+                else:
+                    self.write(product/'owned-target.js',b'owned synthetic alias target');(product/'src/index.js').unlink();(product/'src/index.js').symlink_to('../owned-target.js')
                 if change=='product-remove':
                     with self.assertRaises(FileNotFoundError):I.check(ctx,source)
                 else:
                     with self.assertRaises(R.SafetyError) as caught:I.check(ctx,source)
-                    expected='INSTALLED_CONTENT_IDENTITY_REFUSED' if change=='sdk-symlink' else 'INSTALLED_PRODUCT_CHANGED_REFUSED' if change=='product-add' else 'SDK_BUNDLE_CHANGED_REFUSED'
+                    expected='INSTALLED_CONTENT_IDENTITY_REFUSED' if change in {'sdk-symlink','product-symlink'} else 'INSTALLED_PRODUCT_CHANGED_REFUSED' if change in {'product-change','product-add'} else 'SDK_BUNDLE_CHANGED_REFUSED'
                     self.assertEqual(caught.exception.code,expected)
 
 if __name__=='__main__':unittest.main()
