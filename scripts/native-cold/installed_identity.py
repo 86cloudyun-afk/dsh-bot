@@ -28,7 +28,8 @@ def _path_code_signature(code):
 def _raw_path_method(name):
     # Live namespace views avoid invoking unknown descriptors just to inspect
     # them. All recognized methods are defined by Path or overridden by PosixPath.
-    return _POSIX_MEMBERS.get(name,_PATH_MEMBERS.get(name))
+    try:return _POSIX_MEMBERS[name] if name in _POSIX_MEMBERS else _PATH_MEMBERS[name]
+    except KeyError:return None
 
 def _standard_path_method(name):
     """Recognize the concrete 3.12 stdlib code, never an import-time replacement.
@@ -44,6 +45,7 @@ def _standard_path_method(name):
     return method if digest==_PATH_CODE_SHA256[name] else None
 
 _STANDARD_METHODS={name:_standard_path_method(name) for name in _PATH_CODE_SHA256}
+_STANDARD_CODES={name:method.__code__ if method is not None else None for name,method in _STANDARD_METHODS.items()}
 
 class _Spelling:
     """A normal absolute spelling from standard listdir, with runtime stat predicates.
@@ -61,24 +63,48 @@ class _Spelling:
     def __fspath__(self):return self.spelling if self._path is None else os.fspath(self._path)
     def __str__(self):return self.spelling if self._path is None else str(self._path)
     def stat(self,*args,**kwargs):
-        method=_POSIX_MEMBERS.get('stat',_PATH_MEMBERS.get('stat'))
-        if self._path is None and method is not None and method is _STANDARD_METHODS['stat']:return method(self,*args,**kwargs)
+        method=_STANDARD_METHODS['stat']
+        try:current=_POSIX_MEMBERS['stat'] if 'stat' in _POSIX_MEMBERS else _PATH_MEMBERS['stat']
+        except KeyError:current=None
+        if self._path is None and method is not None and current is method and method.__code__ is _STANDARD_CODES['stat']:
+            # Unroll only the verified body, retaining its current OS binding,
+            # original argument object and mutable keyword default semantics.
+            if not args and 'os' in method.__globals__ and (not kwargs or len(kwargs)==1 and 'follow_symlinks' in kwargs):
+                if kwargs:return method.__globals__['os'].stat(self,follow_symlinks=kwargs['follow_symlinks'])
+                defaults=method.__kwdefaults__
+                if defaults is not None and 'follow_symlinks' in defaults:return method.__globals__['os'].stat(self,follow_symlinks=defaults['follow_symlinks'])
+            return method(self,*args,**kwargs)
         return self.path().stat(*args,**kwargs)
     def lstat(self):
-        method=_POSIX_MEMBERS.get('lstat',_PATH_MEMBERS.get('lstat'))
-        if self._path is None and method is not None and method is _STANDARD_METHODS['lstat']:return method(self)
+        method=_STANDARD_METHODS['lstat']
+        try:current=_POSIX_MEMBERS['lstat'] if 'lstat' in _POSIX_MEMBERS else _PATH_MEMBERS['lstat']
+        except KeyError:current=None
+        if self._path is None and method is not None and current is method and method.__code__ is _STANDARD_CODES['lstat']:
+            # The verified lstat body delegates to stat with this explicit
+            # keyword. Observe both live methods before eliding that frame.
+            stock_stat=_STANDARD_METHODS['stat']
+            try:current_stat=_POSIX_MEMBERS['stat'] if 'stat' in _POSIX_MEMBERS else _PATH_MEMBERS['stat']
+            except KeyError:current_stat=None
+            if stock_stat is not None and current_stat is stock_stat and stock_stat.__code__ is _STANDARD_CODES['stat'] and 'os' in stock_stat.__globals__:return stock_stat.__globals__['os'].stat(self,follow_symlinks=False)
+            return self.stat(follow_symlinks=False)
         return self.path().lstat()
     def is_dir(self):
-        method=_POSIX_MEMBERS.get('is_dir',_PATH_MEMBERS.get('is_dir'))
-        if self._path is None and method is not None and method is _STANDARD_METHODS['is_dir']:return method(self)
+        method=_STANDARD_METHODS['is_dir']
+        try:current=_POSIX_MEMBERS['is_dir'] if 'is_dir' in _POSIX_MEMBERS else _PATH_MEMBERS['is_dir']
+        except KeyError:current=None
+        if self._path is None and method is not None and current is method and method.__code__ is _STANDARD_CODES['is_dir']:return method(self)
         return self.path().is_dir()
     def is_file(self):
-        method=_POSIX_MEMBERS.get('is_file',_PATH_MEMBERS.get('is_file'))
-        if self._path is None and method is not None and method is _STANDARD_METHODS['is_file']:return method(self)
+        method=_STANDARD_METHODS['is_file']
+        try:current=_POSIX_MEMBERS['is_file'] if 'is_file' in _POSIX_MEMBERS else _PATH_MEMBERS['is_file']
+        except KeyError:current=None
+        if self._path is None and method is not None and current is method and method.__code__ is _STANDARD_CODES['is_file']:return method(self)
         return self.path().is_file()
     def is_symlink(self):
-        method=_POSIX_MEMBERS.get('is_symlink',_PATH_MEMBERS.get('is_symlink'))
-        if self._path is None and method is not None and method is _STANDARD_METHODS['is_symlink']:return method(self)
+        method=_STANDARD_METHODS['is_symlink']
+        try:current=_POSIX_MEMBERS['is_symlink'] if 'is_symlink' in _POSIX_MEMBERS else _PATH_MEMBERS['is_symlink']
+        except KeyError:current=None
+        if self._path is None and method is not None and current is method and method.__code__ is _STANDARD_CODES['is_symlink']:return method(self)
         return self.path().is_symlink()
 
 @lru_cache(maxsize=32768)
@@ -99,7 +125,7 @@ def canonical(path):
     ancestor, remaining suffix, and per-resolution link state. Other runtimes
     and custom paths retain their original resolve implementation.
     """
-    standard_resolve=_STANDARD_METHODS['resolve'] is not None and _raw_path_method('resolve') is _STANDARD_METHODS['resolve']
+    standard_resolve=_STANDARD_METHODS['resolve'] is not None and _raw_path_method('resolve') is _STANDARD_METHODS['resolve'] and _STANDARD_METHODS['resolve'].__code__ is _STANDARD_CODES['resolve']
     if type(path) is _Spelling and (not _FAST_POSIX or not standard_resolve or path._path is not None):path=path.path()
     if type(path) not in (PosixPath,_Spelling) or not _FAST_POSIX or not standard_resolve:
         return path.resolve(strict=True)==path
@@ -145,7 +171,7 @@ def files_under(root,sdk=False):
         nonlocal inspected,total
         R.require(directory.is_dir() and not directory.is_symlink() and canonical(directory),'INSTALLED_CONTENT_IDENTITY_REFUSED')
         directory_text=str(directory) if prefix is not None and type(directory) in (PosixPath,_Spelling) else None
-        if directory_text is not None and _FAST_POSIX and _STANDARD_METHODS['iterdir'] is not None and _raw_path_method('iterdir') is _STANDARD_METHODS['iterdir']:
+        if directory_text is not None and _FAST_POSIX and _STANDARD_METHODS['iterdir'] is not None and _raw_path_method('iterdir') is _STANDARD_METHODS['iterdir'] and _STANDARD_METHODS['iterdir'].__code__ is _STANDARD_CODES['iterdir']:
             stem=directory_text.rstrip('/')+'/'
             entries=(_Spelling(stem+name,name) for name in sorted(os.listdir(directory),key=lambda name:name.encode()))
         else:

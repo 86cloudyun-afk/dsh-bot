@@ -381,6 +381,72 @@ class PrefixPathTests(unittest.TestCase):
                 self.assertEqual(bindings,[(path,PosixPath)]);self.assertEqual(calls,[(path,())])
                 self.assertIs(type(bindings[0][0]),PosixPath)
 
+    def test_changed_stock_method_code_uses_actual_path_binding(self):
+        replacement={}
+        exec("def changed(self,*args,**kwargs):\n control=_dsh_identity_code_control\n if str(self)==str(control[0]):\n  self.as_posix()\n  control[1].append((type(self),args,kwargs))\n  raise PermissionError(13,'SYNTHETIC_CODE_HOOK_DENIED',str(self))\n return control[2](self,*args,**kwargs)\n",replacement)
+        for name in ('stat','lstat','is_dir','is_file','is_symlink','resolve','iterdir'):
+            with self.subTest(method=name),self.owned() as root:
+                path=root/'inside.js';self.write(path,b'owned live code hook');module=self.identity_copy();method=getattr(PosixPath,name)
+                saved_code=method.__code__;saved_kwargs=method.__kwdefaults__;namespace=method.__globals__;key='_dsh_identity_code_control';absent=object();previous=namespace.get(key,absent)
+                original=types.FunctionType(saved_code,namespace,method.__name__,method.__defaults__,method.__closure__);original.__kwdefaults__=saved_kwargs
+                observed=[]
+                try:
+                    method.__code__=replacement['changed'].__code__
+                    for implementation in (_C93,module):
+                        calls=[];namespace[key]=(root if name=='iterdir' else path,calls,original)
+                        observed.append((self.outcome(lambda:implementation.files_under(root)),calls))
+                    self.assertEqual(observed[1],observed[0])
+                finally:
+                    method.__code__=saved_code
+                    if previous is absent:namespace.pop(key,None)
+                    else:namespace[key]=previous
+
+    def test_stock_stat_changed_keyword_defaults_retain_runtime_behavior(self):
+        for defaults in ({'follow_symlinks':False},None):
+            with self.subTest(defaults=defaults),self.owned() as root:
+                self.write(root/'inside.js',b'owned stock defaults');module=self.identity_copy();method=PosixPath.stat;original=os.stat;observed=[]
+                for implementation in (_C93,module):
+                    calls=[]
+                    def stat_call(value,*args,**kwargs):calls.append((os.fspath(value),args,kwargs));return original(value,*args,**kwargs)
+                    with patch.object(method,'__kwdefaults__',defaults),patch.object(os,'stat',stat_call):
+                        result=self.outcome(lambda:implementation.files_under(root))
+                    observed.append((result,calls))
+                self.assertEqual(observed[1],observed[0])
+
+    def test_stock_stat_uses_the_current_pathlib_os_binding(self):
+        with self.owned() as root:
+            self.write(root/'inside.js',b'owned current OS binding');module=self.identity_copy();observed=[]
+            for implementation in (_C93,module):
+                calls=[]
+                class CurrentOS:
+                    def __getattr__(self,name):return getattr(os,name)
+                    def stat(self,value,*args,**kwargs):
+                        calls.append((os.fspath(value),args,kwargs));return os.stat(value,*args,**kwargs)
+                namespace=PosixPath.stat.__globals__
+                with patch.dict(namespace,{'os':CurrentOS()}):
+                    # Newer predicates use os.path rather than Path.stat, so
+                    # explicitly exercise this binding on every real runtime.
+                    mode=root.stat().st_mode;result=self.outcome(lambda:implementation.files_under(root))
+                observed.append((result,calls,mode))
+            self.assertEqual(observed[1],observed[0]);self.assertEqual(observed[0][1][0],(str(root),(),{'follow_symlinks':True}))
+
+    def test_stock_method_deletion_during_listing_uses_actual_bound_api(self):
+        for name in ('stat','lstat','is_dir','is_file','is_symlink','resolve','iterdir'):
+            with self.subTest(method=name),self.owned() as root:
+                self.write(root/'nested/inside.js',b'owned deleted method');module=self.identity_copy();observed=[]
+                owner=next(base for base in PosixPath.__mro__ if name in base.__dict__);original_method=owner.__dict__[name]
+                for implementation in (_C93,module):
+                    original_list=os.listdir;original_scan=os.scandir;deleted=[]
+                    def remove(directory):
+                        if os.fspath(directory)==str(root) and not deleted:delattr(owner,name);deleted.append(name)
+                    def listing(directory):result=original_list(directory);remove(directory);return result
+                    def scanning(directory):result=original_scan(directory);remove(directory);return result
+                    try:
+                        with patch.object(os,'listdir',listing),patch.object(os,'scandir',scanning):result=self.outcome(lambda:implementation.files_under(root))
+                        observed.append((result,deleted))
+                    finally:setattr(owner,name,original_method)
+                self.assertEqual(observed[1],observed[0]);self.assertEqual(observed[0][1],[name])
+
     def installation(self,root):
         source=root/'source';sdk=source/'node_modules/synthetic-sdk';sdk.mkdir(parents=True)
         self.write(source/'package-lock.json',json.dumps({'packages':{'node_modules/synthetic-sdk':{'version':'1.0.0','integrity':'sha512-synthetic-fixture'}}}).encode())
