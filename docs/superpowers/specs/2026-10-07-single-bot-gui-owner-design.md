@@ -1,0 +1,48 @@
+# Single-Bot GUI owner
+
+The authorized goal is an installable first version that starts from a fresh isolated Harness Home, authenticates through stock BrowserAuth, and gives its authenticated operator one Bot with a durable main Session and owned work Sessions. Multi-Bot, groups, meetings, model filesystem and shell tools are outside this version.
+
+## Composition
+
+Use a supported Loader profile with the stock base/Web bundles as the transport and browser dependency source. The profile disables stock model-facing preset declarations and unrelated visible surfaces, uses an empty `dsh-bot/empty` preset by default, and installs the product package as a packed immutable snapshot. A new private GUI owner plugin retains its Cordis fiber, `Host`, `DshAdapter`, Ledger, actual `HostConnectionService`, and operator Peer. No serialized actor or gateway Peer constructs authority.
+
+The app registers `/dsh-bot-gui` for bounded bootstrap/create/reconcile requests. The existing `/dsh-bot` summary read and `/dsh-bot-owner` selected controls remain separately gated. The browser presents an explicit create form when no Bot exists, and the existing goal/results panel once the Bot is selected. The owner never exposes its Host, private ports, caller, or secrets as a service or response.
+
+## Identity and recovery
+
+Creation saves the original operation ID/nonce before any native await, creates at most one Bot, prepares one contact creation intent, and reconciles that original Session ID. A restart reads the same product ledger identity and selected Bot. Native preparation opens a private journal before actual `agents.create` or `agents.resume` and verifies the exact journal/prepared brands. Recovery requires the complete sealed known native history before same-ID resume, and never activates a raw Controller Agent or reruns historical input/work. Main receives only `dsh_bot_delegate`; work receives zero tools. The initial agent preset is read from the Bot's immutable configuration and verified against persisted headers.
+
+The actual main delegate definition is prepared before resume and is the same definition later registered on the actual resumed Agent. Fresh creation retains the actual native handle in the private adapter port and binds its genuine source only after the original blank proof and exact tool registration. The source is passed privately into both selected contact controls and the producer. The process model flag never constructs a capability. Failed, unsealed, or UNKNOWN recovery keeps its original Bot/main/operation IDs and a read-only bootstrap; it neither substitutes a Session nor claims full continuation. Journal handles close before the private product ledger closes.
+
+Owner mutations recheck the actual retained connection/operator fiber, owner fiber, connection activation, Bot epoch/config, and authority grant before and after awaits. A changed binding fails closed. The existing browser original-operation storage and locks remain intact; UNKNOWN messages are reconciled by original IDs without resending.
+
+The official initial permission hooks remain mounted. This fresh profile binds `workspace-write` sandbox and permission preset with `ask` approval, regardless of ambient permission-mode settings. The original GUI operation persists that exact copied immutable tuple before any native creation. A semantically blank Session contains only the three official events, in order: `permission/preset`, `sandbox/mode`, and `approval/policy`, with sequences 0 through 2 and exact expected data. The private Adapter verifies the durable prefix and live sequence; fresh GUI binding rechecks both. A fourth event, input, tool activity, changed mode, or changed restart configuration refuses binding and preserves the original identity. Tests without these hooks retain strict zero-event behavior.
+
+## Execution and truthfulness
+
+Model requests require the explicit process flag `--enable-model-requests`; this app's zero-model validation does not use the provider. A main goal uses the actual Agent/Session inbox and confirms durable queueing. The private producer routes observed work responses to the main's next turn. Replies and `turn/end` events are evidence of output only. Stop requests are accepted fences; held work generations remain UNKNOWN and held until authoritative Host terminal evidence is available. This GUI must not manufacture native settlement from Agent idle or a reply.
+
+The enable flag expresses operator intent, not native execution authority. This GUI always requires an owned generation source for main sends. Without an exact private source, bootstrap reports effective sending disabled with unconfirmed continuation, the Agent model gate refuses, and the selected owner RPC refuses before allocating a message/operation or waking a bare Agent. Reads and original Bot/main identities remain available. The forthcoming protected creation/history journal bridge must create or resume through the native capability before it can enable sending; an old bare or unsealed Agent is never retrofitted.
+
+Native source callbacks separate original authority from dispatch. Authority compares the actual live owner, fixed Bot/main/config/epochs, unchanged Task identity, full original input digest, and the exact durable generation/slot lease. It remains valid for an original fenced generation so its actual source can verify that original receipt. Dispatch adds the explicit model gate, latest main/work generation and kind-specific contact/work fences. A main work-result retains its parent's full original work binding. These private policy callbacks only deny or permit the SDK's existing checks; copied ledger labels cannot mint a source or settlement receipt, and the policy never changes a ledger row.
+
+Archival/restoration controls are added only with complete native log inspection and existing Host epoch invalidation. If that interface is unavailable, bootstrap truthfully reports the limitation and keeps the saved identity; unsupported restore must not create a replacement Bot or erase held UNKNOWN work.
+
+## Validation
+
+Use meaningful failing tests for profile isolation, authenticated owner bootstrap/create replay, actual Session persistence/restart identity, and current-peer rejection. Run the existing test suite. Launch the packed profile in a fresh private Home on loopback and use Chromium with an empty user-data directory to exchange the real process token for its signed cookie. Verify an unauthenticated root/API is refused and a foreign Origin is refused. Verify the real Loader roster loads the Bot panel and creates/selects one Bot without a model request. Synthetic external output may test result presentation and routing, and must remain labeled synthetic in evidence. No production Home/history/key values are read or copied.
+### Native controller and browser roster
+
+The stock Web SessionController browser face requires the file-upload client service. This owner profile keeps file intake closed. It mounts the exact stock native SessionController class through a host-only package subpath and disables the stock Session, Workspace, Conversation, and Sidebar browser rows. The official renderer, layout, locale, connection, and module Loader remain the browser shell. The owner panel selects itself only after its main slot has registered.
+
+The renderer's required optional Session scope uses `slots.installScope` with a stable, explicitly absent binding. It rejects any ordinary Session reference. Bot/main/work observations use only the private owner ports; this UI binding never activates or substitutes a native Session.
+
+The stock layout title receives an explicitly empty ordinary-Session UI roster through `slots.provideRoot`; this is separate from the owned Bot Sessions. Unrelated public Workspace views and the dynamic Cordis client runner are disabled. The stock settings client remains because it provides `configForms` to locale and theme; no settings navigation is rendered by this profile.
+
+The fresh GUI profile selects Chinese through the official locale preference. The visible surface groups Bot identity, main goal/reply, original receipts, and work target/result/stop states, with modest spacing, input sizing, and status colors. Internal plugin/authority diagnostics and future-feature placeholders do not appear in the product flow. UNKNOWN receipts, pending stops, retained slots, and disabled sending remain explicit.
+
+### Relocated reviewed exports
+
+The default package installer keeps its exact recorded source-root check. Final reviewed source bundles can explicitly choose `packageSourceMode: 'verified-export'`, with the original trusted manifest SHA256/buildId pin. This verifies the unchanged tar hash, canonical product file closure, bytes, hashes, modes, and installed copy without needing `.git` or the original directory to exist. The receipt keeps the original source root/head/tree/clean state and separately records the actual verified export root; no manifest is rewritten and no current Git clean state is inferred. Extra files inside the published closure, changed source modes/bytes, links, or incomplete pins refuse installation. Reviewed installer/helper files can remain outside the unchanged product package closure.
+
+Stock browser boot manifests omit Host row configuration. The profile therefore installs a private `dsh-bot-gui-surface` package with empty host/client behavior. Its exact package ID in the official boot graph activates this UI composition. The marker carries no authority; every read and mutation still uses the authenticated owner RPC bindings.

@@ -84,6 +84,18 @@
     "./bot-chain-native-owner-app": {
       "types": "./src/bot-chain-native-owner-app.d.ts",
       "default": "./src/bot-chain-native-owner-app.mjs"
+    },
+    "./bot-gui-owner-app": {
+      "types": "./src/bot-gui-owner-app.d.ts",
+      "default": "./src/bot-gui-owner-app.mjs"
+    },
+    "./bot-gui-startup": {
+      "types": "./src/bot-gui-startup.d.ts",
+      "default": "./src/bot-gui-startup.mjs"
+    },
+    "./bot-gui-session-controller": {
+      "types": "./src/bot-gui-session-controller.d.ts",
+      "default": "./src/bot-gui-session-controller.mjs"
     }
   },
   "types": "./src/plugin.d.ts",
@@ -96,7 +108,6 @@
       "inject": [
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-layout",
-        "@deepseek-ai/dsh-client-ui-sidebar",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-connection"
       ]

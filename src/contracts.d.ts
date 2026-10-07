@@ -36,6 +36,10 @@ export interface OwnedCreationPort {
  createOwnedSession(intent:CreationIntent):Promise<{sessionId:string}>;
  inspectOwnedCreation(intent:CreationIntent):Promise<CreationProof|null>;
 }
+/** Private SDK-branded history path; the original intent is only an exact selector. */
+export interface OwnedGenerationCreationPort extends OwnedCreationPort {
+ resumeOwnedSession(intent:CreationIntent,options?:Readonly<{delegateTool?:import('@deepseek-ai/dsh-tools').ToolDefinition}>):Promise<{sessionId:string}>;
+}
 export declare class Host {
  constructor(options:{ledger:Ledger;ownerHumanId:string;adapter?:NativeAdapterContract;ownerCapability?:object;workSessionRuntime?:OfflineWorkSessionRuntime});
  execute(actor:TrustedActor,envelope:CommandEnvelope,payload:unknown):Receipt;
@@ -135,8 +139,11 @@ export interface WorkSessionView extends WorkDelegation {
  readonly state:WorkState;readonly creationState:'reserved'|'confirmed'|'unknown';readonly held:boolean;readonly fence:WorkFence|null;
  readonly creationOperationId:string|null;readonly creationReceipt:CreationProof|null;readonly sessionCreation:WorkSessionCreation;readonly delivery:WorkDeliveryReceipt|null;
  readonly slotLease:WorkSlotLease|null;readonly summary:string|null;readonly unsupported:WorkUnsupportedCode|null;
- readonly evidenceKind:'unsupported'|'offline-synthetic';readonly nativeRuntimeVerified:false;
+ /** True verifies only this original generation's branded settlement, never all session history. */readonly evidenceKind:'unsupported'|'offline-synthetic'|'native-sdk';readonly nativeRuntimeVerified:boolean;
+ readonly generationObservation:WorkGenerationObservation;
 }
+/** Serializable observations only; local return or usage defaults never imply settlement. */
+export interface WorkGenerationObservation {readonly local:'unknown'|'pending'|'returned';readonly remote:'UNKNOWN'|'settled';readonly usageKnown:boolean;readonly usage:Readonly<{inputTokens:number;outputTokens:number;totalTokens?:number;cacheReadTokens?:number;cacheWriteTokens?:number;reasoningTokens?:number}>|null;readonly settlementVerified:boolean}
 export interface WorkSessionSnapshot {readonly work:readonly WorkSessionView[];readonly held:number;readonly limit:15;readonly coverage:'owner-contract-ledger';readonly nativeCoverageVerified:false}
 /** Returned only by the exact privately retained source, never accepted as a port input. */
 export interface WorkRuntimeReceipt {
@@ -157,8 +164,12 @@ export interface WorkMessageBinding {readonly botId:string;readonly taskId:strin
 export interface WorkProducerMessage {readonly id:string;readonly role:'user';readonly content:readonly unknown[];readonly source:WorkProducerProvenance&WorkMessageBinding&{readonly kind:'dsh-bot'}}
 /** Owner-only capability, captured synchronously once per original creation intent. */
 export type OwnedWorkCreationOptions = Readonly<{cwd:string}> & (Readonly<{port:OwnedCreationPort;portFor?:never}>|Readonly<{port?:never;portFor:(intent:CreationIntent)=>OwnedCreationPort}>);
+/** Configuration travels separately from the native preparation; runtime branding is mandatory. */
+export interface OwnedGenerationRoute {readonly provider:string;readonly model:string;readonly maxTokens:number;readonly reasoningEffort:'off'}
+export interface OwnedGenerationBinding extends WorkBinding {readonly nonce:string;readonly inputMessageId:string;readonly messageIdentity:string;readonly slotLease:WorkSlotLease}
+export interface OwnedGenerationPreparation {readonly prepared:unknown;readonly route:OwnedGenerationRoute}
 /** Private open-time transport. Never accept these methods from tool or RPC arguments. */
-export interface OwnedWorkProducerOptions {readonly execution?:boolean;readonly provenance:WorkProducerProvenance;readonly isCurrent:()=>boolean;readonly createMessage:(binding:WorkMessageBinding,provenance:WorkProducerProvenance,content:string)=>WorkProducerMessage;readonly send:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<void>;readonly inspect:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<boolean>}
+export interface OwnedWorkProducerOptions {readonly execution?:boolean;readonly requireOwnedGeneration?:boolean;readonly provenance:WorkProducerProvenance;readonly isCurrent:()=>boolean;readonly createMessage:(binding:WorkMessageBinding,provenance:WorkProducerProvenance,content:string)=>WorkProducerMessage;readonly send:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<void>;readonly inspect:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<boolean>}
 export interface OwnedWorkSessionOptions {readonly botId:string;readonly botEpoch:number;readonly authorityEpoch:number;readonly isCurrent?:()=>boolean;readonly creation?:OwnedWorkCreationOptions;readonly producer?:OwnedWorkProducerOptions}
 export interface WorkChildRequest extends WorkDelegation {readonly parentTaskId:string;readonly parentSessionId:string;readonly parentGeneration:number}
 declare const ownedWorkSessionBrand:unique symbol;
@@ -173,6 +184,8 @@ export interface OwnedWorkSessionPort {
  readonly executeMessage:(envelope:CommandEnvelope,target:WorkTarget,signal?:AbortSignal)=>Promise<WorkSessionView>;
  readonly collect:(target:WorkTarget)=>Promise<WorkSessionView>;
  readonly fence:(envelope:CommandEnvelope,payload:WorkTarget&{readonly reason:'terminate'|'handoff'})=>Receipt<WorkSessionView>;
+ /** Persist the product fence before requesting exact retained native-generation cancellation. */
+ readonly stop:(envelope:CommandEnvelope,payload:WorkTarget&{readonly reason:'terminate'|'handoff'})=>Promise<WorkSessionView>;
  readonly resume:(envelope:CommandEnvelope,payload:WorkTarget)=>Receipt<WorkSessionView>;
  readonly spawnChild:(request:WorkChildRequest)=>Readonly<{status:'unsupported';code:'child_spawn_unsupported'}>;
  readonly dispose:()=>void;

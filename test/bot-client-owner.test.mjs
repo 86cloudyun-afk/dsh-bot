@@ -25,3 +25,66 @@ test('work stop receipts are bound to exact generation and cannot block a later 
 test('actual-shaped nullable workstop receipt persists accepted after original lookup and remount',async()=>{const storage=new Map(),locks=lockFixture(),f=fixture({storage,locks});let original;try{f.setResponder(async(channel,endpoint,frame)=>{if(channel==='/dsh-bot')return{ok:true,value:{version:1,status:'ready',bot:[{botId:'selected-bot',name:'Selected Bot',lifecycle:'active',readiness:'registered',epoch:1,revision:1}],task:[]}};if(endpoint==='selectedView')return{ok:true,value:selected};if(endpoint==='requestWorkStop'){original=frame.payload;return{ok:false};}return{ok:true,value:{version:1,operationId:frame.payload.operationId,nonce:frame.payload.nonce,botId:frame.botId,sessionId:'selected-contact',messageId:null,state:'accepted',preciseNativeSettlementVerified:false}};});let tree=await f.settle();await find(tree,'data-dsh-bot-work-stop').props.onClick();tree=await f.settle();await find(tree,'data-dsh-bot-work-stop').props.onClick();tree=await f.settle();const persisted=JSON.parse([...storage.values()][0]),stop=Object.values(persisted.stops)[0];assert.equal(stop.state,'accepted');assert.equal(stop.messageId,undefined);assert.equal(f.calls.filter(c=>c[1]==='requestWorkStop').length,1);assert.deepEqual(f.calls.find(c=>c[1]==='inspectContactReceipt')[2].payload,{operationId:original.operationId,nonce:original.nonce});assert.equal(find(tree,'data-dsh-bot-work-stop').props.disabled,true);}finally{await f.dispose();}const remount=fixture({storage,locks});try{const tree=await remount.settle();assert.equal(find(tree,'data-dsh-bot-work-stop').props.disabled,true);assert.equal(remount.calls.filter(c=>c[1]==='requestWorkStop').length,0);}finally{await remount.dispose();}});
 
 test('unknown contact stop remains lookup-only when the native contact has become idle',async()=>{const f=fixture();let running=true,original;try{f.setResponder(async(channel,endpoint,frame)=>{if(channel==='/dsh-bot')return{ok:true,value:{version:1,status:'ready',bot:[{botId:'selected-bot',name:'Selected Bot',lifecycle:'active',readiness:'registered',epoch:1,revision:1}],task:[]}};if(endpoint==='selectedView')return{ok:true,value:{...selected,contact:{...selected.contact,status:running?'running':'idle'}}};if(endpoint==='requestContactStop'){running=false;original=frame.payload;return{ok:false};}return{ok:true,value:{version:1,operationId:frame.payload.operationId,nonce:frame.payload.nonce,botId:frame.botId,messageId:'native-original-message',state:endpoint==='inspectContactReceipt'?'accepted':'durably-queued',preciseNativeSettlementVerified:false}};});let tree=await submit(f,'Harmless contact stop fixture');await find(tree,'data-dsh-bot-contact-stop').props.onClick();tree=await f.settle();const lookup=find(tree,'data-dsh-bot-contact-stop');assert.equal(lookup.props.disabled,false);await lookup.props.onClick();assert.equal(f.calls.filter(c=>c[1]==='requestContactStop').length,1);assert.deepEqual(f.calls.find(c=>c[1]==='inspectContactReceipt')[2].payload,{operationId:original.operationId,nonce:original.nonce});}finally{await f.dispose();}});
+
+const nativeSettled={local:'returned',remote:'settled',usageKnown:true,usage:{inputTokens:5,outputTokens:3,totalTokens:8},settlementVerified:true};
+function nativeResponder(view,receipt={}){return async(channel,endpoint,frame)=>{
+ if(channel==='/dsh-bot')return{ok:true,value:{version:1,status:'ready',bot:[{botId:'selected-bot',name:'Selected Bot',lifecycle:'active',readiness:'registered',epoch:1,revision:1}],task:[]}};
+ if(endpoint==='selectedView')return{ok:true,value:structuredClone(view)};
+ return{ok:true,value:{version:1,operationId:frame.payload.operationId,nonce:frame.payload.nonce,botId:frame.botId,
+   sessionId:'selected-contact',messageId:'native-original-message',state:'durably-queued',preciseNativeSettlementVerified:true,generationObservation:nativeSettled,...receipt}};
+};}
+test('consistent native terminal observation keeps main/work results readable and labels only the exact reclaimed work',async()=>{
+ const f=fixture(),view=structuredClone(selected);
+ view.contact={...view.contact,generation:1,generationObservation:nativeSettled,preciseNativeSettlementVerified:true};
+ view.work[0]={...view.work[0],state:'waiting',held:false,generationObservation:nativeSettled,preciseNativeSettlementVerified:true};view.held=0;
+ try{f.setResponder(nativeResponder(view));const tree=await f.settle();assert.ok(find(tree,'data-dsh-bot-main-reply'));
+  assert.equal(find(tree,'data-dsh-bot-contact-generation')?.props['data-dsh-bot-contact-generation'],'settled');
+  assert.equal(find(tree,'data-dsh-bot-work-generation')?.props['data-dsh-bot-work-generation'],'settled');
+  assert.match(texts(tree),/native_settled/);assert.match(texts(tree),/released/);assert.equal(find(tree,'data-dsh-bot-work-stop').props.disabled,true);
+ }finally{await f.dispose();}
+});
+for(const local of ['pending','returned'])test(`native ${local} with UNKNOWN remote retains work and blocks allocating another contact input`,async()=>{
+ const f=fixture(),view=structuredClone(selected),observation={local,remote:'UNKNOWN',usageKnown:false,usage:null,settlementVerified:false};
+ view.contact={...view.contact,generation:1,generationObservation:observation,preciseNativeSettlementVerified:false};
+ view.work[0]={...view.work[0],generationObservation:observation};
+ try{f.setResponder(nativeResponder(view));let tree=await f.settle();assert.ok(find(tree,'data-dsh-bot-work-detail'));
+  find(tree,'data-dsh-bot-goal').props.onChange({target:{value:'Do not allocate another pending input'}});tree=f.render();
+  assert.equal(find(tree,'data-dsh-bot-submit').props.disabled,true);assert.match(texts(tree),/retained/);
+  assert.equal(find(tree,'data-dsh-bot-work-generation')?.props['data-dsh-bot-work-generation'],local==='pending'?'pending':'UNKNOWN');
+  await find(tree,'data-dsh-bot-goal-form').props.onSubmit({preventDefault(){}});
+  assert.equal(f.calls.filter(call=>call[1]==='sendContactText').length,0);
+ }finally{await f.dispose();}
+});
+test('native terminal claims with incomplete usage, pending local activity or a held lease are refused by the shipped panel',async()=>{
+ for(const mutation of [view=>{view.work[0].generationObservation.usage.totalTokens=0;},
+   view=>{view.work[0].generationObservation.local='pending';},view=>{view.work[0].held=true;}]){
+  const f=fixture(),view=structuredClone(selected);view.work[0]={...view.work[0],held:false,generationObservation:structuredClone(nativeSettled),preciseNativeSettlementVerified:true};
+  mutation(view);try{f.setResponder(nativeResponder(view));const tree=await f.settle();assert.equal(find(tree,'data-dsh-bot-work-detail'),undefined);
+   assert.equal(find(tree,'data-dsh-bot-submit').props.disabled,true);assert.doesNotMatch(texts(tree),/native_settled/);
+  }finally{await f.dispose();}
+ }
+});
+test('an exact native terminal receipt retains the original saved state while incomplete claims remain UNKNOWN',async()=>{
+ for(const verified of [true,false]){const f=fixture();try{
+  f.setResponder(nativeResponder(selected,verified?{}:{generationObservation:{...nativeSettled,usageKnown:false,usage:null}}));
+  const tree=await submit(f,'Synthetic native receipt display');
+  assert.equal(find(tree,'data-dsh-bot-receipt').props['data-dsh-bot-receipt'],verified?'durably-queued':'unknown');
+  assert.doesNotMatch([...f.storage.values()].join(''),/usageKnown|settlementVerified|generationObservation/);
+ }finally{await f.dispose();}}
+});
+test('pending native observations refresh through selected reads and stop scheduling once the exact work settles',async()=>{
+ const timeout=globalThis.setTimeout,clear=globalThis.clearTimeout,scheduled=new Map();let next=0;
+ globalThis.setTimeout=(callback,delay)=>{assert.equal(delay,1500);scheduled.set(++next,callback);return next;};
+ globalThis.clearTimeout=id=>scheduled.delete(id);
+ const f=fixture(),view=structuredClone(selected),pending={local:'pending',remote:'UNKNOWN',usageKnown:false,usage:null,settlementVerified:false};
+ view.contact={...view.contact,generation:1,generationObservation:pending,preciseNativeSettlementVerified:false};
+ view.work[0]={...view.work[0],generationObservation:pending};
+ try{f.setResponder(nativeResponder(view));await f.settle();assert.equal(scheduled.size,1,'active original native generation must schedule one read');
+  const [id,callback]=scheduled.entries().next().value;scheduled.delete(id);
+  view.contact={...view.contact,generationObservation:nativeSettled,preciseNativeSettlementVerified:true};
+  view.work[0]={...view.work[0],held:false,state:'waiting',generationObservation:nativeSettled,preciseNativeSettlementVerified:true};view.held=0;
+  callback();const tree=await f.settle();assert.equal(find(tree,'data-dsh-bot-work-generation')?.props['data-dsh-bot-work-generation'],'settled');
+  assert.equal(scheduled.size,0);assert.ok(f.calls.filter(call=>call[1]==='selectedView').length>=2);
+  assert.equal(f.calls.filter(call=>['sendContactText','requestContactStop','requestWorkStop'].includes(call[1])).length,0);
+ }finally{await f.dispose();globalThis.setTimeout=timeout;globalThis.clearTimeout=clear;}
+});
