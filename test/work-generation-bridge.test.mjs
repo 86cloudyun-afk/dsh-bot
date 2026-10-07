@@ -42,3 +42,9 @@ test('explicit protected creation rejects missing SDK or synthetic Context befor
  await assert.rejects(()=>port.createOwnedSession({operationId:'synthetic-op',sessionId:'synthetic-session',cwd:'/synthetic',agentPreset:'synthetic/empty'}),error=>['unsupported_owned_generation_sdk','unsupported_host_identity'].includes(error.code));
  assert.equal(prepared,0);assert.equal(created,0);
 });
+
+test('synthetic legacy stop durably fences original generation and keeps UNKNOWN reservation',async t=>{
+ const f=await fixture(t);await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'task',generation:1});
+ const stopped=await f.call('stop','fenceWorkSession',{task_id:'task',generation:1,reason:'terminate'});
+ assert.equal(stopped.fence.reason,'terminate');assert.equal(stopped.held,true);assert.equal(stopped.generationObservation.remote,'UNKNOWN');assert.equal(f.ledger.list('workGeneration')[0].fence.operationId,stopped.fence.operationId);assert.equal(f.sent.length,1);
+});

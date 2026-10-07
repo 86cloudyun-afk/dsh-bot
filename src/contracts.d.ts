@@ -176,6 +176,8 @@ export interface OwnedWorkSessionPort {
  readonly executeMessage:(envelope:CommandEnvelope,target:WorkTarget,signal?:AbortSignal)=>Promise<WorkSessionView>;
  readonly collect:(target:WorkTarget)=>Promise<WorkSessionView>;
  readonly fence:(envelope:CommandEnvelope,payload:WorkTarget&{readonly reason:'terminate'|'handoff'})=>Receipt<WorkSessionView>;
+ /** Persist the product fence before requesting exact retained native-generation cancellation. */
+ readonly stop:(envelope:CommandEnvelope,payload:WorkTarget&{readonly reason:'terminate'|'handoff'})=>Promise<WorkSessionView>;
  readonly resume:(envelope:CommandEnvelope,payload:WorkTarget)=>Receipt<WorkSessionView>;
  readonly spawnChild:(request:WorkChildRequest)=>Readonly<{status:'unsupported';code:'child_spawn_unsupported'}>;
  readonly dispose:()=>void;
