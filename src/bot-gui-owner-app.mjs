@@ -103,7 +103,8 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     producer=installOwnedBotProducer({ownerCtx,host,caller:owner,originAgent:agent,botId:bot.botId,botEpoch:bot.epoch,
       authorityEpoch,cwd,rootInstructionRef:'authenticated-single-bot-main-goal',execution:{beforeExecute:async()=>{current();}}});
     contactOwner=installSelectedBotContactOwner({ownerCtx,expectedHost:host,connection,peer,connectionGeneration:generation,
-      getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,requireOwnedGeneration:true});
+      getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,requireOwnedGeneration:true,
+      canSend:()=>{current();return modelStatus()==='available';}});
     selectRead(bot.botId);
     ledger.put('guiOwner','selected',{botId:bot.botId,sessionId:agent.id,configVersion:bot.configVersion,botEpoch:bot.epoch});
   }
