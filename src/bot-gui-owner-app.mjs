@@ -87,7 +87,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     }
     return port;
   }
-  const modelGate=ownerCtx.on('agent/pre-step', event => {
+  const modelGate=ownerCtx.on('agent/pre-step', (event,next) => {
     current();
     requireValue(modelStatus()==='available','gui_model_requests_disabled');
     const id=event.agent?.id;
@@ -95,6 +95,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     requireValue(ownerCtx.tools.schemas().length === 0,'gui_global_tools_denied');
     const tools=ownerCtx.tools.schemas(event.agent).map(t=>t.name);
     requireValue(id === selected.sessionId ? canonical(tools) === canonical(['dsh_bot_delegate']) : tools.length === 0,'gui_agent_tools_denied');
+    return next();
   });
   async function bindMain(bot,checkpoint,{fresh=false}={}) {
     checkpoint();
