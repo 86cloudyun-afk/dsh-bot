@@ -227,13 +227,13 @@ test('authenticated registry archives still refuse traversal paths before creati
   await assert.rejects(fs.lstat(join(root, 'escaped.js')), { code: 'ENOENT' });
 });
 
-test('missing dependency after staging cleans only the claimed output', async t => {
+test('missing dependency after staging retains the failed output', async t => {
   const { options, root } = await fixture(t);
   const productPath = join(options.productRoot, 'package.json'), meta = JSON.parse(await fs.readFile(productPath));
   meta.peerDependencies['@deepseek-ai/absent-required-peer'] = '0.2.0-rc.2'; await json(productPath, meta);
   const caller = join(root, 'caller'); await write(join(caller, 'keep.txt'), 'caller content');
   await assert.rejects(module.assembleDistributionRuntime(options), { code: 'RUNTIME_DEPENDENCY_CLOSURE_MISSING' });
-  await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+  assert.equal((await fs.lstat(options.outputDirectory)).isDirectory(), true);
   assert.equal(await fs.readFile(join(caller, 'keep.txt'), 'utf8'), 'caller content');
 });
 
@@ -338,7 +338,7 @@ test('CLI unknown decompression errors use a fixed category', async t => {
   assert.deepEqual(JSON.parse(result.stderr), { errorCategory: 'ASSEMBLY_FAILED' });
 });
 
-test('late output replacement preserves caller files under ownership-aware cleanup', async t => {
+test('late output replacement preserves caller files without cleanup', async t => {
   const { options, root } = await fixture(t), path = join(options.outputDirectory, 'distribution-runtime-manifest.json');
   let replaced = false;
   const reads = observeReads(t, async selected => {
@@ -348,7 +348,7 @@ test('late output replacement preserves caller files under ownership-aware clean
   });
   const cause = await module.assembleDistributionRuntime(options).then(() => assert.fail('replacement must be refused'), cause => cause);
   reads.restore(); assert.equal(replaced, true);
-  assert.equal(cause.cleanupErrorCategory, 'OUTPUT_OWNERSHIP_CHANGED');
+  assert.equal(cause.failureOutputPolicy, 'RETAINED_NO_AUTOMATIC_REMOVAL');
   assert.equal(await fs.readFile(join(options.outputDirectory, 'caller.txt'), 'utf8'), 'CALLER_REPLACEMENT_REMAINS');
 });
 
@@ -438,7 +438,7 @@ test('delegated overlay validation never reads a replaced linked manifest target
   await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
 });
 
-test('shared overlay verification reads only exclusive private views and removes them', async t => {
+test('shared overlay verification reads only exclusive private views and retains them', async t => {
   const { options, root } = await fixture(t), reads = observeReads(t);
   const result = await module.assembleDistributionRuntime(options); reads.restore();
   assert.equal(result.manifest.overlayVerificationBefore.trustedManifestPinChecked, true);
@@ -446,7 +446,9 @@ test('shared overlay verification reads only exclusive private views and removes
   assert.equal(reads.pathnameReads.some(path => path.startsWith(options.overlayDirectory + '/')), false, 'shared naked pathname reads must never use caller-controlled overlay files');
   const delegated = reads.pathnameReads.filter(path => path.includes('/.dsh-overlay-verify-') && path.endsWith('/artifact-manifest.json'));
   assert.equal(new Set(delegated.map(dirname)).size, 2, 'before and after checks must use distinct privately created file views');
-  assert.equal((await fs.readdir(root)).some(name => name.startsWith('.dsh-overlay-verify-')), false);
+  assert.equal((await fs.readdir(root)).filter(name => name.startsWith('.dsh-overlay-verify-')).length, 2);
+  assert.equal(result.manifest.overlayVerificationBefore.capturedViewRetained, true);
+  assert.equal(result.manifest.overlayVerificationAfter.automaticRemovalAttempted, false);
 });
 
 for (const kind of ['bytes', 'mode', 'extra']) test(`private overlay view still refuses original source ${kind} drift`, async t => {
@@ -463,10 +465,10 @@ for (const kind of ['bytes', 'mode', 'extra']) test(`private overlay view still 
   reads.restore(); assert.equal(changed, true);
   assert.equal(cause.code, kind === 'extra' ? 'ARTIFACT_FILE_SET_MISMATCH' : 'ARTIFACT_HASH_MISMATCH');
   await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
-  assert.equal((await fs.readdir(root)).some(name => name.startsWith('.dsh-overlay-verify-')), false);
+  assert.equal((await fs.readdir(root)).filter(name => name.startsWith('.dsh-overlay-verify-')).length, 1);
 });
 
-test('private verification view cleanup preserves a replaced caller directory', async t => {
+test('private verification view failure preserves a replaced caller directory', async t => {
   const { options, root } = await fixture(t); let replacement;
   const reads = observeReads(t, async selected => {
     if (replacement || !selected.includes('/.dsh-overlay-verify-') || !selected.endsWith('/artifact-manifest.json')) return;
@@ -475,7 +477,49 @@ test('private verification view cleanup preserves a replaced caller directory', 
   });
   const cause = await module.assembleDistributionRuntime(options).then(() => assert.fail('a replaced private verification view must be refused'), cause => cause);
   reads.restore(); assert.ok(replacement);
-  assert.equal(cause.cleanupErrorCategory, 'VERIFICATION_VIEW_OWNERSHIP_CHANGED');
+  assert.equal(cause.code, 'ENOENT');
   assert.equal(await fs.readFile(join(replacement, 'caller.txt'), 'utf8'), 'CALLER_VERIFICATION_REPLACEMENT_REMAINS');
   await assert.rejects(fs.lstat(options.outputDirectory), { code: 'ENOENT' });
+});
+
+test('failed assembly retains its output across replacement after cleanup admission', async t => {
+  const { options, root } = await fixture(t);
+  const productPath = join(options.productRoot, 'package.json'), meta = JSON.parse(await fs.readFile(productPath));
+  meta.peerDependencies['@deepseek-ai/absent-required-peer'] = '0.2.0-rc.2'; await json(productPath, meta);
+  const remove = mutableFs.rm; let replaced = false;
+  t.mock.method(mutableFs, 'rm', async (path, ...args) => {
+    if (path === options.outputDirectory && !replaced) {
+      // All earlier pathname ownership checks have completed. Mutate only this
+      // real fixture before the asynchronous recursive removal reaches disk.
+      replaced = true; await fs.rename(path, join(root, 'original-failed-output'));
+      await fs.mkdir(path, { mode: 0o700 }); await write(join(path, 'caller.txt'), 'CALLER_AFTER_ADMISSION');
+    }
+    return remove(path, ...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  await assert.rejects(module.assembleDistributionRuntime(options), { code: 'RUNTIME_DEPENDENCY_CLOSURE_MISSING' });
+  if (replaced) assert.equal(await fs.readFile(join(options.outputDirectory, 'caller.txt'), 'utf8'), 'CALLER_AFTER_ADMISSION');
+  else assert.equal((await fs.lstat(options.outputDirectory)).isDirectory(), true);
+});
+
+test('captured verification views are retained without asynchronous recursive removal', async t => {
+  const { options, root } = await fixture(t), remove = mutableFs.rm;
+  let replaced;
+  t.mock.method(mutableFs, 'rm', async (path, ...args) => {
+    if (dirname(String(path)) === root && String(path).includes('/.dsh-overlay-verify-') && !replaced) {
+      replaced = String(path); await fs.rename(path, join(root, 'original-captured-view'));
+      await fs.mkdir(path, { mode: 0o700 }); await write(join(path, 'caller.txt'), 'CALLER_VIEW_AFTER_ADMISSION');
+    }
+    return remove(path, ...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  await module.assembleDistributionRuntime(options);
+  if (replaced) assert.equal(await fs.readFile(join(replaced, 'caller.txt'), 'utf8'), 'CALLER_VIEW_AFTER_ADMISSION');
+  else {
+    const views = (await fs.readdir(root)).filter(name => name.startsWith('.dsh-overlay-verify-'));
+    assert.equal(views.length, 2);
+    for (const name of views) assert.equal((await fs.lstat(join(root, name))).mode & 0o777, 0o700);
+  }
 });

@@ -120,20 +120,11 @@ async function verifyOverlayView(options, manifest, temporaryParent) {
     await checkOverlayFileSet(options.overlayDirectory, expected);
     await checkOwnership();
   } catch (cause) { failure = cause; }
-  if (view) {
-    try {
-      const current = await fs.lstat(view);
-      if (!owned || !current.isDirectory() || current.isSymbolicLink() || current.ino !== owned.ino || current.dev !== owned.dev) throw error('VERIFICATION_VIEW_OWNERSHIP_CHANGED');
-      await fs.rm(view, { recursive: true, force: true });
-    } catch (cleanup) {
-      if (cleanup.code !== 'ENOENT') {
-        if (!failure) failure = error('VERIFICATION_VIEW_CLEANUP_FAILED');
-        failure.cleanupErrorCategory = cleanup.code;
-      }
-    }
-  }
+  // An asynchronous pathname check does not authorize a later recursive
+  // removal: another writer can replace the directory between those calls.
+  // Retain the owner-only captured view on both success and failure.
   if (failure) throw failure;
-  return result;
+  return { ...result, capturedViewRetained: true, automaticRemovalAttempted: false };
 }
 async function payloadFiles(root, at = '', skipModules = true) {
   if (at && (!safe(at) || prohibited(at))) throw error('PROHIBITED_PACKAGE_PAYLOAD');
@@ -404,14 +395,15 @@ export async function assembleDistributionRuntime(options) {
     try { await fs.mkdir(output, { mode: 0o700 }); } catch (cause) { if (cause.code === 'EEXIST') throw error('OUTPUT_ALREADY_EXISTS'); throw cause; }
     created = true;
     claimed = await fs.lstat(output);
-    const copiedFiles = new Map(official.files.map(file => [file.path, { ...file }]));
-    for (const file of official.files) await copyRecord(options.officialRoot, file, output, file.path);
     const coreNames = new Set(manifest.packages.map(x => x.name)), versions = new Map(manifest.packages.map(x => [x.name, x.version]));
+    // The original public graph has already been inventoried and pinned. Core
+    // packages replaced by the source-built overlay need not be copied and
+    // then recursively deleted from the caller-selected output pathname.
+    const replacedPrefixes = manifest.packages.map(pkg => 'node_modules/' + pkg.name + '/');
+    const retainedOfficialFiles = official.files.filter(file => !replacedPrefixes.some(prefix => file.path.startsWith(prefix)));
+    const copiedFiles = new Map(retainedOfficialFiles.map(file => [file.path, { ...file }]));
+    for (const file of retainedOfficialFiles) await copyRecord(options.officialRoot, file, output, file.path);
     await checkOwnership();
-    for (const pkg of manifest.packages) {
-      await fs.rm(packagePath(output, pkg.name), { recursive: true, force: true });
-      for (const path of copiedFiles.keys()) if (path.startsWith('node_modules/' + pkg.name + '/')) copiedFiles.delete(path);
-    }
     for (const file of manifest.files) {
       const slot = file.path.split('/')[1], pkg = manifest.packages.find(x => x.slot === slot);
       const destination = 'node_modules/' + pkg.name + '/' + file.path.split('/').slice(2).join('/');
@@ -512,11 +504,7 @@ export async function assembleDistributionRuntime(options) {
     await checkOwnership();
     return { runtimeDirectory: output, dsh: join(output, 'node_modules/.bin/dsh'), manifestPath: join(output, RECEIPT), manifestSha256: sha(receiptBytes), ownership: { ino: claimed.ino, dev: claimed.dev }, manifest: receipt };
   } catch (cause) {
-    if (created && !claimed) cause.cleanupErrorCategory = 'ARTIFACT_OWNERSHIP_UNAVAILABLE';
-    if (claimed) {
-      try { const current = await fs.lstat(output); if (current.isDirectory() && !current.isSymbolicLink() && current.ino === claimed.ino && current.dev === claimed.dev) await fs.rm(output, { recursive: true, force: true }); else cause.cleanupErrorCategory = 'OUTPUT_OWNERSHIP_CHANGED'; }
-      catch (cleanup) { if (cleanup.code !== 'ENOENT') cause.cleanupErrorCategory = cleanup.code ?? cleanup.message; }
-    }
+    if (created) cause.failureOutputPolicy = 'RETAINED_NO_AUTOMATIC_REMOVAL';
     throw cause;
   }
 }
@@ -560,8 +548,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } catch (cause) {
     const ioCodes = new Set(['ENOENT', 'EACCES', 'EPERM', 'EEXIST', 'ENOTDIR', 'EIO', 'ENOMEM', 'ELOOP', 'ERR_ACCESS_DENIED']);
     const errorCategory = ownErrors.has(cause) || ioCodes.has(cause?.code) ? cause.code : 'ASSEMBLY_FAILED';
-    const cleanup = cause?.cleanupErrorCategory;
-    const cleanupErrorCategory = cleanup === undefined ? undefined : ioCodes.has(cleanup) || ['ARTIFACT_OWNERSHIP_UNAVAILABLE', 'OUTPUT_OWNERSHIP_CHANGED', 'VERIFICATION_VIEW_OWNERSHIP_CHANGED'].includes(cleanup) ? cleanup : 'CLEANUP_FAILED';
-    process.stderr.write(JSON.stringify({ errorCategory, cleanupErrorCategory }) + '\n'); process.exitCode = 1;
+    const failureOutputPolicy = cause?.failureOutputPolicy === 'RETAINED_NO_AUTOMATIC_REMOVAL' ? cause.failureOutputPolicy : undefined;
+    process.stderr.write(JSON.stringify({ errorCategory, failureOutputPolicy }) + '\n'); process.exitCode = 1;
   }
 }
