@@ -23,6 +23,7 @@ export interface AgentPresetCatalog { readonly domain:'agentPreset';readonly sta
 export interface AgentPresetSessionView { readonly id:string;readonly blank:boolean;readonly projectionValues?:Readonly<{agentPreset?:string|null}> }
 /** Durable creation-only intent. No dispatch or paid execution capability. */
 export interface CreationIntent {
+ readonly nonce?:string;readonly plannedBinding?:OwnedGenerationBinding;readonly workDepth?:0|1;readonly parentBinding?:OwnedGenerationBinding;
  readonly workBinding?:Readonly<{task_id:string;generation:number}>;
  readonly kind?:'execution';readonly taskId?:string;readonly taskEpoch?:number;readonly taskRevision?:number;
  readonly operationId:string;readonly sessionId:string;readonly botId:string;readonly botEpoch:number;
@@ -135,6 +136,7 @@ export type WorkState='queued'|'admitted'|'running'|'settling'|'unknown'|'waitin
 export type WorkUnsupportedCode='unsupported_work_generation_receipts'|'legacy_work_unreconciled'|'capacity_exhausted'|'work_start_not_invoked'|'work_start_unknown'|'work_stop_unconfirmed'|'work_generation_fenced'|'work_lookup_timeout'|'work_lookup_failed'|'work_receipt_unknown';
 export interface WorkFence {readonly reason:'terminate'|'handoff'|'resumed';readonly generation:number;readonly operationId:string}
 export interface WorkSessionView extends WorkDelegation {
+ readonly depth:0|1;readonly parentTaskId:string|null;readonly parentSessionId:string|null;readonly parentGeneration:number|null;
  readonly botId:string;readonly taskId:string;readonly sessionId:string;readonly generation:number;readonly revision:number;readonly taskEpoch:number;
  readonly state:WorkState;readonly creationState:'reserved'|'confirmed'|'unknown';readonly held:boolean;readonly fence:WorkFence|null;
  readonly creationOperationId:string|null;readonly creationReceipt:CreationProof|null;readonly sessionCreation:WorkSessionCreation;readonly delivery:WorkDeliveryReceipt|null;
@@ -163,10 +165,10 @@ export interface WorkProducerProvenance {readonly producerId:string;readonly ing
 export interface WorkMessageBinding {readonly botId:string;readonly taskId:string;readonly sessionId:string;readonly generation:number;readonly operationId:string}
 export interface WorkProducerMessage {readonly id:string;readonly role:'user';readonly content:readonly unknown[];readonly source:WorkProducerProvenance&WorkMessageBinding&{readonly kind:'dsh-bot'}}
 /** Owner-only capability, captured synchronously once per original creation intent. */
-export type OwnedWorkCreationOptions = Readonly<{cwd:string}> & (Readonly<{port:OwnedCreationPort;portFor?:never}>|Readonly<{port?:never;portFor:(intent:CreationIntent)=>OwnedCreationPort}>);
+export type OwnedWorkCreationOptions = Readonly<{cwd:string;reserveGeneration?:boolean;bindSource?:(intent:CreationIntent,port:OwnedCreationPort,options:Readonly<{mode:'create'|'resume'}>)=>void;childPortFor?:(intent:CreationIntent,original:Readonly<{parentSource:object;parentGeneration:object;parentBinding:OwnedGenerationBinding;mode:'create'}>)=>OwnedCreationPort}> & (Readonly<{port:OwnedCreationPort;portFor?:never}>|Readonly<{port?:never;portFor:(intent:CreationIntent)=>OwnedCreationPort}>);
 /** Configuration travels separately from the native preparation; runtime branding is mandatory. */
 export interface OwnedGenerationRoute {readonly provider:string;readonly model:string;readonly maxTokens:number;readonly reasoningEffort:'off'}
-export interface OwnedGenerationBinding extends WorkBinding {readonly nonce:string;readonly inputMessageId:string;readonly messageIdentity:string;readonly slotLease:WorkSlotLease}
+export interface OwnedGenerationBinding extends WorkBinding {readonly nonce:string;readonly inputMessageId:string;readonly messageIdentity:string;readonly slotLease:WorkSlotLease;readonly parentWorkBinding?:OwnedGenerationBinding}
 export interface OwnedGenerationPreparation {readonly prepared:unknown;readonly route:OwnedGenerationRoute}
 /** Private open-time transport. Never accept these methods from tool or RPC arguments. */
 export interface OwnedWorkProducerOptions {readonly execution?:boolean;readonly requireOwnedGeneration?:boolean;readonly provenance:WorkProducerProvenance;readonly isCurrent:()=>boolean;readonly createMessage:(binding:WorkMessageBinding,provenance:WorkProducerProvenance,content:string)=>WorkProducerMessage;readonly send:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<void>;readonly inspect:(binding:WorkMessageBinding,message:WorkProducerMessage,signal?:AbortSignal)=>Promise<boolean>}
@@ -185,10 +187,11 @@ export interface OwnedWorkSessionPort {
  /** Wake original once and retain held/unknown when native terminal support is absent. */
  readonly executeMessage:(envelope:CommandEnvelope,target:WorkTarget,signal?:AbortSignal)=>Promise<WorkSessionView>;
  readonly collect:(target:WorkTarget)=>Promise<WorkSessionView>;
+ /** Read only this original generation; never starts or replaces it. */readonly inspectOriginalGeneration:(target:WorkTarget)=>Promise<WorkSessionView>;
  readonly fence:(envelope:CommandEnvelope,payload:WorkTarget&{readonly reason:'terminate'|'handoff'})=>Receipt<WorkSessionView>;
  /** Persist the product fence before requesting exact retained native-generation cancellation. */
  readonly stop:(envelope:CommandEnvelope,payload:WorkTarget&{readonly reason:'terminate'|'handoff'})=>Promise<WorkSessionView>;
  readonly resume:(envelope:CommandEnvelope,payload:WorkTarget)=>Receipt<WorkSessionView>;
- readonly spawnChild:(request:WorkChildRequest)=>Readonly<{status:'unsupported';code:'child_spawn_unsupported'}>;
+ readonly spawnChild:{(request:WorkChildRequest):Readonly<{status:'unsupported';code:'child_spawn_unsupported'}>;(envelope:CommandEnvelope,request:WorkChildRequest,signal?:AbortSignal):Promise<WorkSessionView>};
  readonly dispose:()=>void;
 }

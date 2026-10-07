@@ -8,9 +8,11 @@ export const REQUIRED_NATIVE=Object.freeze(['session_model','dispatch_freeze','o
 const registryIdentity=registry=>registry?.[Symbol.for('cordis.tracker')] ?? registry;
 const durablePorts=new WeakMap();
 const generationPorts=new WeakMap();
-const creationCoordinates=i=>canonical([i.operationId,i.sessionId,i.cwd,i.agentPreset,i.kind??null,i.botId,i.botEpoch,i.configVersion,i.authorityEpoch,i.taskId??null,i.taskEpoch??null,i.taskRevision??null]);
+const creationCoordinates=i=>canonical([i.operationId,i.nonce??null,i.sessionId,i.cwd,i.agentPreset,i.kind??null,i.botId,i.botEpoch,i.configVersion,i.authorityEpoch,i.taskId??null,i.taskEpoch??null,i.taskRevision??null,i.workDepth??null,i.parentBinding??null]);
 /** Private exact-port lookup; neither copied ports nor historical JSON recover a source. */
 export function ownedGenerationSourceFor(port,intent){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);if(!row)return null;retained.check(intent);requireValue(row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');return row.source??null;}
+/** Exact private original preparation snapshot for native blank control; JSON is only a selector. */
+export function ownedGenerationCreationIntentFor(port,intent){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);if(!row)return null;retained.check(intent);requireValue(row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');return row.creationIntent??null;}
 /** Internal evidence query: labels or copied/wrapped ports cannot mint this identity. */
 export const ownedCreationProofKind=(port,intent)=>durablePorts.get(port)?.has(intent.operationId)?'stock-session-durable':'fixture-contract';
 export class DshAdapter {
@@ -102,13 +104,16 @@ export class DshAdapter {
       requireValue(mode==='resume'?preparation.prepared.mode==='resume':preparation.prepared.mode===undefined||preparation.prepared.mode==='create','unsupported_owned_generation_restore');
       const route=Object.freeze(structuredClone(preparation.route));requireValue(route&&typeof route.provider==='string'&&typeof route.model==='string'&&Number.isSafeInteger(route.maxTokens)&&route.maxTokens>0&&route.reasoningEffort==='off','invalid_generation_route');
       const presets=context.agentPresets,presetIdentity=registryIdentity(presets),resolved=await presets.resolve(i.agentPreset);check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&resolved.id===i.agentPreset,'mode_registry_changed');
-      const row={coordinates:creationCoordinates(i),prepared:preparation.prepared,sdk,source:null,mode,expectedDelegateTool:definition};rows.set(i.operationId,row);return{row,route,presets,presetIdentity};};
+      const parentAgent=preparation.prepared.parentAgent;
+      requireValue(i.workDepth===1?role==='work'&&parentAgent&&parentAgent.id===i.parentBinding?.sessionId&&context.agents.get(parentAgent.id)===parentAgent&&scopeOf(parentAgent.ctx)===parentAgent:parentAgent===undefined,'native_creation_lineage_conflict');
+      const row={coordinates:creationCoordinates(i),prepared:preparation.prepared,sdk,source:null,mode,expectedDelegateTool:definition,creationIntent:mode==='create'&&typeof i.nonce==='string'?Object.freeze({binding:Object.freeze(structuredClone(i)),operationId:i.operationId,nonce:i.nonce}):null};rows.set(i.operationId,row);return{row,route,presets,presetIdentity};};
     const setup=(i,presets,presetIdentity)=>async(agentCtx,agent)=>{check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity,'mode_registry_changed');const preset=await presets.mount(agentCtx,i.agentPreset);check(i);requireValue(preset.id===i.agentPreset&&scopeOf(agentCtx)===agent,'native_creation_binding_changed');return{commit:()=>{check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&context.tools.schemas().length===0&&context.tools.schemas(agent).length===0,'native_creation_binding_changed');}};};
     const port=Object.freeze({
       createOwnedSession:async i=>{
         const {row,route,presets,presetIdentity}=await prepare(i,'create');check(i);
         requireValue(row.sdk.isPreparedOwnedGenerationSource(row.prepared,context,i.sessionId,role)===true,'unsupported_owned_generation_preparation');
-        const handle=await context.agents.create({sessionId:i.sessionId,agentOptions:route,meta:{cwd:i.cwd,agentPreset:i.agentPreset},protectedModelCalls:row.prepared.protectedModelCalls,
+        const parentAgent=row.prepared.parentAgent;
+        const handle=await context.agents.create({sessionId:i.sessionId,agentOptions:route,meta:{cwd:i.cwd,agentPreset:i.agentPreset,...parentAgent===undefined?{}:{parentSession:parentAgent.id,origin:'subagent',delegationDepth:(parentAgent.session.header.delegationDepth??0)+1}},protectedModelCalls:row.prepared.protectedModelCalls,...parentAgent===undefined?{}:{parentAgent},
           setup:setup(i,presets,presetIdentity)});
         row.handle=handle;row.session=handle.agent.session;check(i);mounted(row);
         if(role==='work'&&row.expectedDelegateTool===undefined){row.source=row.prepared.attach(handle);requireValue(row.sdk.isOwnedGenerationSource(row.source,context)===true,'unsupported_owned_generation_source');}
