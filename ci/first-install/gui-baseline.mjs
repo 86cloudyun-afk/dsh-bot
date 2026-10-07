@@ -115,6 +115,23 @@ export async function guiBaseline(state){
   const value=await until(boot,view=>view.modelRequestsEnabled===false&&view.modelDispatchStatus==='disabled','DOCUMENTED_DEFAULT_MODEL_GATE_NOT_READY');
   await until(()=>page.locator('[data-dsh-bot-goal]').isDisabled(),Boolean,'DOCUMENTED_MODEL_INPUT_NOT_DISABLED');return value;
  };
+ const refresh=async()=>{
+  const button=page.getByRole('button',{name:'刷新回复与工作',exact:true});await button.waitFor({state:'visible',timeout:15000});
+  const pending=page.waitForResponse(response=>{
+   const url=new URL(response.url());return url.origin===origin&&url.pathname==='/dsh-bot-owner/selectedView'
+    &&response.request().method()==='POST';
+  },{timeout:15000});pending.catch(()=>{});
+  await button.click();
+  const response=await pending;requireThat(response.status()===200,'DOCUMENTED_REFRESH_NOT_KNOWN');
+  const result=(await response.json()).result;
+  requireThat(result?.ok===true&&result.value?.version===1&&result.value.status==='ready'
+   &&result.value.botId===report.identity.botId&&result.value.contact?.sessionId===report.identity.mainSessionId,
+   'DOCUMENTED_REFRESH_ORIGINAL_IDENTITIES_NOT_KNOWN');
+  await until(()=>page.locator('[data-dsh-bot-owner-status]').count(),value=>value===0,'DOCUMENTED_REFRESH_NOT_READY');
+  await until(()=>page.getByRole('button',{name:'刷新回复与工作',exact:true}).isVisible(),Boolean,'DOCUMENTED_REFRESH_NOT_READY');
+  const current=await disabled();
+  requireThat(JSON.stringify(identity(current))===JSON.stringify(report.identity),'DOCUMENTED_REFRESH_IDENTITIES_CHANGED');
+ };
  const screenshot=async name=>{
   const url=new URL(page.url());requireThat(url.origin===origin&&url.pathname==='/'&&url.search===''&&url.hash===''
    &&await page.locator('[data-dsh-bot-panel]').isVisible(),'SCREENSHOT_CLEAN_AUTHENTICATED_URL_REQUIRED');
@@ -154,7 +171,7 @@ export async function guiBaseline(state){
   await page.locator('[data-dsh-bot-create]').click();
   const created=await until(boot,value=>Boolean(value.selectedBotId)&&value.creation?.state==='created','DOCUMENTED_CREATE_NOT_KNOWN');
   report.identity=identity(created);await disabled();report.checks.push('actual-gui-create-native-bot-default-model-input-disabled');
-  await page.getByRole('button',{name:'刷新回复与工作',exact:true}).click();await disabled();
+  await refresh();
   report.checks.push('actual-user-refresh-keeps-default-model-input-disabled');await screenshot('view-created.png');
   await page.close();await stop();
   // A new original CLI process reads the same freshly created installed Home.
@@ -164,7 +181,7 @@ export async function guiBaseline(state){
   const restored=await page.goto(origin,{waitUntil:'domcontentloaded'});requireThat(restored?.status()===200,'STOCK_PERSISTENT_COOKIE_RESTART_FAILED');await connect();
   const current=await until(boot,value=>value.selectedBotId===report.identity.botId,'DOCUMENTED_BOT_NOT_RESTORED');
   requireThat(JSON.stringify(identity(current))===JSON.stringify(report.identity),'DOCUMENTED_RESTART_IDENTITIES_CHANGED');
-  await disabled();await page.getByRole('button',{name:'刷新回复与工作',exact:true}).click();await disabled();
+  await disabled();await refresh();
   report.checks.push('cold-same-home-original-ledger-bot-main-session-cookie-restored');await screenshot('view-restarted.png');
   await stop();await browser.close();browser=undefined;
   const after=await verifyInstalled(state,initialProof);requireThat(after.proof.profileSha256===before.proof.profileSha256,'DOCUMENTED_PROFILE_CHANGED');
