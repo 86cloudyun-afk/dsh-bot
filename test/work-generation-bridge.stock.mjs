@@ -38,7 +38,7 @@ test('actual SDK synthetic stop observes durable product fence before original a
   const aborted=()=>{assert.equal(f.query().fence.reason,'terminate');abortObserved=true;reject(new DOMException('Synthetic original cancellation','AbortError'));};
   if(init.signal.aborted)aborted();else init.signal.addEventListener('abort',aborted,{once:true});
  }));
- await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'work',generation:1});for(let n=0;n<30&&!f.requests();n++)await tick();
+ await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'work',generation:1});await f.waitRequest();
  const stopped=await f.call('stop','fenceWorkSession',{task_id:'work',generation:1,reason:'terminate'});
  assert.equal(abortObserved,true);assert.equal(stopped.held,true);assert.equal(stopped.generationObservation.local,'returned');assert.equal(stopped.generationObservation.remote,'UNKNOWN');assert.equal(stopped.generationObservation.settlementVerified,false);assert.equal(f.requests(),1);
 });

@@ -39,7 +39,7 @@ export async function generationFixture(t,fetcher=()=>syntheticResponse()) {
  if(typeof Native.prepareOwnedGenerationSource!=='function'||typeof Native.isPreparedOwnedGenerationSource!=='function')throw Error('FUTURE_NATIVE_GENERATION_SDK_REQUIRED');
  if(typeof Provider.DeepSeekProtectedProviders!=='function')throw Error('FUTURE_PROTECTED_PROVIDER_SDK_REQUIRED');
  const directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'generation-')),ctx=new Context();ctx.baseUrl=new URL(`file://${directory}/fixture.json`).href;
- const originalFetch=globalThis.fetch;let requests=0;globalThis.fetch=async(...args)=>{requests++;return fetcher(...args);};
+ const originalFetch=globalThis.fetch,started=Promise.withResolvers();let requests=0;globalThis.fetch=async(...args)=>{requests++;started.resolve();return fetcher(...args);};
  const ledger=new Ledger(join(directory,'product.sqlite'));t.after(async()=>{globalThis.fetch=originalFetch;await ctx.fiber.dispose();ledger.close();});
  ctx.provide('agentDefaultModel',{currentSelection:()=>route});ctx.provide('attachments',{});ctx.provide('fileUploads',{registerAgentResolver:()=>()=>{}});ctx.provide('fs',{});ctx.provide('workspaceRegistry',{archivedSessionIds:[],list:()=>[],get:()=>undefined});ctx.provide('typert',{lookups:{register:()=>()=>{},configure:()=>()=>{}},contexts:{configureHost:()=>()=>{}}});
  await ctx.plugin(Loader);
@@ -51,5 +51,6 @@ export async function generationFixture(t,fetcher=()=>syntheticResponse()) {
  const command=(name,payload,revision=null,epochs={})=>host.executeOwned(caller,envelope(name,payload,revision,epochs),payload).result;
  const bot=command('createBot',{name:'Synthetic Generation Bot',config:{contact:{provider:route.provider,model:route.model},agentPreset:preset}});
  const prepareGeneration=(intent,role='work')=>({prepared:Native.prepareOwnedGenerationSource({ownerCtx:ctx,providerFactory:ctx.deepseekProtectedProviders.lookup(route.provider),sessionId:intent.sessionId,role,route,isCurrent:()=>true}),route});
- return {Native,ctx,ledger,host,caller,bot,directory,command,prepareGeneration,requests:()=>requests};
+ const waitRequest=async()=>{let timer;try{await Promise.race([started.promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('SYNTHETIC_NATIVE_DISPATCH_TIMEOUT')),2000);})]);}finally{clearTimeout(timer);}};
+ return {Native,ctx,ledger,host,caller,bot,directory,command,prepareGeneration,requests:()=>requests,waitRequest};
 }
