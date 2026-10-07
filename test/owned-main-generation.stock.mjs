@@ -6,7 +6,7 @@ import {createUserMessage} from '@deepseek-ai/dsh-llm';
 import {defineTool} from '@deepseek-ai/dsh-tools';
 import {SessionCreationDriver} from '../src/session-creation.mjs';
 import {createOwnedMainGenerationBridge} from '../src/owned-main-generation.mjs';
-import {generationFixture,syntheticResponse,tick} from './work-generation-fixture.mjs';
+import {generationFixture,syntheticResponse,tick,observeUntil} from './work-generation-fixture.mjs';
 
 async function main(t,fetcher){
  const f=await generationFixture(t,fetcher),i=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
@@ -20,16 +20,15 @@ async function main(t,fetcher){
 }
 
 test('actual SDK synthetic main settles exact input and shares sequential admission across private consumers',async t=>{
- const f=await main(t),first=await f.send();let result=first;
- for(let n=0;n<30&&!result.generationObservation.settlementVerified;n++){await tick();result=await f.bridge.inspect(first.binding,()=>{});}
+ const f=await main(t),first=await f.send(),result=await observeUntil(()=>f.bridge.inspect(first.binding,()=>{}),value=>value.generationObservation.settlementVerified);
  assert.equal(result.generationObservation.remote,'settled');assert.equal(result.generationObservation.usageKnown,true);assert.equal(result.generationObservation.settlementVerified,true);
  const second=await f.send('main-operation-two');assert.equal(second.binding.generation,2);assert.equal(second.binding.sessionId,first.binding.sessionId);assert.notEqual(second.binding.inputMessageId,first.binding.inputMessageId);
  assert.deepEqual(await f.bridge.inspect(first.binding,()=>{}),result);assert.deepEqual(JSON.parse(JSON.stringify(result)),result);
 });
 
 test('actual SDK synthetic main missing finish keeps UNKNOWN and blocks allocation of next original input',async t=>{
- const f=await main(t,()=>syntheticResponse({finish:false})),first=await f.send();for(let n=0;n<30&&f.agent.status!=='idle';n++)await tick();
- const result=await f.bridge.inspect(first.binding,()=>{});assert.equal(result.generationObservation.local,'returned');assert.equal(result.generationObservation.remote,'UNKNOWN');
+ const f=await main(t,()=>syntheticResponse({finish:false})),first=await f.send();await f.waitRequest();
+ const result=await observeUntil(()=>f.bridge.inspect(first.binding,()=>{}),value=>value.generationObservation.local==='returned');assert.equal(result.generationObservation.local,'returned');assert.equal(result.generationObservation.remote,'UNKNOWN');
  const before=f.ledger.list('ownedMainGeneration');await assert.rejects(()=>f.send('main-operation-two'),e=>e.code==='main_generation_unsettled');assert.deepEqual(f.ledger.list('ownedMainGeneration'),before);assert.equal(f.requests(),1);
 });
 

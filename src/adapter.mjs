@@ -88,20 +88,21 @@ export class DshAdapter {
     durablePorts.set(port,verified);return port;
   }
   /** Prepare actual protected calls before mounting; retain the original native handle privately. */
-  ownedGenerationCreationPort(sessionIds,{scopeOf,role,prepareGeneration,isCurrent,initialization}) {
+  ownedGenerationCreationPort(sessionIds,{scopeOf,role,prepareGeneration,isCurrent,initialization,delegateTool}) {
     requireValue(Array.isArray(sessionIds)&&sessionIds.length>0&&typeof scopeOf==='function'&&['main','work'].includes(role)&&typeof prepareGeneration==='function'&&typeof isCurrent==='function','invalid_creation_options');
     const owned=new Set(sessionIds.map(id=>text(id,'sessionId',200))),context=this.context,rows=new Map(),verified=new Set(),initialMode=initialization===undefined?undefined:freezeInitialSessionMode(initialization);
+    requireValue(delegateTool===undefined||delegateTool?.name==='dsh_bot_delegate','invalid_generation_tool');
     const check=i=>{requireValue(owned.has(i?.sessionId),'scope_denied');requireValue(context&&this.context===context&&isCurrent()===true,'host_disconnected');};
     const mounted=row=>{const {handle,session}=row;requireValue(context.agents.get(session.id)===handle.agent&&context.sessions.get(session.id)===session&&handle.agent.session===session&&scopeOf(handle.agent.ctx)===handle.agent,'native_creation_binding_changed');};
     const readBlank=async(i,row)=>{check(i);mounted(row);const stat=await context.sessionPersistence.stat(i.sessionId);check(i);mounted(row);requireValue(stat?.sizeBytes>0,'native_creation_not_durable');const stored=await context.sessionPersistence.open(i.sessionId,'read');try{check(i);mounted(row);const log=await stored.read();check(i);mounted(row);requireValue(stored.header.id===i.sessionId&&stored.header.cwd===i.cwd&&stored.header.agentPreset===i.agentPreset&&stored.header.isSeeded===false&&isBlankInitialSessionEvents(log.events,initialMode)&&canonical(log.events)===canonical(row.session.snapshotEvents()),'native_creation_not_durable');}finally{await stored.close();check(i);mounted(row);}};
     const readRestored=async(i,row)=>{check(i);mounted(row);requireValue(row.mode==='resume','unsupported_owned_generation_restore');const stored=await context.sessionPersistence.open(i.sessionId,'read');try{check(i);mounted(row);const log=await stored.read();check(i);mounted(row);requireValue(stored.header.id===i.sessionId&&stored.header.cwd===i.cwd&&stored.header.agentPreset===i.agentPreset&&stored.header.isSeeded===false&&canonical(log.events)===canonical(row.session.snapshotEvents()),'native_restore_binding_changed');}finally{await stored.close();check(i);mounted(row);}};
-    const prepare=async(i,mode,delegateTool)=>{check(i);const sdk=await loadOwnedGenerationSdk();check(i);const {Context}=await import('@deepseek-ai/cordis');check(i);requireValue(context instanceof Context,'unsupported_host_identity');requireValue(!rows.has(i.operationId),'native_creation_replay');
-      const preparation=await prepareGeneration(Object.freeze(structuredClone(i)),Object.freeze({mode,...delegateTool===undefined?{}:{delegateTool}}));check(i);
+    const prepare=async(i,mode,definition=delegateTool)=>{check(i);const sdk=await loadOwnedGenerationSdk();check(i);const {Context}=await import('@deepseek-ai/cordis');check(i);requireValue(context instanceof Context,'unsupported_host_identity');requireValue(!rows.has(i.operationId),'native_creation_replay');
+      const preparation=await prepareGeneration(Object.freeze(structuredClone(i)),Object.freeze({mode,...definition===undefined?{}:{delegateTool:definition}}));check(i);
       requireValue(preparation&&sdk.isPreparedOwnedGenerationSource(preparation.prepared,context,i.sessionId,role)===true,'unsupported_owned_generation_preparation');
       requireValue(mode==='resume'?preparation.prepared.mode==='resume':preparation.prepared.mode===undefined||preparation.prepared.mode==='create','unsupported_owned_generation_restore');
       const route=Object.freeze(structuredClone(preparation.route));requireValue(route&&typeof route.provider==='string'&&typeof route.model==='string'&&Number.isSafeInteger(route.maxTokens)&&route.maxTokens>0&&route.reasoningEffort==='off','invalid_generation_route');
       const presets=context.agentPresets,presetIdentity=registryIdentity(presets),resolved=await presets.resolve(i.agentPreset);check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&resolved.id===i.agentPreset,'mode_registry_changed');
-      const row={coordinates:creationCoordinates(i),prepared:preparation.prepared,sdk,source:null,mode,expectedDelegateTool:delegateTool};rows.set(i.operationId,row);return{row,route,presets,presetIdentity};};
+      const row={coordinates:creationCoordinates(i),prepared:preparation.prepared,sdk,source:null,mode,expectedDelegateTool:definition};rows.set(i.operationId,row);return{row,route,presets,presetIdentity};};
     const setup=(i,presets,presetIdentity)=>async(agentCtx,agent)=>{check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity,'mode_registry_changed');const preset=await presets.mount(agentCtx,i.agentPreset);check(i);requireValue(preset.id===i.agentPreset&&scopeOf(agentCtx)===agent,'native_creation_binding_changed');return{commit:()=>{check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&context.tools.schemas().length===0&&context.tools.schemas(agent).length===0,'native_creation_binding_changed');}};};
     const port=Object.freeze({
       createOwnedSession:async i=>{
@@ -110,7 +111,7 @@ export class DshAdapter {
         const handle=await context.agents.create({sessionId:i.sessionId,agentOptions:route,meta:{cwd:i.cwd,agentPreset:i.agentPreset},protectedModelCalls:row.prepared.protectedModelCalls,
           setup:setup(i,presets,presetIdentity)});
         row.handle=handle;row.session=handle.agent.session;check(i);mounted(row);
-        if(role==='work'){row.source=row.prepared.attach(handle);requireValue(row.sdk.isOwnedGenerationSource(row.source,context)===true,'unsupported_owned_generation_source');}
+        if(role==='work'&&row.expectedDelegateTool===undefined){row.source=row.prepared.attach(handle);requireValue(row.sdk.isOwnedGenerationSource(row.source,context)===true,'unsupported_owned_generation_source');}
         requireValue(await context.sessions.flush(row.session),'native_creation_not_durable');check(i);mounted(row);await readBlank(i,row);return{sessionId:i.sessionId};
       },
       /** Explicit sealed-history resume; never reruns the original creation driver or input. */
@@ -119,7 +120,7 @@ export class DshAdapter {
         requireValue(row.sdk.isPreparedOwnedGenerationSource(row.prepared,context,i.sessionId,role)===true,'unsupported_owned_generation_preparation');
         const handle=await context.agents.resume({resumeSessionId:i.sessionId,agentOptions:route,protectedModelCalls:row.prepared.protectedModelCalls,...row.prepared.parentAgent===undefined?{}:{parentAgent:row.prepared.parentAgent},setup:setup(i,presets,presetIdentity)});
         row.handle=handle;row.session=handle.agent.session;check(i);mounted(row);
-        if(role==='work'){row.source=row.prepared.attach(handle);requireValue(row.sdk.isOwnedGenerationSource(row.source,context)===true,'unsupported_owned_generation_source');}
+        if(role==='work'&&row.expectedDelegateTool===undefined){row.source=row.prepared.attach(handle);requireValue(row.sdk.isOwnedGenerationSource(row.source,context)===true,'unsupported_owned_generation_source');}
         requireValue(await context.sessions.flush(row.session),'native_creation_not_durable');check(i);mounted(row);await readRestored(i,row);return{sessionId:i.sessionId};
       },
       inspectOwnedCreation:async i=>{check(i);const row=rows.get(i.operationId);if(!row?.handle)return null;requireValue(row.coordinates===creationCoordinates(i),'native_creation_binding_changed');mounted(row);if(row.mode==='resume')await readRestored(i,row);else await readBlank(i,row);
@@ -133,11 +134,20 @@ export class DshAdapter {
   }
   /** Main tool binding occurs after original blank proof and before any model input. */
   bindOwnedMainGeneration(port,intent,delegateTool){
-    const retained=generationPorts.get(port);requireValue(retained?.adapter===this&&retained.role==='main'&&retained.verified.has(intent?.operationId),'unsupported_owned_generation_source');retained.check(intent);
+    return this.#bindOwnedDelegateGeneration(port,intent,delegateTool,'main');
+  }
+  /** Parent work's exact owner-approved tool is registered after its original zero-tool proof. */
+  bindOwnedWorkGeneration(port,intent,delegateTool){
+    return this.#bindOwnedDelegateGeneration(port,intent,delegateTool,'work');
+  }
+  #bindOwnedDelegateGeneration(port,intent,delegateTool,role){
+    const retained=generationPorts.get(port);requireValue(retained?.adapter===this&&retained.role===role&&retained.verified.has(intent?.operationId),'unsupported_owned_generation_source');retained.check(intent);
     const row=retained.rows.get(intent.operationId);requireValue(row?.handle&&row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');retained.mounted(row);
     if(row.source){requireValue(row.delegateTool===delegateTool,'native_creation_binding_changed');return row.source;}
-    if(row.mode==='resume')requireValue(row.expectedDelegateTool===delegateTool,'native_creation_binding_changed');else requireValue(isBlankInitialSessionEvents(row.session.snapshotEvents(),retained.initialMode,row.session.seq),'native_creation_not_blank');
-    const source=row.prepared.attach(row.handle,{delegateTool});requireValue(row.sdk.isOwnedGenerationSource(source,retained.context)===true,'unsupported_owned_generation_source');row.delegateTool=delegateTool;row.source=source;return source;
+    if(row.mode==='resume'||role==='work'||row.expectedDelegateTool!==undefined)requireValue(row.expectedDelegateTool===delegateTool,'native_creation_binding_changed');
+    if(row.mode==='create')requireValue(isBlankInitialSessionEvents(row.session.snapshotEvents(),retained.initialMode,row.session.seq),'native_creation_not_blank');
+    const tools=retained.context.tools;requireValue(delegateTool?.name==='dsh_bot_delegate'&&tools.schemas().length===0&&tools.schemas(row.handle.agent).length===1&&tools.get('dsh_bot_delegate',row.handle.agent)===delegateTool,'native_creation_binding_changed');
+    const source=row.prepared.attach(row.handle,role==='main'?{delegateTool}:undefined);requireValue(row.sdk.isOwnedGenerationSource(source,retained.context)===true,'unsupported_owned_generation_source');row.delegateTool=delegateTool;row.source=source;return source;
   }
   unsupported(operation) { return {status:'unsupported',operation,reason:'Missing verified native contract; no native mutation issued'}; }
   selectSessionModel() { return this.unsupported('selectSessionModel'); }

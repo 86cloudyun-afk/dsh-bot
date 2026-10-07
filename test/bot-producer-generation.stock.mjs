@@ -15,7 +15,7 @@ test('actual SDK synthetic producer prepares work before create and routes origi
  const work=await producer.delegate({operationId:'producer-generation',nonce:'producer-generation',task_id:'producer-work',goal:'Return synthetic work result',completion_condition:'Observe original native receipt'});assert.equal(work.sessionCreation.state,'created');assert.equal(prepared,1);
  await producer.execute({task_id:work.task_id,generation:work.generation});
  let timeout;try{await Promise.race([done.promise,new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('synthetic_result_route_timeout')),2000);})]);}finally{clearTimeout(timeout);}
- assert.equal(f.requests(),2);
+ await f.waitRequest(2);assert.equal(f.requests(),2);
  const workGeneration=f.ledger.list('workGeneration')[0];assert.equal(workGeneration.generationObservation.settlementVerified,true);assert.equal(workGeneration.held,false);assert.equal(workGeneration.state,'waiting');
  const rows=f.ledger.list('ownedMainGeneration');assert.equal(rows.length,1);assert.equal(rows[0].binding.kind,'work-result');assert.equal(rows[0].binding.parentWorkBinding.sessionId,work.sessionId);assert.equal(f.ledger.list('workObservedResponse')[0].generationBinding.inputMessageId,rows[0].binding.inputMessageId);
 });

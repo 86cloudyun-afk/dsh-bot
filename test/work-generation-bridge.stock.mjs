@@ -3,8 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {scopeOf} from '@deepseek-ai/dsh-scope';
 import {createUserMessage} from '@deepseek-ai/dsh-llm';
+import {defineTool} from '@deepseek-ai/dsh-tools';
 import {SessionCreationDriver} from '../src/session-creation.mjs';
-import {generationFixture,envelope,tick,syntheticResponse} from './work-generation-fixture.mjs';
+import {generationFixture,envelope,tick,syntheticResponse,observeUntil} from './work-generation-fixture.mjs';
 
 async function work(t,fetcher) {
  const f=await generationFixture(t,fetcher);
@@ -22,14 +23,14 @@ async function work(t,fetcher) {
 test('actual SDK synthetic loop reserves before sole native source send and releases exact original receipt',async t=>{
  let f;f=await work(t,()=>{assert.equal(f.port.query({}).held,1);return syntheticResponse();});
  const started=await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'work',generation:1});assert.equal(started.held,true);
- let result=started;for(let n=0;n<30&&result.held;n++){await tick();result=await f.port.collect({task_id:'work',generation:1});}
+ const result=await observeUntil(()=>f.port.collect({task_id:'work',generation:1}),value=>!value.held);
  assert.equal(result.state,'waiting');assert.equal(result.held,false);assert.equal(result.generationObservation.local,'returned');assert.equal(result.generationObservation.remote,'settled');assert.equal(result.generationObservation.usageKnown,true);assert.equal(result.generationObservation.settlementVerified,true);assert.equal(f.requests(),1);
  const before=structuredClone(result);assert.deepEqual(await f.port.collect({task_id:'work',generation:1}),before);assert.equal(f.requests(),1);assert.deepEqual(JSON.parse(JSON.stringify(result)),result);
 });
 
 for(const options of [{finish:false},{usage:false}])test(`actual SDK synthetic local return keeps original UNKNOWN slot for ${JSON.stringify(options)}`,async t=>{
  const f=await work(t,()=>syntheticResponse(options));await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'work',generation:1});
- let result;for(let n=0;n<30;n++){await tick();result=await f.port.collect({task_id:'work',generation:1});if(result.generationObservation.local==='returned')break;}
+ const result=await observeUntil(()=>f.port.collect({task_id:'work',generation:1}),value=>value.generationObservation.local==='returned');
  assert.equal(result.generationObservation.local,'returned');assert.equal(result.held,true);assert.equal(result.generationObservation.remote,'UNKNOWN');assert.equal(result.generationObservation.settlementVerified,false);assert.equal(f.requests(),1);
 });
 
@@ -45,7 +46,7 @@ test('actual SDK synthetic stop observes durable product fence before original a
 
 test('actual SDK synthetic late original receipt cannot release resumed generation or change its slot lease',async t=>{
  let request=0;const f=await work(t,()=>++request===1?syntheticResponse():new Promise(()=>{}));
- await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'work',generation:1});let first;for(let n=0;n<30;n++){await tick();first=await f.port.collect({task_id:'work',generation:1});if(!first.held)break;}assert.equal(first.state,'waiting');
+ await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'work',generation:1});const first=await observeUntil(()=>f.port.collect({task_id:'work',generation:1}),value=>!value.held);assert.equal(first.state,'waiting');
  f.call('resume','resumeWorkSession',{task_id:'work',generation:1});await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'work',generation:2});
  const newer=f.query();assert.equal(newer.held,true);assert.equal(newer.generation,2);assert.equal(f.port.query({}).held,1);
  for(let n=0;n<2;n++)assert.deepEqual(await f.port.collect({task_id:'work',generation:1}),newer);
@@ -84,4 +85,13 @@ test('actual SDK private resume rejects a copied resume label without SDK prepar
  assert.equal(typeof port.resumeOwnedSession,'function');
  await assert.rejects(()=>port.resumeOwnedSession(intent),e=>e.code==='unsupported_owned_generation_preparation');
  assert.equal(f.ctx.agents.get(intent.sessionId),undefined);assert.equal(f.ctx.sessions.get(intent.sessionId),undefined);assert.equal(f.requests(),0);
+});
+
+test('actual SDK zero-work source cannot acquire delegate authority from a private tool label',async t=>{
+ const f=await generationFixture(t),definition=defineTool({name:'dsh_bot_delegate',description:'Synthetic denied zero-work upgrade',parameters:{},output:{schema:{type:'object',additionalProperties:true},render:()=>[]},async execute(){return{};}}),intent={operationId:'work-tool-label-refused',sessionId:`session-${crypto.randomUUID()}`,cwd:f.directory,agentPreset:'synthetic/empty',kind:'execution',botId:f.bot.botId,botEpoch:1,configVersion:f.bot.configVersion,authorityEpoch:1};
+ const port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'work',delegateTool:definition,isCurrent:()=>true,prepareGeneration:i=>f.prepareGeneration(i)});
+ await port.createOwnedSession(intent);assert.equal((await port.inspectOwnedCreation(intent)).scopedTools,0);
+ const unregister=f.ctx.agents.get(intent.sessionId).ctx.tools.register(definition);t.after(unregister);
+ assert.equal(typeof f.host.adapter.bindOwnedWorkGeneration,'function');
+ assert.throws(()=>f.host.adapter.bindOwnedWorkGeneration(port,intent,definition),e=>e.code==='GENERATION_TOOL_POLICY_CHANGED');assert.equal(f.requests(),0);
 });

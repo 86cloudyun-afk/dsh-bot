@@ -1,11 +1,13 @@
 import type {Context} from '@deepseek-ai/cordis';
 import type {InitialSessionModeSnapshot} from './initial-session-blank.mjs';
+import type {GuiDelegationPolicy} from './bot-gui-delegation-policy.mjs';
 export interface BotGuiOwnerConfig {
   homeDirectory:string;
   cwd:string;
   agentPreset?:string;
   route?:{provider:string;model:string;reasoning:string};
   initialMode?:InitialSessionModeSnapshot;
+  delegationPolicy?:GuiDelegationPolicy;
 }
 export declare const name:'dsh-bot-gui-owner-app';
 export declare const inject:string[];
