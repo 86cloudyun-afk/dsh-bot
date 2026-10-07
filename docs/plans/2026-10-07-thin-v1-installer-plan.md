@@ -34,10 +34,10 @@
 
 **Interfaces:** `installV1(options)` and `parseV1InstallArguments(values)`; descriptor fields and exact paths are defined in the design.
 
-- [ ] Write fixture tests for trusted digest, target selection, protected/traversal paths, symlink never-read, file hash/mode changes, required tool/lock/product/source/notice references and existing caller output.
-- [ ] Run `node --test scripts/install-v1.test.mjs`; preserve the expected RED output before implementing.
-- [ ] Implement safe pinned descriptor/file reads and fixed-layout validation, then copy only selected listed files into the owned materials view with a second complete comparison.
-- [ ] Run the input-boundary tests and verify fixed refusal categories and absent/unmodified output.
+- [x] Write fixture tests for trusted digest, target selection, protected/traversal paths, symlink never-read, file hash/mode changes, required tool/lock/product/source/notice references and existing caller output.
+- [x] Run `node --test scripts/install-v1.test.mjs`; preserve the expected RED output before implementing.
+- [x] Implement safe pinned descriptor/file reads and fixed-layout validation, then copy only selected listed files into the owned materials view with a second complete comparison.
+- [x] Run the input-boundary tests and verify fixed refusal categories and absent/unmodified output.
 
 ### Task 2: Fresh public SDK, real assembly and relocated GUI profile
 
