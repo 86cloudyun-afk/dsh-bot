@@ -12,6 +12,7 @@ import {installOwnedBotProducer} from './bot-producer.mjs';
 import {installSelectedBotContactOwner} from './selected-bot-contact-owner.mjs';
 import {installExplicitOperatorReadBinding} from './explicit-operator-read-binding.mjs';
 import {canonical,digest,requireValue,text} from './errors.mjs';
+import {freezeInitialSessionMode,isBlankInitialSessionEvents} from './initial-session-blank.mjs';
 
 export const name='dsh-bot-gui-owner-app';
 export const inject=['appReady','appExit','dshBotGuiStartup','connection','webServer','llm','sessions',
@@ -25,7 +26,7 @@ const creationView = row => row ? {version:1,operationId:row.operationId,nonce:r
   botId:row.botId ?? null,sessionId:row.sessionId ?? null,preciseNativeSettlementVerified:false} : null;
 
 export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset='dsh-bot/empty',
-  route={provider:'deepseek-official',model:'deepseek-flash',reasoning:'off'},modelRequestsEnabled=false}) {
+  route={provider:'deepseek-official',model:'deepseek-flash',reasoning:'off'},modelRequestsEnabled=false,initialMode}) {
   requireValue(ownerCtx instanceof Context && [homeDirectory,cwd].every(v => typeof v === 'string' && isAbsolute(v)), 'gui_owner_required');
   const owner=ownerCtx.fiber, connection=identity(ownerCtx.get('connection')), peer=connection?.operator;
   requireValue(connection instanceof HostConnectionService && peer?.ctx instanceof Context && scopeOf(peer.ctx) === peer,'gui_actual_operator_required');
@@ -33,6 +34,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   text(agentPreset,'agentPreset',200);
   exact(route,['provider','model','reasoning']);
   const modelRoute=Object.freeze({provider:text(route.provider,'provider',100),model:text(route.model,'model',200),reasoning:text(route.reasoning,'reasoning',40)});
+  const initialization=initialMode===undefined?undefined:freezeInitialSessionMode(initialMode);
   const ledger=new Ledger(join(homeDirectory,'bot-gui.sqlite'));
   const host=new Host({ledger,ownerHumanId:'this-home-authenticated-gui-owner',ownerCapability:owner,adapter:new DshAdapter(ownerCtx)});
   const authorityEpoch=ledger.get('grant','native-owner')?.epoch;
@@ -62,6 +64,10 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   readBinding=installExplicitOperatorReadBinding({ownerCtx,expectedHost:host,readPort});
   const selectRead=botId=>readBinding.select({audience:'this-host-authenticated-operator',botIds:botId?[botId]:[],taskIds:[]});
   selectRead(null);
+  function boundInitialMode(row) {
+    requireValue(canonical(row.initialMode??null)===canonical(initialization??null),'gui_initial_mode_changed');
+    return row.initialMode==null?undefined:freezeInitialSessionMode(row.initialMode);
+  }
   const modelGate=ownerCtx.on('agent/pre-step', event => {
     current();
     requireValue(modelRequestsEnabled,'gui_model_requests_disabled');
@@ -78,12 +84,18 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     const log=await ownerCtx.sessionController.inspect(bot.contactSessionId);checkpoint();
     requireValue(log?.meta?.id === bot.contactSessionId && log.meta.cwd === cwd && log.meta.agentPreset === agentPreset
       && log.meta.isSeeded === false && Array.isArray(log.events),'gui_main_log_unconfirmed');
-    if(fresh) requireValue(log.events.length === 0,'gui_main_not_blank');
+    const original=ledger.list('guiCreationOperation').find(row=>row.botId===bot.botId&&row.sessionId===bot.contactSessionId);
+    requireValue(original,'gui_original_receipt_required');
+    const mode=boundInitialMode(original),prefixLength=mode?3:0;
+    requireValue(isBlankInitialSessionEvents(log.events.slice(0,prefixLength),mode)
+      && !log.events.slice(prefixLength).some(event=>['permission/preset','sandbox/mode','approval/policy'].includes(event.type)),'gui_initial_mode_changed');
+    if(fresh) requireValue(isBlankInitialSessionEvents(log.events,mode),'gui_main_not_blank');
     const found=await ownerCtx.sessionController.resolveAgent(bot.contactSessionId);checkpoint();
     const agent=found?.agent;
     requireValue(agent?.id === bot.contactSessionId && agent.session?.id === bot.contactSessionId
       && ownerCtx.agents.get(agent.id) === agent && scopeOf(agent.ctx) === agent
       && ownerCtx.tools.schemas().length === 0 && ownerCtx.tools.schemas(agent).length === 0,'gui_main_scope_unconfirmed');
+    if(fresh) requireValue(isBlankInitialSessionEvents(agent.session.snapshotEvents(),mode,agent.session.seq),'gui_main_not_blank');
     selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:agent.id});
     current();
     producer=installOwnedBotProducer({ownerCtx,host,caller:owner,originAgent:agent,botId:bot.botId,botEpoch:bot.epoch,
@@ -96,6 +108,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   function rowFor(payload) {
     const row=ledger.get('guiCreationOperation',payload.operationId);
     requireValue(row && row.nonce === payload.nonce,'gui_original_receipt_required');
+    boundInitialMode(row);
     return row;
   }
   async function finishCreation(original,checkpoint) {
@@ -120,7 +133,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     const creation=ledger.get('creation',row.creationOperation.operationId);
     requireValue(creation?.sessionId === row.sessionId && creation.botId === row.botId,'gui_creation_binding_unconfirmed');
     if(creation.state !== 'created') {
-      await new SessionCreationDriver({host,caller:owner,port:host.adapter.ownedCreationPort([row.sessionId],{scopeOf,durable:true}),
+      await new SessionCreationDriver({host,caller:owner,port:host.adapter.ownedCreationPort([row.sessionId],{scopeOf,durable:true,initialization:boundInitialMode(row)}),
         isCurrent:()=>{try{checkpoint();return true;}catch{return false;}}}).run(owner,creation.operationId);
       checkpoint();
     }
@@ -154,7 +167,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
           else {
             requireValue(ledger.list('guiCreationOperation').length === 0 && ledger.list('bot').length === 0,'gui_single_bot_required');
             row={operationId:payload.operationId,nonce:payload.nonce,binding:digest(payload),name:payload.name,
-              state:'unknown',createdAt:new Date().toISOString(),botOperation:{operationId:randomUUID(),nonce:randomUUID(),createdAt:new Date().toISOString()}};
+              initialMode:initialization??null,state:'unknown',createdAt:new Date().toISOString(),botOperation:{operationId:randomUUID(),nonce:randomUUID(),createdAt:new Date().toISOString()}};
             ledger.put('guiCreationOperation',row.operationId,row);
           }
         }
@@ -178,6 +191,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   ownerCtx.effect(()=>()=>dispose());
   try {
     current();await host.adapter.refreshSessionModeCatalog();current();
+    for(const original of ledger.list('guiCreationOperation'))boundInitialMode(original);
     const saved=ledger.get('guiOwner','selected');
     if(saved) {
       const bot=host.object('bot',saved.botId);

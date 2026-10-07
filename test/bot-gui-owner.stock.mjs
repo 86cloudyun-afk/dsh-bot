@@ -9,6 +9,9 @@ import {stockRuntime,preset,envelope} from './bot-producer-fixture.mjs';
 import {Ledger} from '../src/ledger.mjs';
 import {Host} from '../src/host.mjs';
 import {DshAdapter} from '../src/adapter.mjs';
+import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy';
+import Approval from '@deepseek-ai/dsh-user-approval';
+import PermissionPresets from '@deepseek-ai/dsh-permission-presets';
 globalThis.__offlineIO ??= {model:0};
 
 async function installer() {
@@ -19,7 +22,7 @@ async function installer() {
   assert.equal(typeof m.installBotGuiOwner,'function','missing private authenticated GUI owner composer');
   return m.installBotGuiOwner;
 }
-async function runtime(directory) {
+async function runtime(directory,{initialMode}={}) {
   const ctx = await stockRuntime(directory), handlers = new Map(), routes = new Map();
   // The stock Controller's cold projection reads this external adapter fact.
   ctx.attachments.imageLimits={maxImageBytes:1024,maxImagesPerMessage:1,maxMessageImageBytes:1024,maxImagePixels:1024,maxImageDimension:32,mediaTypes:['image/png']};
@@ -32,12 +35,52 @@ async function runtime(directory) {
   connection.register = function(owner,channel,handler) {handlers.set(channel,handler);return register.call(this,owner,channel,handler);};
   const cwd = join(directory,'harmless');
   await mkdir(cwd,{recursive:true});
+  if(initialMode) {
+    await ctx.plugin(SandboxPolicy,{mode:initialMode.sandboxMode,workspaceRoot:cwd});
+    await ctx.plugin(Approval,{policy:initialMode.approvalPolicy});
+    // Unused external shell adapter fact; actual official mode services write the Session prefix.
+    ctx.provide('shell',{sandboxMode:initialMode.sandboxMode});
+    await ctx.plugin(PermissionPresets,{defaultPreset:initialMode.permissionPreset,
+      presets:{[initialMode.permissionPreset]:{sandbox:initialMode.sandboxMode,approval:initialMode.approvalPolicy}}});
+  }
   return {ctx,connection,handlers,options:{ownerCtx:ctx,homeDirectory:directory,cwd,
-    agentPreset:preset,route:{provider:'offline-blocked',model:'never-invoked',reasoning:'off'},modelRequestsEnabled:false},
+    agentPreset:preset,route:{provider:'offline-blocked',model:'never-invoked',reasoning:'off'},modelRequestsEnabled:false,initialMode},
     call(endpoint,payload={},peer=connection.operator) {return handlers.get('/dsh-bot-gui')(endpoint,payload,new AbortController().signal,peer);},
     async dispose(){connection.register=register;await ctx.fiber.dispose();}};
 }
 const create = {operationId:'gui-create-original',nonce:'gui-create-original-nonce',name:'One Bot'};
+
+test('GUI original creation binds an immutable official initial mode before native effects and rejects changed restart modes', async () => {
+  const install=await installer(),directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-mode-'));
+  const expected={permissionPreset:'workspace-write',sandboxMode:'workspace-write',approvalPolicy:'ask'},input={...expected};
+  const f=await runtime(directory,{initialMode:input}),app=await install(f.options),before=globalThis.__offlineIO.model;
+  try {
+    input.approvalPolicy='never';
+    const response=await f.call('createBot',create);
+    assert.equal(response.ok,true);assert.equal(response.value.state,'created');
+    const ledger=new Ledger(join(directory,'bot-gui.sqlite'));
+    let row;
+    try{row=ledger.get('guiCreationOperation',create.operationId);assert.deepEqual(row.initialMode,expected);}
+    finally{ledger.close();}
+    const log=await f.ctx.sessionController.inspect(row.sessionId);
+    assert.deepEqual(log.events.map(event=>[event.type,event.data]),[
+      ['permission/preset',{preset:'workspace-write'}],['sandbox/mode',{mode:'workspace-write'}],['approval/policy',{policy:'ask'}],
+    ]);
+    assert.equal(globalThis.__offlineIO.model,before);
+    // An UNKNOWN native creation remains its original operation, never a replacement.
+    assert.equal((await f.call('reconcileCreate',{operationId:create.operationId,nonce:create.nonce})).value.sessionId,row.sessionId);
+  } finally{app.dispose();await f.dispose();}
+  const same=await runtime(directory,{initialMode:{...expected}}),resumed=await install(same.options);
+  try {
+    const boot=(await same.call('bootstrap')).value;
+    assert.equal(boot.creation.operationId,create.operationId);assert.equal(boot.creation.state,'created');
+    assert.equal(same.ctx.agents.list().length,1);
+    assert.deepEqual(same.ctx.tools.schemas(same.ctx.agents.get(boot.contactSessionId)).map(tool=>tool.name),['dsh_bot_delegate']);
+  } finally{resumed.dispose();await same.dispose();}
+  const changed=await runtime(directory,{initialMode:{permissionPreset:'read-only',sandboxMode:'read-only',approvalPolicy:'ask'}});
+  try {await assert.rejects(()=>install(changed.options),{code:'gui_initial_mode_changed'});assert.equal(changed.ctx.agents.list().length,0);}
+  finally{await changed.dispose();}
+});
 
 test('private GUI composer exposes no ledger to a forged gateway peer and creates exactly one durable tool-free main', async () => {
   const install = await installer(), directory = await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-owner-'));

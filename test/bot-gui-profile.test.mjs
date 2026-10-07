@@ -44,6 +44,12 @@ test('fresh GUI profile installs packed owner with real BrowserAuth and an empty
   assert.ok((await readFile(join(profileDir,'node_modules','dsh-bot-gui-surface','client.js'),'utf8')).includes("id:'dsh-bot-gui-surface'"));
   assert.equal(added.find(p => p.id === 'bot-gui-owner').config.homeDirectory, r.home);
   assert.equal(added.find(p => p.id === 'bot-gui-owner').config.cwd, r.cwd);
+  assert.deepEqual(added.find(p => p.id === 'bot-gui-owner').config.initialMode,
+    {permissionPreset:'workspace-write',sandboxMode:'workspace-write',approvalPolicy:'ask'});
+  assert.deepEqual(patch.find(p => p.id === 'sandbox-policy')?.config,
+    {mode:'workspace-write',workspaceRoot:r.cwd});
+  assert.deepEqual(patch.find(p => p.id === 'approval')?.config,{policy:'ask'});
+  assert.equal(patch.find(p => p.id === 'permission')?.config.defaultPreset,'workspace-write');
   assert.equal(patch.find(p => p.id === 'llm-deepseek').config.apiKeyEnv, 'DEEPSEEK_API_KEY');
   assert.deepEqual(await readdir(r.cwd), []);
   assert.deepEqual(r.credentialReferences, ['DEEPSEEK_API_KEY']);
