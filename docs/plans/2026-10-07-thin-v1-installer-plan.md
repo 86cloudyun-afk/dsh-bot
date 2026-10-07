@@ -4,7 +4,7 @@
 
 **Goal:** Install a coherent private v1 runtime and fresh GUI profile from caller-pinned thin files, fetching the official public SDK through an isolated npm operation.
 
-**Architecture:** One new orchestrator validates the descriptor and selected file inventory, creates exclusive verified materials, runs a fresh bounded npm install, then calls the existing reviewed consumer and GUI helper. The packed product is verified and unpacked without Git; all output is confined to one freshly owned root.
+**Architecture:** One new orchestrator validates the descriptor and selected file inventory, creates verified materials, runs a fresh bounded npm install, then calls the existing reviewed consumer and GUI helper. The packed product is verified and unpacked without Git. Writes target one fresh root under the explicit trusted-local-directory and exclusive-use assumption; pathname checks are not atomic inode-bound writes.
 
 **Tech stack:** Node 24, built-in filesystem/crypto/child-process APIs, existing consumer/exporter/package decoder/GUI helper.
 
@@ -18,6 +18,7 @@
 - No complete official SDK bytes in the thin artifact, no lifecycle/native/model/CLI startup during installation.
 - Fresh empty npm cache/config/Home; strict TLS and fixed HTTPS registry; filtered child environment and bounded timeout.
 - Fresh exclusive output/profile/work; every created failure is preserved without automatic recursive removal; no old Home/config/credentials.
+- A trusted local directory with no concurrent modification by another process/user is required. Receipts declare `outputWritesAtomic:false` and `concurrentOutputMutationSupported:false`; checkpoints refuse observed identity changes without guaranteeing atomic write binding.
 - Private qualification only; model gate false by default and credential reference only.
 
 ## Review focus
@@ -26,7 +27,7 @@
 - An unselected target may be unavailable; selecting it must still be refused on the wrong host.
 - Input mutation between validation/copy or within a descriptor read must never produce an accepted installation.
 - npm user settings, inherited provider keys and lifecycle flags must not affect the fresh child operation.
-- A replaced installation directory must survive every failure without new assembly writes; timeout must confirm the original owned group stopped or return bounded `SDK_INSTALL_STOP_UNKNOWN`.
+- Observed installation identity changes must refuse continuation and preserve failed output. Replacement after a completed checkpoint is an unsupported timing that can receive a write before the next refusal. Timeout must confirm the original owned group stopped or return bounded `SDK_INSTALL_STOP_UNKNOWN`.
 
 ### Task 1: Trusted thin input and material boundary
 
@@ -89,4 +90,17 @@ Independent exact `53da328` review closed the prior stop-deadline issue but repr
 
 The old 53da328 output-ownership signal rule and removal assertions describe that frozen revision, not this revised contract. The external fixture harness alone removes its test directories after child-stop confirmation. Failed real installations and intermediate materials remain for explicit external inspection/cleanup. Separate focused RED tests reproduced unreviewed imports before a missing ownership check and after a completed ownership check; both replacement fixtures' markers must stay absent after the captured-source repair. Fresh qualification of the parent's newer preserving consumer and final coherent product/Host bundle pins remain separate gates.
 
-The fresh preserving-installer suite passes 46/46 in `thin-preserve-repair/fresh-full-installer.log`. It includes actual guarded child teardown receipts with network/model/native/extra-child counters all zero, group absence for API fixtures and captured start-identity/stopped-state confirmation for the CLI orphan fixture. The initial unchanged-suite invocation lacked its required package fixture and failed 8 cases; that log is retained. After preparing the current source through a fresh offline, ignore-scripts npm pack with an exclusive cache/config view, the original safety-guarded GUI startup/bootstrap/package suite passes 15/15 in `fresh-unchanged-gui-package-qualified.log`. No real SDK download, native execution, model call or final runtime assembly occurred. The synthetic consumer integration still deliberately uses the frozen ede605ce fixture bytes; final bundle assembly must select the parent's separately reviewed preserving consumer and GUI/package helper pins.
+The frozen 857bb6b preserving-installer suite passed 46/46 in `thin-preserve-repair/fresh-full-installer.log`. It includes actual guarded child teardown receipts with network/model/native/extra-child counters all zero, group absence for API fixtures and captured start-identity/stopped-state confirmation for the CLI orphan fixture. The initial unchanged-suite invocation lacked its required package fixture and failed 8 cases; that log is retained. After preparing the current source through a fresh offline, ignore-scripts npm pack with an exclusive cache/config view, the original safety-guarded GUI startup/bootstrap/package suite passed 15/15 in `fresh-unchanged-gui-package-qualified.log`. No real SDK download, native execution, model call or final runtime assembly occurred. The synthetic consumer integration still deliberately uses the frozen ede605ce fixture bytes; final bundle assembly must select the parent's separately reviewed preserving consumer and GUI/package helper pins.
+
+### Authorized review correction: explicit exclusive-use output contract
+
+Fresh independent review of exact `857bb6b` found a material-write race after the final lstat returned. Its real owned fixture renamed the output, created a caller replacement and received one listed source-packet file before the next checkpoint rejected. The original RED at `thin-installer-review-857bb6b/write-race.log` remains unchanged; this is not an atomic-write fix. The parent disclosed the limitation and explicitly narrowed supported installation to trusted local directories, exclusive use and no concurrent modification by another process or user.
+
+- [x] Inspect and retain the original race evidence and frozen 857bb6b pin; do not rerun or rewrite it as GREEN.
+- [x] State the supported-directory assumptions and post-check write limitation throughout design and first-install documentation.
+- [x] Add fixed `outputWritesAtomic:false` and `concurrentOutputMutationSupported:false` fields to success results/manifests and failure-preservation receipts, with RED-to-GREEN filesystem-only receipt assertions.
+- [x] Verify existing filesystem/admission unit cases without another npm child, SDK, model or native operation; commit a new exact clean pin for independent review under the narrowed contract.
+
+All final hash/identity checks, captured descriptor-pinned helper sources and bounded immutable-original-child stop behavior remain unchanged. No extra asynchronous checkpoints are added to imply atomicity. The old full-suite and actual child-stop receipts remain historical evidence at their exact revision, rather than new-process evidence for this declaration correction.
+
+Fresh ordinary filesystem/admission checks pass 22/22 in `thin-output-contract-correction/fresh-filesystem-admission-qualified.log` with the existing safety guard and test isolation disabled. They verify the failure-preservation declarations without an npm or other child process. The missing-declaration RED remains in `receipt-contract-red.log`; it is distinct from the unchanged actual write-race RED. Success-result/manifest assertions were added to the existing coherent synthetic success fixture but were not rerun in this no-child verification scope. Those assertions and the eventual real thin first installation remain part of the parent-owned final integration/review gate.

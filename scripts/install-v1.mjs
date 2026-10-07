@@ -1,4 +1,5 @@
-/** Caller-pinned thin installer. Fetches public SDK bytes into a fresh private installation. */
+/** Caller-pinned thin installer. Requires a trusted, exclusively used local directory.
+ * Pathname checkpoints do not provide atomic inode-bound writes under concurrent mutation. */
 import * as fs from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {join,dirname,resolve,relative,isAbsolute,sep} from 'node:path';
@@ -9,6 +10,7 @@ import {spawn} from 'node:child_process';
 
 const CLI_VERSION='0.2.0-rc.2',NODE_VERSION='24.19.0',ownErrors=new WeakSet();
 const TERM_GRACE_MS=250,STOP_CONFIRMATION_MS=750;
+const outputContract=Object.freeze({outputWritesAtomic:false,concurrentOutputMutationSupported:false});
 const ioErrors=new Set(['ENOENT','EACCES','EPERM','EEXIST','ENOTDIR','EIO','ENOMEM','ELOOP','ERR_ACCESS_DENIED']),failurePreservations=new WeakMap();
 const fail=code=>{const cause=Object.assign(new Error(code),{code});ownErrors.add(cause);return cause;};
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -233,13 +235,13 @@ export async function installV1(options){
   await checkOwnership();
   for(const file of selection.selected){await readSafe(join(options.bundleDirectory,file.path),file);await readSafe(join(materials,file.path),file);}
   await readSafe(options.descriptorPath,descriptorRecord);await readSafe(options.npmCliPath,npmCliRecord);
-  const result={format:1,classification:'PRIVATE_LOCAL_THIN_INSTALLATION',installationDirectory:output,bundleDescriptorSha256:options.expectedDescriptorSha256,target:target.id,nodeVersion:NODE_VERSION,platform:process.platform,arch:process.arch,runtimeDirectory:runtime.runtimeDirectory,runtimeManifestPath:runtime.manifestPath,runtimeManifestSha256:runtime.manifestSha256,profileDirectory:join(output,'profile'),home:gui.home,cwd:gui.cwd,profile:gui.profile,dsh:gui.dsh,configPath:join(gui.home,'profiles',gui.profile,'cordis.patch.yml'),corePackageCount:74,externalPackageCount:28,gui,sdkInstallation,helperExecution:execution.evidence(),selectedInputFileCount:selection.selected.length,selectedInputFileIndexSha256:sha(JSON.stringify(selection.selected)),productManifestSha256:sha(product.manifestBytes),modelsEnabled:false,credentialReferences:['DEEPSEEK_API_KEY'],credentialsCreated:false,publicReleaseQualified:false,sandboxEnforcementVerified:false,manualStartup:{executable:process.execPath,arguments:[gui.dsh,'--profile',gui.profile,'--port','3080','--no-open'],environment:{DSH_HOME:gui.home}}};
+  const result={format:1,classification:'PRIVATE_LOCAL_THIN_INSTALLATION',...outputContract,installationDirectory:output,bundleDescriptorSha256:options.expectedDescriptorSha256,target:target.id,nodeVersion:NODE_VERSION,platform:process.platform,arch:process.arch,runtimeDirectory:runtime.runtimeDirectory,runtimeManifestPath:runtime.manifestPath,runtimeManifestSha256:runtime.manifestSha256,profileDirectory:join(output,'profile'),home:gui.home,cwd:gui.cwd,profile:gui.profile,dsh:gui.dsh,configPath:join(gui.home,'profiles',gui.profile,'cordis.patch.yml'),corePackageCount:74,externalPackageCount:28,gui,sdkInstallation,helperExecution:execution.evidence(),selectedInputFileCount:selection.selected.length,selectedInputFileIndexSha256:sha(JSON.stringify(selection.selected)),productManifestSha256:sha(product.manifestBytes),modelsEnabled:false,credentialReferences:['DEEPSEEK_API_KEY'],credentialsCreated:false,publicReleaseQualified:false,sandboxEnforcementVerified:false,manualStartup:{executable:process.execPath,arguments:[gui.dsh,'--profile',gui.profile,'--port','3080','--no-open'],environment:{DSH_HOME:gui.home}}};
   const resultBytes=Buffer.from(JSON.stringify(result,null,2)+'\n'),manifestPath=join(output,'installation-manifest.json');await checkOwnership();await fs.writeFile(manifestPath,resultBytes,{flag:'wx',mode:0o600});await checkOwnership();
   return{...result,installationManifestPath:manifestPath,installationManifestSha256:sha(resultBytes),ownership:{ino:claimed.ino,dev:claimed.dev}};
  }catch(cause){
   if(!created)throw cause;
   const code=ownErrors.has(cause)?cause.code:ioErrors.has(cause?.code)?cause.code:'THIN_INSTALL_FAILED',failure=Object.assign(new Error(code),{code});if(ownErrors.has(cause))ownErrors.add(failure);
-  const preservation=Object.freeze({state:'PRESERVED_AFTER_FAILURE',automaticRecursiveDeletion:false,identityKnown:Boolean(claimed),outputIdentity:Object.freeze({directory:output,ino:claimed?.ino??null,dev:claimed?.dev??null,mode:claimed?claimed.mode&0o777:null})});failure.failurePreservation=preservation;failurePreservations.set(failure,preservation);
+  const preservation=Object.freeze({state:'PRESERVED_AFTER_FAILURE',...outputContract,automaticRecursiveDeletion:false,identityKnown:Boolean(claimed),outputIdentity:Object.freeze({directory:output,ino:claimed?.ino??null,dev:claimed?.dev??null,mode:claimed?claimed.mode&0o777:null})});failure.failurePreservation=preservation;failurePreservations.set(failure,preservation);
   if(ownErrors.has(cause)&&cause.code==='SDK_INSTALL_STOP_UNKNOWN'){failure.cleanupErrorCategory='SDK_CHILD_STOP_UNKNOWN';failure.stopConfirmation=cause.stopConfirmation;}
   throw failure;
  }finally{execution?.close();}
