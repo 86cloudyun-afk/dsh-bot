@@ -19,6 +19,10 @@ import {HostConnectionService} from '@deepseek-ai/dsh-client-connection';
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy';
 import Approval from '@deepseek-ai/dsh-user-approval';
 import PermissionPresets from '@deepseek-ai/dsh-permission-presets';
+import Storage from '@deepseek-ai/dsh-storage';
+import * as StorageJson from '@deepseek-ai/dsh-storage-json';
+import * as StorageDomain from '@deepseek-ai/dsh-storage-domain';
+import WorkspaceRegistry from '@deepseek-ai/dsh-workspace';
 import * as Provider from '@deepseek-ai/dsh-llm-deepseek';
 import * as Native from '@deepseek-ai/dsh-experimental-native-run';
 import {installBotGuiOwner} from '../src/bot-gui-owner-app.mjs';
@@ -35,16 +39,17 @@ export async function guiGenerationRuntime(t,{directory,enabled=false,fetcher=()
   ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'deepseek-official',model:'deepseek-flash',maxTokens:2048,reasoningEffort:'off'})});
   ctx.provide('attachments',{imageLimits:{maxImageBytes:1024,maxImagesPerMessage:1,maxMessageImageBytes:1024,maxImagePixels:1024,maxImageDimension:32,mediaTypes:['image/png']}});
   ctx.provide('fileUploads',{registerAgentResolver:()=>()=>{}});ctx.provide('fs',{});
-  ctx.provide('workspaceRegistry',{archivedSessionIds:[],list:()=>[],get:()=>undefined});
   ctx.provide('typert',{lookups:{register:()=>()=>{},configure:()=>()=>{}},contexts:{configureHost:()=>()=>{}}});
   ctx.provide('webServer',{register:()=>()=>{}});
   await ctx.plugin(Loader);
   const provider={name:'gui-keyless-synthetic-provider',inject:['llm'],apply(child){Provider.registerDeepSeekProvider(child,'deepseek-official',{
     options:()=>Provider.resolveAdapterOptions({reasoningEffort:'off',maxTokens:2048,retryPolicy:{mode:'normal',maxRetries:0,backoff:{initialDelayMs:1,maxDelayMs:1,jitterRatio:0}}}),resolveAuth:async()=>({headers:{}})});}};
   const plugins={llm:LlmRuntime,sessions:SessionStore,projections:Projections,persistence:Persistence,prompt:SystemPrompt,tools:Tools,
-    agents:Agents,loop:AgentLoop,presets:Presets,preset:Preset,query:Query,controller:Controller,provider,protectedProviders:Provider.DeepSeekProtectedProviders};
+    agents:Agents,loop:AgentLoop,presets:Presets,preset:Preset,query:Query,controller:Controller,provider,protectedProviders:Provider.DeepSeekProtectedProviders,
+    storage:Storage,storageJson:StorageJson,storageDomain:StorageDomain,workspace:WorkspaceRegistry};
   Object.assign(ctx.loader.builtins,plugins);
   const rows=Object.keys(plugins).map(id=>({id,name:`cordis:${id}`,config:id==='persistence'?{root:join(directory,'sessions'),compression:'none'}:
+    id==='storageJson'?{root:join(directory,'storage')}:id==='storageDomain'?{backend:'json'}:
     id==='loop'?{agents:[]}:id==='presets'?{default:preset}:id==='preset'?{id:preset,plugins:[]}:id==='prompt'?{personaPrefix:'',includeHarnessIdentity:false}:
       id==='controller'?{nativeOpen:false}:{}}));
   await writeFile(join(directory,'native-fixture.json'),JSON.stringify(rows));await ctx.loader.root.update(rows);await ctx.loader.await();

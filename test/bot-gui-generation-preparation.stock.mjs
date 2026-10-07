@@ -36,6 +36,32 @@ test('GUI preparation uses only an actual journal-capable SDK before any native 
   assert.equal(f.ledger.list('ownedMainGeneration').length,0);
 });
 
+test('an altered original creation nonce cannot allocate a GUI journal or native preparation',async t=>{
+ const create=await preparer(),f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
+ const prepare=create({ownerCtx:f.ctx,host:f.host,homeDirectory:f.directory,cwd:f.directory,agentPreset:preset,
+  route:{provider:route.provider,model:route.model,reasoning:'off'},isOwnerCurrent:()=>true,canModelDispatch:()=>false});
+ t.after(()=>prepare.close());assert.equal(typeof intent.nonce,'string');
+ await assert.rejects(()=>prepare.prepare({...intent,nonce:'another-creation-nonce'},{role:'main',create:true,mainSessionId:intent.sessionId}),{code:'gui_native_creation_changed'});
+ assert.equal(f.ctx.agents.list().length,0);assert.equal(f.requests(),0);
+ await assert.rejects(lstat(join(f.directory,'owned-generations')),{code:'ENOENT'});
+});
+
+test('the GUI retains the complete original pre-native creation snapshot after the mutable intent is marked created',async t=>{
+ const create=await preparer(),f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);
+ const prepare=create({ownerCtx:f.ctx,host:f.host,homeDirectory:f.directory,cwd:f.directory,agentPreset:preset,
+  route:{provider:route.provider,model:route.model,reasoning:'off'},isOwnerCurrent:()=>true,canModelDispatch:()=>false});
+ t.after(()=>prepare.close());let original,result;
+ const port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'main',isCurrent:()=>true,
+  prepareGeneration:async actual=>{original=actual;result=await prepare.prepare(actual,{role:'main',create:true,mainSessionId:intent.sessionId});return result;}});
+ const created=await new SessionCreationDriver({host:f.host,caller:f.caller,port}).run(f.caller,intent.operationId);
+ assert.equal(created.state,'created');assert.equal(original.state,'creating');
+ assert.deepEqual(result.creationIntent,{binding:original,operationId:original.operationId,nonce:original.nonce});
+ assert.equal(Object.isFrozen(result.creationIntent),true);assert.equal(Object.isFrozen(result.creationIntent.binding),true);
+ const retained=f.ledger.get('guiNativeCreationOriginal',canonical([intent.botId,intent.sessionId,'main']));
+ assert.deepEqual(retained,result.creationIntent);assert.equal(retained.binding.state,'creating');
+ assert.equal(f.ledger.get('creation',intent.operationId).state,'created');assert.equal(f.requests(),0);
+});
+
 const delegateDefinition=()=>defineTool({name:'dsh_bot_delegate',description:'Synthetic original parent work only',parameters:{},
   output:{schema:{type:'object',additionalProperties:true},render:()=>[]},async execute(){return{};}});
 async function parentPreparationFixture(t){

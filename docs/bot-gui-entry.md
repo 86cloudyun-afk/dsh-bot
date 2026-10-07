@@ -28,6 +28,14 @@ DSH_HOME=/absolute/new-installation/home \
 
 默认启动为查看模式，不发模型请求。此 profile 需要已审核 runtime 提供官方的保护执行入口和 provider 注册服务；不支持该服务的旧 runtime 会拒绝启动。正式发送目标还需原会话通过能力和历史校验，并显式添加 `--enable-model-requests`。官方 provider 使用环境变量引用 `DEEPSEEK_API_KEY`；安装器和产品 Home 不写入模型密钥值。能力尚未确认时，界面保持只读并保留已有 Bot 和对话身份。
 
+要提交目标，先由启动环境安全提供 `DEEPSEEK_API_KEY`，再使用以下命令。这个选项只为本次启动开启模型请求，不会改写 profile；停止进程后，省略该选项重启即可回到默认查看模式。启用后仍会核对原会话能力，UNKNOWN 历史不会因启用选项而重发。
+
+```sh
+DSH_HOME=/absolute/new-installation/home \
+  /absolute/verified-runtime/node_modules/.bin/dsh \
+  --profile dsh-bot-gui --port 3080 --no-open --enable-model-requests
+```
+
 “消息已保存”表示原消息已持久入队；“停止请求已接受”表示已请求停止。回复、空闲状态和已接受的停止都不能单独证明工作已结束。状态为 UNKNOWN 时保留原代次和工作槽位，查询原回执，不重复发送。只有原生入口提供精确、可核对的终态证据后，才能回收对应槽位。
 
 上一轮仍在处理或结束状态为 UNKNOWN 时，新目标输入会暂停。处理中会自动刷新原状态；也可以点击“刷新回复与工作”或“查询原回执”。界面只有在该轮结束状态、完整用量和原生证明一致时显示“结束状态已核对”。未启动的排队工作显示“未占用槽位”，与已核对结束后的“已回收”区分。
