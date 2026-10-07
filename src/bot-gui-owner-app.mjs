@@ -68,7 +68,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   }
   function dispatchCurrent(){try{current();return true;}catch{return false;}}
   const generationPreparation=createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,agentPreset,route:modelRoute,initialization,
-    isOwnerCurrent:()=>{try{current();return true;}catch{return false;}},canModelDispatch:()=>modelStatus()==='available'});
+    isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}},canModelDispatch:()=>modelStatus()==='available'});
   function envelope(command,payload,row,revision=null,epochs={}) {
     return {operationId:row.operationId,nonce:row.nonce,command,payloadDigest:digest(payload),expectedRevision:revision,
       expectedEpochs:{nativeOwner:authorityEpoch,...epochs},rootHumanInstructionRef:'authenticated-single-bot-gui-owner',
@@ -155,8 +155,10 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
     contactOwner=installSelectedBotContactOwner({ownerCtx,expectedHost:host,connection,peer,connectionGeneration:generation,
       getConnectionGeneration:currentGeneration,selectedBotId:bot.botId,botEpoch:bot.epoch,authorityEpoch,contactAgent:agent,requireOwnedGeneration:true,generationSource:mainGenerationSource,
       canSend:()=>{current();return modelStatus()==='available';}});
-    if(typeof host.openOwnedBotLifecyclePort==='function')lifecyclePort=host.openOwnedBotLifecyclePort(owner,{botId:bot.botId,botEpoch:bot.epoch,authorityEpoch,
-      isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}},mainCreationPort:port,mainCreationIntent:intent});
+    if(typeof host.openOwnedBotLifecyclePort==='function'){
+      lifecyclePort=await host.openOwnedBotLifecyclePort(owner,{botId:bot.botId,botEpoch:bot.epoch,authorityEpoch,
+        isOwnerCurrent:()=>{try{lifetime();return true;}catch{return false;}},mainCreationPort:port,mainCreationIntent:intent});checkpoint();
+    }
     selectRead(bot.botId);
     ledger.put('guiOwner','selected',{botId:bot.botId,sessionId:agent.id,configVersion:bot.configVersion,botEpoch:bot.epoch});
   }
@@ -284,7 +286,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
   const unregister=ownerCtx.get('connection').rpc.handle('/dsh-bot-gui',handler);
   const dispose=()=>{
     if(closePromise)return closePromise;closed=true;
-    contactOwner?.dispose();producer?.dispose();lifecyclePort?.dispose();readBinding?.close();modelGate();void unregister?.();
+    contactOwner?.dispose();producer?.dispose();lifecyclePort?.dispose?.();readBinding?.close();modelGate();void unregister?.();
     // In-flight native operations observe closed before touching the database again.
     closePromise=Promise.allSettled([creationTail,...pendingActions]).then(async()=>{await generationPreparation.close();ledger.close();});return closePromise;
   };
@@ -298,7 +300,7 @@ export async function installBotGuiOwner({ownerCtx,homeDirectory,cwd,agentPreset
       requireValue(saved.sessionId === bot.contactSessionId && saved.configVersion === bot.configVersion
         && Number.isSafeInteger(saved.botEpoch)&&saved.botEpoch>0&&saved.botEpoch<=bot.epoch,'gui_saved_identity_changed');
       const coldRead=()=>{
-        lifetime();contactOwner?.dispose();producer?.dispose();lifecyclePort?.dispose();
+        lifetime();contactOwner?.dispose();producer?.dispose();lifecyclePort?.dispose?.();
         contactOwner=null;producer=null;lifecyclePort=null;mainGenerationSource=null;
         selected=Object.freeze({botId:bot.botId,botEpoch:bot.epoch,configVersion:bot.configVersion,sessionId:bot.contactSessionId});selectRead(bot.botId);
         contactOwner=installBotGuiColdOwner({ownerCtx,host,connection,peer,connectionGeneration:generation,getConnectionGeneration:currentGeneration,

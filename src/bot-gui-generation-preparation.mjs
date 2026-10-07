@@ -6,6 +6,7 @@ import {canonical,digest,requireValue} from './errors.mjs';
 import {loadOwnedGenerationSdk} from './owned-generation-bridge.mjs';
 import {freezeInitialSessionMode} from './initial-session-blank.mjs';
 import {createGuiGenerationPolicy} from './bot-gui-generation-policy.mjs';
+import {isOwnedBotLifecycleRestoreGrant,describeOwnedBotLifecycleRestore} from './owned-bot-lifecycle.mjs';
 
 const identity=value=>value?.[symbols.original]??value;
 const coordinates=intent=>canonical(['operationId','nonce','sessionId','cwd','agentPreset','kind','botId','botEpoch',
@@ -28,8 +29,8 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
   requireValue(route?.provider==='deepseek-official'&&typeof route.model==='string'&&route.model.length>0
     &&route.reasoning==='off','gui_native_route_required');
   const nativeRoute=Object.freeze({provider:route.provider,model:route.model,maxTokens:2048,reasoningEffort:'off'});
-  const mode=initialization===undefined?undefined:freezeInitialSessionMode(initialization),journals=new Set(),consumed=new Set();
-  let closed=false;
+  const mode=initialization===undefined?undefined:freezeInitialSessionMode(initialization),journals=new Set(),consumed=new Set(),entries=new Map();
+  let closed=false,archiveGate=null;
   function current(){
     requireValue(!closed&&ownerCtx.fiber.state===2&&ownerCtx.fiber.uid!==null&&host.adapter.context===ownerCtx,'gui_native_owner_stale');
     const live=isOwnerCurrent();if(live&&typeof live.then==='function')Promise.resolve(live).catch(()=>{});
@@ -102,6 +103,126 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
       &&coordinates(retained.binding)===coordinates(intent)&&['prepared','creating'].includes(retained.binding.state),'gui_original_creation_required');
     return freezeJSON(JSON.parse(canonical(retained)));
   }
+  function historyScope(intent,options){
+    current();const stored=host.ledger.get('creation',intent?.operationId),bot=host.object('bot',intent?.botId),grant=host.ledger.get('grant','native-owner');
+    requireValue(stored?.state==='created'&&coordinates(stored)===coordinates(intent)&&intent.cwd===cwd&&intent.agentPreset===agentPreset
+      &&['main','work'].includes(options?.role)&&bot.configVersion===intent.configVersion&&grant?.epoch===intent.authorityEpoch
+      &&host.isCreationOwnerGrant(grant),'gui_original_history_required');
+    const config=host.ledger.get('config',intent.configVersion),configured=config?.[options.role==='main'?'contact':'execution'];
+    requireValue(config?.agentPreset===agentPreset&&configured?.provider===nativeRoute.provider&&configured.model===nativeRoute.model
+      &&(configured.reasoning===null||configured.reasoning==='off'),'gui_original_history_required');
+    if(options.role==='main')requireValue(intent.kind!=='execution'&&bot.creationIntentId===intent.operationId&&bot.contactSessionId===intent.sessionId,'gui_original_history_required');
+    else requireValue(intent.kind==='execution'&&host.ledger.list('workTask').some(work=>work.botId===intent.botId&&work.taskId===intent.taskId
+      &&work.sessionId===intent.sessionId),'gui_original_history_required');
+    const creationIntent=originalCreation(intent,{role:options.role,create:false});
+    requireValue(same(creationIntent,options.originalCreationIntent),'gui_original_creation_changed');
+    return creationIntent;
+  }
+  function exactHistoryBinding(intent,role,binding){
+    requireValue(binding?.botId===intent.botId&&binding.sessionId===intent.sessionId&&binding.configVersion===intent.configVersion
+      &&binding.authorityEpoch===intent.authorityEpoch&&positive(binding.generation),'gui_original_history_required');
+    const row=host.ledger.get(role==='main'?'ownedMainGeneration':'workGeneration',canonical(role==='main'
+      ?[binding.botId,binding.sessionId,binding.generation]:[binding.botId,binding.taskId,binding.generation]));
+    requireValue(row&&same(row.binding,binding),'gui_original_history_required');
+    if(role==='work')originalInput(binding);
+  }
+  async function mountArchiveGate(sdk,check){
+    if(typeof sdk.mountOwnedGenerationArchiveGate!=='function')return;
+    archiveGate??=sdk.mountOwnedGenerationArchiveGate(ownerCtx);
+    await archiveGate;check();
+  }
+  async function openHistory(intent,options){
+    const creationIntent=historyScope(intent,options),key=canonical([options.role,intent.sessionId]);
+    const sdk=await loadOwnedGenerationSdk();historyScope(intent,options);
+    requireValue(['selectOwnedGenerationHistory','isOwnedGenerationHistorySelector','mountOwnedGenerationArchiveGate'].every(name=>typeof sdk[name]==='function'),'gui_owned_history_unsupported');
+    const existing=entries.get(key);
+    if(existing){requireValue(same(existing.creationIntent,creationIntent)&&existing.history===true,'gui_original_history_busy');return existing;}
+    await mountArchiveGate(sdk,()=>historyScope(intent,options));
+    const journal=await sdk.openOwnedGenerationJournal({ownerCtx,directory:join(homeDirectory,'owned-generations',digest({botId:intent.botId,sessionId:intent.sessionId,role:options.role})),
+      create:false,sessionId:intent.sessionId,role:options.role,...options.role==='work'?{toolPolicy:intent.workDepth===0&&intent.plannedBinding?'delegate':'zero'}:{},
+      route:nativeRoute,initialization:mode,session:{cwd,agentPreset},creationIntent});
+    try{
+      historyScope(intent,options);requireValue(sdk.isOwnedGenerationJournal(journal,ownerCtx,intent.sessionId,options.role)===true,'gui_owned_journal_required');
+      const authorize=binding=>{historyScope(intent,options);exactHistoryBinding(intent,options.role,binding);return true;};
+      const selectHistory=async binding=>{
+        authorize(binding);
+        const selector=await sdk.selectOwnedGenerationHistory(journal,ownerCtx,binding,Object.freeze({isAuthorized:()=>authorize(binding),
+          isDispatchFenced:()=>{try{authorize(binding);return host.object('bot',intent.botId).lifecycle==='archived'||ownerCtx.agents.get(intent.sessionId)===undefined;}catch{return false;}}}));
+        authorize(binding);requireValue(sdk.isOwnedGenerationHistorySelector(selector,journal,ownerCtx,binding)===true,'gui_owned_history_required');return selector;
+      };
+      const entry=Object.freeze({journal,sdk,intent:creationIntent.binding,role:options.role,creationIntent,history:true,selectHistory});
+      journals.add(journal);entries.set(key,entry);return entry;
+    }catch(error){await journal.close();throw error;}
+  }
+  async function inspectOriginalHistory(intent,options){
+    current();const purpose=options?.purpose;
+    requireValue(['archive-restore','active-recovery'].includes(purpose),'gui_original_history_required');
+    const bot=host.object('bot',intent?.botId);
+    requireValue(bot.lifecycle===(purpose==='archive-restore'?'archived':'active'),purpose==='archive-restore'?'gui_archived_history_required':'gui_active_history_required');
+    historyScope(intent,options);
+    const {openOwnedWorkspaceSessionPort}=await import('@deepseek-ai/dsh-workspace');current();
+    const workspace=openOwnedWorkspaceSessionPort(ownerCtx.workspaceRegistry,ownerCtx);
+    requireValue(workspace.isArchived(intent.sessionId)===(purpose==='archive-restore'),'gui_native_history_state_changed');
+    requireValue(ownerCtx.agents.get(intent.sessionId)===undefined,'gui_unprotected_main_active');
+    const entry=await openHistory(intent,options);current();
+    requireValue(workspace.isArchived(intent.sessionId)===(purpose==='archive-restore'),'gui_native_history_state_changed');
+    return Object.freeze({journal:entry.journal,selectHistory:entry.selectHistory});
+  }
+  function restoreDescription(intent,options){
+    requireValue(isOwnedBotLifecycleRestoreGrant(options?.grant,host,ownerCtx.fiber,intent)===true,'gui_restore_grant_required');
+    current();const description=describeOwnedBotLifecycleRestore(options.grant,host,ownerCtx.fiber,intent);
+    requireValue(description.botId===intent.botId&&description.configVersion===intent.configVersion&&description.sessionId===intent.sessionId
+      &&description.mainSessionId===options.mainSessionId&&description.authorityEpoch===intent.authorityEpoch
+      &&same(description.originalCreationIntent,options.originalCreationIntent),'gui_restore_grant_changed');
+    historyScope(intent,options);return description;
+  }
+  async function prepareRestore(intent,options){
+    const description=restoreDescription(intent,options),key=canonical([options.role,intent.sessionId]);
+    requireValue(!consumed.has(key),'gui_native_preparation_consumed');
+    const entry=await openHistory(intent,options);restoreDescription(intent,options);
+    if(options.historyProof){
+      requireValue(options.historyProof.journal===entry.journal&&Array.isArray(options.historyProof.selectors)
+        &&options.historyProof.selectors.every(row=>entry.sdk.isOwnedGenerationHistorySelector(row.selector,entry.journal,ownerCtx,row.binding)===true),'gui_owned_history_required');
+    }
+    const sdk=entry.sdk,directory=ownerCtx.get('deepseekProtectedProviders'),providerFactory=directory?.lookup?.(nativeRoute.provider);
+    requireValue(providerFactory,'gui_protected_provider_required');
+    const unchanged=()=>{restoreDescription(intent,options);requireValue(identity(ownerCtx.get('deepseekProtectedProviders'))===identity(directory)
+      &&directory.lookup(nativeRoute.provider)===providerFactory,'gui_protected_provider_changed');};
+    const policy=createGuiGenerationPolicy({ledger:host.ledger,ledgerId:host.ledgerInstanceId,botId:description.botId,botEpoch:description.botEpoch,
+      configVersion:description.configVersion,authorityEpoch:description.authorityEpoch,mainSessionId:description.mainSessionId,sessionId:intent.sessionId,
+      role:options.role,isOwnerCurrent:()=>{try{current();return true;}catch{return false;}},canModelDispatch});
+    const common={ownerCtx,providerFactory,sessionId:intent.sessionId,route:nativeRoute,initialization:mode,journal:entry.journal,
+      isCurrent:policy.isCurrent,canDispatch:policy.canDispatch};
+    let prepared;
+    if(options.role==='main'){
+      requireValue(options.delegateTool?.name==='dsh_bot_delegate','gui_resume_delegate_required');
+      prepared=sdk.prepareOwnedGenerationSource({...common,role:'main',delegateTool:options.delegateTool});
+    }else{
+      exactHistoryBinding(intent,'work',options.plannedBinding);
+      const historicalPlan=options.historyProof?.selectors.find(row=>same(row.binding,options.plannedBinding))?.selector
+        ??await entry.selectHistory(options.plannedBinding);unchanged();
+      requireValue(sdk.isOwnedGenerationHistorySelector(historicalPlan,entry.journal,ownerCtx,options.plannedBinding)===true,'gui_owned_history_required');
+      if(intent.workDepth===1){
+        requireValue(options.delegateTool===undefined&&sdk.isOwnedGenerationSource(options.parentSource,ownerCtx)===true
+          &&typeof sdk.prepareOwnedKnownChildGenerationSource==='function','gui_child_source_required');
+        prepared=await sdk.prepareOwnedKnownChildGenerationSource(options.parentSource,options.parentGeneration,{...common,plannedBinding:options.plannedBinding,historicalPlan});
+      }else{
+        requireValue(intent.workDepth===0&&options.delegateTool?.name==='dsh_bot_delegate','gui_parent_delegate_required');
+        prepared=sdk.prepareOwnedGenerationSource({...common,role:'work',workDelegate:{plannedBinding:options.plannedBinding,delegateTool:options.delegateTool},historicalPlan});
+      }
+    }
+    unchanged();requireValue(sdk.isPreparedOwnedGenerationSource(prepared,ownerCtx,intent.sessionId,options.role)===true&&prepared.mode==='resume','gui_owned_preparation_required');
+    consumed.add(key);return Object.freeze({prepared,route:nativeRoute,creationIntent:entry.creationIntent,selectHistory:entry.selectHistory});
+  }
+  async function releaseArchivedJournals(grant){
+    const originals=entries.size?[...entries.values()].map(entry=>entry.intent):host.ledger.list('guiNativeCreationOriginal').map(row=>row.binding);
+    requireValue(originals.length>0&&originals.every(intent=>isOwnedBotLifecycleRestoreGrant(grant,host,ownerCtx.fiber,intent)===true),'gui_restore_grant_required');
+    current();
+    for(const [key,entry]of entries){
+      requireValue(isOwnedBotLifecycleRestoreGrant(grant,host,ownerCtx.fiber,entry.intent)===true,'gui_restore_grant_required');
+      await entry.journal.close();current();journals.delete(entry.journal);entries.delete(key);consumed.delete(key);
+    }
+  }
   async function prepare(intent,options,child=false){
       original(intent,options);const consumedKey=canonical([options.role,intent.sessionId]);
       if(!child&&options.role==='work'&&options.delegateTool!==undefined)parentPlan(intent,options);
@@ -110,6 +231,7 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
       const sdk=await loadOwnedGenerationSdk();original(intent,options);
       if(child)childPlan(intent,options,sdk);
       requireValue(typeof sdk.openOwnedGenerationJournal==='function'&&typeof sdk.isOwnedGenerationJournal==='function','gui_owned_journal_unsupported');
+      await mountArchiveGate(sdk,()=>original(intent,options));
       const directory=ownerCtx.get('deepseekProtectedProviders'),providerFactory=directory?.lookup?.(nativeRoute.provider);
       requireValue(providerFactory,'gui_protected_provider_required');
       const unchanged=()=>{original(intent,options);requireValue(identity(ownerCtx.get('deepseekProtectedProviders'))===identity(directory)
@@ -136,12 +258,21 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
               :options.delegateTool?{delegateTool:options.delegateTool}:{})});
         unchanged();requireValue(sdk.isPreparedOwnedGenerationSource(prepared,ownerCtx,intent.sessionId,options.role)===true
           &&prepared.mode===(options.create?'create':'resume'),'gui_owned_preparation_required');
-        journals.add(journal);return Object.freeze({prepared,route:nativeRoute,creationIntent});
+        journals.add(journal);entries.set(consumedKey,Object.freeze({journal,sdk,intent:creationIntent.binding,role:options.role,creationIntent,history:false}));
+        return Object.freeze({prepared,route:nativeRoute,creationIntent});
       }catch(error){await journal.close();throw error;}
   }
   return Object.freeze({
     prepare:(intent,options)=>prepare(intent,options),
     prepareChild:(intent,options)=>prepare(intent,{...options,role:'work'},true),
-    async close(){if(closed)return;closed=true;await Promise.allSettled([...journals].map(journal=>journal.close()));journals.clear();},
+    prepareRestore,
+    readOriginalCreation(intent){
+      current();const role=intent?.kind==='execution'?'work':'main',originalCreationIntent=originalCreation(intent,{role,create:false});
+      historyScope(intent,{role,originalCreationIntent});return originalCreationIntent;
+    },
+    inspectOriginalHistory,
+    inspectArchivedHistory:(intent,options)=>inspectOriginalHistory(intent,{...options,purpose:'archive-restore'}),
+    releaseArchivedJournals,
+    async close(){if(closed)return;closed=true;await Promise.allSettled([...journals].map(journal=>journal.close()));journals.clear();entries.clear();},
   });
 }
