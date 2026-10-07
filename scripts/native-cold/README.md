@@ -6,6 +6,39 @@ Refusal, missing evidence, timeout, unverified child stop, incomplete capture or
 failed cleanup blocks subsequent cases. This harness makes no model requests and
 adds no child environment keys or filesystem/network permissions.
 
+## Historical partition and approved current pure tests
+
+`partition.json` retains the original 40 test hashes from
+`26f3fe74aa52705fcdd8ff212d5754ce6afe0663`, its tree, both cold migrations and
+their declaration/support hashes, the support-file hashes and the five excluded
+legacy native filenames. The contract pins those historical metadata fields as
+one immutable digest. It continues to reconstruct each moved declaration into
+its original file and compare the complete historical SHA-256.
+
+The current pure inventory contains those 40 filenames plus seven explicitly
+approved additions, each with its full SHA-256. Three original pure files have
+approved extensions: `adapter.test.mjs`, `bot-client-owner.test.mjs` and
+`package-snapshot.test.mjs`. Each extension records its current full SHA-256,
+original prefix byte count and appended suffix SHA-256. The contract removes
+that pinned suffix and hashes the entire reconstructed original body against
+the unchanged historical hash. It cannot reclassify a changed original
+assertion as an approved append.
+
+For `package-snapshot.test.mjs` only, the third-line fs import at byte offset 71
+adds `chmod`. Its exact original/current import bytes are declared and pinned;
+the contract reverses that one six-byte expansion before checking all 6,753
+original bytes. Other import changes are refused. The other two extensions
+retain their complete original byte prefixes without an import transform.
+
+The audit separately reports `originalFiles: 40`, `movedCases: 2`,
+`additionalPureFiles: 7` and `extendedPureFiles: 3`, with the addition hashes and
+extension reconstruction evidence. `originalBodyUnionExact` describes the
+historical bytes after those explicit reversals and two cold reinsertions.
+Unknown or removed pure/native test files, including nested additions, are
+refused; the two admitted cold files remain byte-for-byte bound to their original
+hashes. These read-only Python checks execute no JavaScript or native cases and
+do not establish native acceptance or the running-budget performance margin.
+
 ## Running budget and required finalization
 
 The builtin proof shares a 5-second monotonic running budget starting before the

@@ -75,5 +75,38 @@
     "test/native-stage-eligibility-fixture.json": "38dc78565732cc79735ce79d37915c54584b0b1fe86cffdef20236031279c612",
     "test/bot-producer-fixture.mjs": "9a667717d5094f9bb30e576d532d0f1e753fb3a9d0df3e97e3c4d4ab86072341",
     "test/cold-result-diagnostic.mjs": "a69641c0f6cfd054b612e8c292ffd9470dc6aae77b13febef91e87d2f7cc8b47"
+  },
+  "additionalPureFiles": {
+    "test/bot-gui-bootstrap.test.mjs": "679179a0a397feb2c1dc1a7af0ed6cddea4c719a919d4d6b6b42ad47bcc26db1",
+    "test/bot-gui-controls.test.mjs": "097a2ba7e224fc545d7e094e68c2f0454c6cd2b1682135400e64ac213fb611c5",
+    "test/bot-gui-generation-policy.test.mjs": "689b8af23f0c1636a1a18e24ec05993794345e65720ec5aba805c14a5714c82c",
+    "test/bot-gui-profile.test.mjs": "acabf1aa591c10170a234299aa9cd419a5a0e531296fb2a7fcaceecf3cebd0e9",
+    "test/bot-gui-startup.test.mjs": "bd643a64a469b3498b2f7e43c0f38556ad4689d1889c9b05edf4387f146c0933",
+    "test/initial-session-blank.test.mjs": "315e2857ce0e2fb7801411f46bf4cbfe5fdfc6d09998cb3c646854c67b0142d0",
+    "test/work-generation-bridge.test.mjs": "0ba751f360658532e4c241b8a4a6804bd4763320b4d6ca3c99a95b083ece80f9"
+  },
+  "extendedPureFiles": {
+    "test/adapter.test.mjs": {
+      "currentSHA256": "79d778a2e9c4a738f6688321789ef54932d9d8b59ed3e76d71ca91e331fc55fb",
+      "originalPrefixBytes": 1265,
+      "appendSHA256": "740acb64e96a6d0b92bc4c366ceeb2400dc41603ede81c02f40ae4d80f986a3f",
+      "importChange": null
+    },
+    "test/bot-client-owner.test.mjs": {
+      "currentSHA256": "eb24f7fb821387162f131aa28045ebfe493fab3bfe1003389625bb65e982bd99",
+      "originalPrefixBytes": 21431,
+      "appendSHA256": "f4b91bf85ec3b2d9ff0c8ae7062d8c944b4f5e571fe863e396ae9b1aa226b3f5",
+      "importChange": null
+    },
+    "test/package-snapshot.test.mjs": {
+      "currentSHA256": "3d31217a331a74a0396e955146be7e8a3bd25158336c552f57fd79745b9f0968",
+      "originalPrefixBytes": 6753,
+      "appendSHA256": "bee37e10e761bab29d6988de1b9c07c55b502db0c7f74388d455f411b9db87d0",
+      "importChange": {
+        "offset": 71,
+        "original": "import {mkdtemp,readFile,writeFile,mkdir,readdir,lstat} from 'node:fs/promises';\n",
+        "current": "import {mkdtemp,readFile,writeFile,mkdir,readdir,lstat,chmod} from 'node:fs/promises';\n"
+      }
+    }
   }
 }
