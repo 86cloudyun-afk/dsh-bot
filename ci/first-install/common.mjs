@@ -44,10 +44,11 @@ export async function privateDirectory(path){
  requireThat(after.isDirectory()&&before.dev===after.dev&&before.ino===after.ino&&after.mode===before.mode&&after.uid===before.uid,'PRIVATE_DIRECTORY_REQUIRED');
  return after;
 }
-export async function safeRead(path,expected){
+export async function safeRead(path,expected,{maxBytes=256*1024*1024}={}){
+ requireThat(Number.isSafeInteger(maxBytes)&&maxBytes>0&&maxBytes<=512*1024*1024,'REGULAR_FILE_SIZE_LIMIT_REFUSED');
  requireThat(isAbsolute(path)&&resolve(path)===path&&await fs.realpath(path)===path,'CANONICAL_REGULAR_REQUIRED');
  const before=await fs.lstat(path,{bigint:true});
- requireThat(before.isFile()&&before.nlink===1n&&before.size<=256n*1024n*1024n&&!(before.mode&0o7000n),'CANONICAL_REGULAR_REQUIRED');
+ requireThat(before.isFile()&&before.nlink===1n&&before.size<=BigInt(maxBytes)&&!(before.mode&0o7000n),'CANONICAL_REGULAR_REQUIRED');
  const file=await fs.open(path,constants.O_RDONLY|constants.O_NOFOLLOW);
  try{
   requireThat(fingerprint(before)===fingerprint(await file.stat({bigint:true})),'INPUT_CHANGED');
