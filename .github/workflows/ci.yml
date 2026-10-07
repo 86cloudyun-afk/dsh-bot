@@ -76,6 +76,15 @@ jobs:
         run: |
           dsh_native_source="$(mktemp -d /tmp/dsh-nc.XXXXXX)"
           dsh_native_source="$(cd "$dsh_native_source" && pwd -P)"
+          if [ "$RUNNER_OS" = Linux ]; then
+            # A real executable filesystem for the complete installed SDK.
+            # Every original live path observation, full read, and hash remains
+            # inside its original native budget; no cached inventory is reused.
+            sudo mount -t tmpfs \
+              -o "size=2g,mode=0700,uid=$(id -u),gid=$(id -g),nosuid,nodev,exec" \
+              tmpfs "$dsh_native_source"
+            test "$(findmnt -n -o FSTYPE --target "$dsh_native_source")" = tmpfs
+          fi
           git worktree add --detach "$dsh_native_source" "${{ github.sha }}"
           test "$(git -C "$dsh_native_source" rev-parse HEAD)" = "${{ github.sha }}"
           printf 'DSH_NATIVE_SOURCE=%s\n' "$dsh_native_source" >> "$GITHUB_ENV"
