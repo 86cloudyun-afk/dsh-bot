@@ -29,4 +29,6 @@ The stock Web SessionController browser face requires the file-upload client ser
 
 The renderer's required optional Session scope uses `slots.installScope` with a stable, explicitly absent binding. It rejects any ordinary Session reference. Bot/main/work observations use only the private owner ports; this UI binding never activates or substitutes a native Session.
 
+The stock layout title receives an explicitly empty ordinary-Session UI roster through `slots.provideRoot`; this is separate from the owned Bot Sessions. Unrelated public Workspace/configuration views and the dynamic Cordis client runner are disabled.
+
 Stock browser boot manifests omit Host row configuration. The profile therefore installs a private `dsh-bot-gui-surface` package with empty host/client behavior. Its exact package ID in the official boot graph activates this UI composition. The marker carries no authority; every read and mutation still uses the authenticated owner RPC bindings.

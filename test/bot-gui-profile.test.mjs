@@ -62,6 +62,7 @@ test('fresh GUI profile installs packed owner with real BrowserAuth and an empty
   assert.equal(rows.find(r=>r.id==='session-controller').disabled,true,'stock client controller requires fileUpload; keep only its native host class');
   assert.equal(rows.find(r=>r.id==='bot-gui-session-controller')?.name,'dsh-bot/bot-gui-session-controller');
   for(const id of ['ui-session','ui-workspace','ui-conversation','ui-sidebar']) assert.equal(rows.find(r=>r.id===id).disabled,true,'single Bot surface must not depend on unrelated Session/fileUpload UI');
+  for(const id of ['cordis-client-runner','workspace-controller','ui-settings']) assert.equal(rows.find(r=>r.id===id).disabled,true,'unrelated public configuration/workspace surfaces remain closed');
   assert.notEqual(rows.find(r=>r.id==='config-editor').disabled,true,'stock locale/settings reads need their config service');
   assert.ok(rows.find(r=>r.id==='connection').inject.includes('webServer'),'stock RPC handler captures Connection activation and needs webServer there');
   assert.ok(rows.find(r=>r.id==='connection').config.maxRequestBodyBytes>=280668843,'respect stock aggregate attachment invariant');

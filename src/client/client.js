@@ -84,6 +84,8 @@ window.__ModuleLoader__.load({id:'dsh-bot',factory:require=>{
   if(guiCall){
    const absent=Object.freeze({key:undefined,hooks:Object.freeze({session:undefined}),keyedHooks:Object.freeze({projection:undefined}),props:Object.freeze({sessionId:undefined})});
    const source=Object.freeze({getSnapshot:()=>absent,subscribe:()=>()=>{}});
+   const roster=Object.freeze({byId:Object.freeze({})});
+   ctx.slots.provideRoot({hooks:{sessions:Object.freeze({getSnapshot:()=>roster,subscribe:()=>()=>{}})}});
    ctx.slots.installScope('session',{current:source,bindingSource:target=>{if(target!==undefined)throw Error('dsh-bot: ordinary Session UI unavailable');return source;},renderArea:(_binding,props)=>props.empty?.()??null});
   }
   ctx.effect(()=>ctx.locale.register(namespace,{en,zh}),'dsh-bot: dictionaries');const t=ctx.locale.bind(namespace);
