@@ -12,7 +12,7 @@ import {createOwnedMainGenerationBridge} from '../src/owned-main-generation.mjs'
 import {isOwnedBotLifecycleRestoreGrant,describeOwnedBotLifecycleRestore} from '../src/owned-bot-lifecycle.mjs';
 import {generationFixture,route,syntheticResponse,observeUntil} from './work-generation-fixture.mjs';
 
-const tool=()=>defineTool({name:'dsh_bot_delegate',description:'Synthetic original recovery delegate',parameters:{},output:{schema:{type:'object'},render:()=>[]},async execute(){return{};}});
+const tool=()=>defineTool({name:'dsh_bot_delegate',description:'Synthetic original recovery delegate',parameters:{},output:{schema:{type:'object',additionalProperties:true},render:()=>[]},async execute(){return{};}});
 async function first(t,unknown=false){
  const directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'bot-recovery-')),ledger=new Ledger(join(directory,'product.sqlite'));t.after(()=>ledger.close());
  const f=await generationFixture(t,()=>syntheticResponse({finish:!unknown}),{directory,ledger,realWorkspace:true}),N=f.Native;assert.equal(typeof N.admitOwnedBlankSessionControl,'function','M2_NATIVE_HISTORY_REQUIRED');await N.mountOwnedGenerationArchiveGate(f.ctx);
