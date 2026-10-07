@@ -10,8 +10,11 @@ from unittest.mock import patch
 import run
 import supervisor as R
 from contract import select_platform
+from test_binding import fake_retention,FAKE_OBSERVATION
 
 class BuiltinDiagnosticTests(unittest.TestCase):
+    def setUp(self):
+        retain=patch.object(run.BC,'retain',side_effect=fake_retention);retain.start();self.addCleanup(retain.stop)
     def test_builtin_terminal_semantics_remain_valid_refused_and_unknown(self):
         trace=self.terminal()
         with patch.object(R,'NATIVE_SHA',select_platform('linux','x86_64')['bindings'][0]['sha256'],create=True):
@@ -58,7 +61,8 @@ class BuiltinDiagnosticTests(unittest.TestCase):
           'sqliteConstructAttempts':0,'modelAttempts':None,'boundaryRefusals':['OTHER_ADDON_LOAD_REFUSED'],'setupFailureCode':'NONE',
           'targetSHA256':select_platform('linux','x86_64')['bindings'][0]['sha256'],'systemLoads':0,'narbLoads':0,'narbInfoQueries':0,'narbRequireCalls':0,'narbCalls':[],
           'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED','installedIdentity':None,
-          'preflightBoundary':{'status':'CHECKED',**{name:True for name in ('caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches')}}}
+          'preflightBoundary':{'status':'CHECKED',**{name:True for name in ('caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches')}},
+          'bindingConfig':FAKE_OBSERVATION.copy()}
 
     def exercise(self,trace,*,invalid_envelope=False,read_failure=False,target_change=None,assertion_change=None,progress_change=None):
         with tempfile.TemporaryDirectory() as d:
@@ -196,6 +200,8 @@ class ColdDiagnosticTests(unittest.TestCase):
         self.assertEqual(initial['scope'],'COLD_OBSERVATION_DIAGNOSTIC_ONLY')
 
 class RunTests(unittest.TestCase):
+    def setUp(self):
+        retain=patch.object(run.BC,'retain',side_effect=fake_retention);retain.start();self.addCleanup(retain.stop)
     def test_preparation_failure_commits_diagnostic_before_removing_root(self):
         with tempfile.TemporaryDirectory() as d:
             temp=Path(d); evidence=temp/'evidence';evidence.mkdir()
@@ -293,6 +299,7 @@ class RunTests(unittest.TestCase):
                     if event['identity']['contentSHA256']==old['sha256']:
                         event['identity'].update(contentSHA256=new['sha256'],packageIdentity=new['package'],payloadIdentity=new['payloadIdentity'])
             data['trace']['targetSHA256']=pins['bindings'][0]['sha256']
+            data['trace']['bindingConfig'].update(pinsPlatform=pins['platform'],pinsArch=pins['arch'])
             configure(pins)
             self.assertTrue(cold_eligible(trace=data['trace'],counts=data['counts'],diagnostics=data['diagnostics'],returncode=0,stopped=True,complete=True,errors=[],pins=True))
 

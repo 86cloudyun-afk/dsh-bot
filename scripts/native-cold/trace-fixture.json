@@ -113,6 +113,13 @@
       "environmentRestricted": true,
       "platformMatches": true,
       "architectureMatches": true
+    },
+    "bindingConfig": {
+      "status": "READ_MATCHED",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expectedSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "pinsPlatform": "linux",
+      "pinsArch": "x64"
     }
   },
   "counts": {

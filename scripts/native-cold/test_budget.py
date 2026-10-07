@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 import supervisor as R
 import run
+from test_binding import fake_retention,FAKE_OBSERVATION
 try:
  from case_budget import CaseBudget
 except ModuleNotFoundError:
@@ -51,6 +52,17 @@ class BudgetTests(unittest.TestCase):
   with self.assertRaises(R.SafetyError):b.remaining()
   with b.safety_phase('RESULT_RECEIPT'):self.clock.advance(1)
   self.assertFalse(b.snapshot()['withinBudget']);self.assertEqual(b.snapshot()['safetyFinalizationSeconds'],1)
+ def test_required_stop_confirmation_is_separate_from_running_budget(self):
+  b=self.budget();self.clock.advance(3)
+  with b.safety_phase('CHILD_STOP_CONFIRMATION'):self.clock.advance(7)
+  s=b.snapshot();self.assertEqual(s['runningSeconds'],3);self.assertEqual(s['stopConfirmationSeconds'],7)
+  self.assertEqual(s['finalizationSeconds'],7);self.assertEqual(s['wholeWallSeconds'],10);self.assertTrue(s['withinBudget'])
+ def test_failed_sealing_time_is_separate_but_timeout_latch_never_clears(self):
+  b=self.budget();self.clock.advance(6)
+  with self.assertRaises(R.SafetyError):b.check()
+  with b.safety_phase('RESULT_RECEIPT'):self.clock.advance(7)
+  s=b.snapshot();self.assertEqual(s['runningSeconds'],6);self.assertEqual(s['failureSealingSeconds'],7)
+  self.assertEqual(s['wholeWallSeconds'],13);self.assertFalse(s['withinBudget'])
  def test_invalid_types_limits_and_phase_labels_are_refused(self):
   for limit in (True,0,-1,21,float('inf'),float('nan'),'5'):
    with self.assertRaises(R.SafetyError):CaseBudget(limit,clock=self.clock,alarms=False)
@@ -77,7 +89,7 @@ class BudgetTests(unittest.TestCase):
 class SupervisorBudgetTests(unittest.TestCase):
  def setUp(self):self.assertIsNotNone(CaseBudget,'CASE_TOTAL_BUDGET_MISSING');self.clock=Clock()
  def budget(self,limit=5):return CaseBudget(limit,clock=self.clock,alarms=False)
- def exercise(self,node_seconds=0,launch_seconds=0,timeout_once=False):
+ def exercise(self,node_seconds=0,launch_seconds=0,timeout_once=False,stop_seconds=0,communicate_seconds=.2):
   b=self.budget();self.clock.advance(3);calls=[]
   with tempfile.TemporaryDirectory() as d:
    root=Path(d).resolve();env=R.synthetic_env(root)
@@ -87,8 +99,11 @@ class SupervisorBudgetTests(unittest.TestCase):
     def communicate(child,timeout):
      calls.append(('wait',timeout))
      if timeout_once and not child.done:self.clock.advance(timeout);raise subprocess.TimeoutExpired('synthetic',timeout)
-     self.clock.advance(.2);child.done=True;return b'',b''
-    def poll(child):return 0 if child.done else None
+     self.clock.advance(communicate_seconds);child.done=True;return b'',b''
+    stop_measured=False
+    def poll(child):
+     if child.done and not child.stop_measured:child.stop_measured=True;self.clock.advance(stop_seconds)
+     return 0 if child.done else None
     def terminate(child):calls.append(('terminate',None));child.done=True
     def kill(child):calls.append(('kill',None));child.done=True
    def launch(*a,**k):calls.append(('launch',None));self.clock.advance(launch_seconds);return Child()
@@ -113,8 +128,20 @@ class SupervisorBudgetTests(unittest.TestCase):
   capture,calls,b=self.exercise(timeout_once=True)
   self.assertTrue(capture['timedOut']);self.assertTrue(capture['processStopped']);self.assertTrue(capture['outputComplete'])
   self.assertIn('TIMEOUT',capture['errorCategories']);self.assertTrue(any(k=='terminate' for k,v in calls))
+ def test_slow_stop_confirmation_is_measured_separately_after_running_child(self):
+  capture,calls,b=self.exercise(node_seconds=.25,stop_seconds=7)
+  self.assertTrue(capture['processStopped']);self.assertTrue(capture['outputComplete'])
+  self.assertAlmostEqual(b.snapshot()['stopConfirmationSeconds'],7);self.assertTrue(b.snapshot()['withinBudget'])
+  self.assertLess(b.snapshot()['runningSeconds'],5);self.assertGreater(b.snapshot()['wholeWallSeconds'],7)
+ def test_successful_child_returning_after_running_deadline_stays_failed(self):
+  capture,calls,b=self.exercise(communicate_seconds=3,stop_seconds=7)
+  self.assertTrue(capture['processStopped']);self.assertTrue(capture['outputComplete'])
+  self.assertIn('CASE_BUDGET_EXHAUSTED',capture['errorCategories']);self.assertFalse(b.snapshot()['withinBudget'])
+  self.assertEqual(b.snapshot()['runningSeconds'],6);self.assertEqual(b.snapshot()['stopConfirmationSeconds'],7)
 class CaseBudgetIntegrationTests(unittest.TestCase):
- def setUp(self):self.assertIsNotNone(CaseBudget,'CASE_TOTAL_BUDGET_MISSING');self.clock=Clock()
+ def setUp(self):
+  self.assertIsNotNone(CaseBudget,'CASE_TOTAL_BUDGET_MISSING');self.clock=Clock()
+  retain=patch.object(run.BC,'retain',side_effect=fake_retention);retain.start();self.addCleanup(retain.stop)
  def exercise(self,slow_identity=0,slow_receipt=0,slow_cleanup=0,slow_terminal=0,slow_cleanup_receipt=0,slow_return_hash=0,late_snapshot=False,terminal_hash_failure=False,cleanup_reseal_failure=False):
   with tempfile.TemporaryDirectory() as d:
    temp=Path(d).resolve();evidence=temp/'evidence';evidence.mkdir()
@@ -140,7 +167,7 @@ class CaseBudgetIntegrationTests(unittest.TestCase):
     if terminal_hash_failure and path.name=='builtin-dual-terminal.json' and not injected:
      injected.append(True);raise OSError('SYNTHETIC_HASH_FAILURE')
     return hasher(path)
-   with patch.object(run,'check_context',side_effect=check),patch.object(run,'prepare'),patch.object(R,'supervise_bounded',return_value=child) as launch,patch.object(run,'builtin_observation',return_value=({'stage':'NATIVE_ADMISSION_REFUSED'},{})),patch.object(R,'atomic_create',side_effect=write),patch.object(R.shutil,'rmtree',side_effect=remove),patch.object(R,'sha',side_effect=digest),patch.object(b,'snapshot',side_effect=timed_snapshot),patch.dict(run.WITNESSES,{},clear=True):
+   with patch.object(run,'check_context',side_effect=check),patch.object(run,'prepare'),patch.object(R,'supervise_bounded',return_value=child) as launch,patch.object(run,'builtin_observation',return_value=({'stage':'NATIVE_ADMISSION_REFUSED','bindingConfig':FAKE_OBSERVATION.copy()},{})),patch.object(R,'atomic_create',side_effect=write),patch.object(R.shutil,'rmtree',side_effect=remove),patch.object(R,'sha',side_effect=digest),patch.object(b,'snapshot',side_effect=timed_snapshot),patch.dict(run.WITNESSES,{},clear=True):
     outcome=run.run_case('builtin-dual',ctx)
     witness='builtin-dual' in run.WITNESSES
    files={p.name:json.loads(p.read_text()) for p in evidence.glob('*.json')}

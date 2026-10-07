@@ -16,6 +16,7 @@ import child from 'node:child_process';
 import worker from 'node:worker_threads';
 import {syncBuiltinESMExports} from 'node:module';
 import './preflight.test.mjs';
+import './binding.test.mjs';
 
 // Every native loader, exit, model and filesystem operation in these fixtures is fake.
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8');

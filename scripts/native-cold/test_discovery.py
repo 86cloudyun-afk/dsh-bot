@@ -5,8 +5,11 @@ from unittest.mock import patch
 import run
 import supervisor as R
 from contract import select_platform
+from test_binding import fake_retention
 
 class DiscoveryTests(unittest.TestCase):
+    def setUp(self):
+        retain=patch.object(run.BC,'retain',side_effect=fake_retention);retain.start();self.addCleanup(retain.stop)
     def exercise(self,absolute=False):
         with tempfile.TemporaryDirectory() as d:
             temp=Path(d).resolve(strict=True);current=temp/'current';product=current/'product'

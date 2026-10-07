@@ -1,5 +1,6 @@
 import datetime,json,re
 import supervisor as R
+import binding_config as BC
 CASES={"builtin-dual":74}
 FORBIDDEN_MARKERS=['original-loader-tripwire.json','identity-io-tripwire.json','fake-original-loader-ran.json','caller-catch-ran.json','exit-listener-ran.json','patched-exit-ran.json','fallback-returned.json','second-load-attempted.json']
 
@@ -49,6 +50,7 @@ def observation_diagnostic(journal,statuses,contract,pid):
   'roles':{role:enum(statuses.get(role),{role+'_'+suffix for suffix in ('PRESENT','MISSING','INVALID','READ_FAILED')}) for role in ('TARGET','ASSERTION','TRACE')},
   'tracePresent':type(journal.get('TRACE')) is dict,'terminalValid':terminal,'trace':projection,
   'preflightBoundary':{'status':enum(boundary.get('status'),{'CHECKED','NOT_CHECKED'}),**{key:boolean(boundary.get(key)) for key in sorted(PREFLIGHT_KEYS)}},
+  'bindingConfig':BC.project(trace.get('bindingConfig')),
   'assertion':{'assertionId':enum(assertion.get('assertionId'),ASSERTION_IDS),'status':enum(assertion.get('status'),{'IN_PROGRESS','UNCAUGHT_FAILURE'}),'errorCode':enum(assertion.get('errorCode'),LABEL_CODES)},
   'target':{'pidMatches':type(target.get('pid')) is int and target.get('pid')==pid,'versionMatches':target.get('version')=='v24.19.0',
             'caseMatches':target.get('case')=='builtin-dual','targetMatches':target.get('targetId')=='CATCH_FALLBACK_IMMEDIATE_STOP'},
@@ -99,10 +101,11 @@ def original_terminal_valid(t,pid,case):
 
 
 def terminal_valid(t,pid,case):
+ if type(t) is not dict or not BC.read_matched(t.get('bindingConfig')):return False
  extra={'systemLoads':0,'narbLoads':0,'narbInfoQueries':0,'narbRequireCalls':0,'narbCalls':[],'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED','installedIdentity':None,
   'preflightBoundary':{'status':'CHECKED',**{key:True for key in PREFLIGHT_KEYS}}}
  if type(t) is not dict or not all(k in t and exact(t[k],v) for k,v in extra.items()):return False
- core={k:v for k,v in t.items() if k not in extra};events=core.get('nativeAttempts')
+ core={k:v for k,v in t.items() if k not in extra and k!='bindingConfig'};events=core.get('nativeAttempts')
  if type(events) is not list or len(events)!=1:return False
  event=events[0]
  if type(event) is not dict or set(event)!={'index','targetId','admission','reason','outcome','identity'} or event['targetId']!='UNKNOWN':return False

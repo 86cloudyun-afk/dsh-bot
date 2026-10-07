@@ -9,7 +9,8 @@ const body=source.slice(start,end);
 const names=['caseRecognized','permissionReady','environmentRestricted','platformMatches','architectureMatches'];
 function exercise(change={}){
  const process={execArgv:['--permission'],env:{DSH_HOME:'UNTRUSTED_VALUE_MUST_NOT_PERSIST'},platform:'darwin',arch:'arm64',...change.process};
- const caseName=change.caseName??'builtin-dual',state={explicitApprovedAddonFlag:process.execArgv.includes('--permission')&&process.execArgv.includes('--allow-addons')};const saves=[];let refusal=null;
+ const caseName=change.caseName??'builtin-dual',state={explicitApprovedAddonFlag:process.execArgv.includes('--permission')&&process.execArgv.includes('--allow-addons'),
+  bindingConfig:change.bindingConfig??{status:'READ_MATCHED',pinsPlatform:'darwin',pinsArch:'arm64'}};const saves=[];let refusal=null;
  try{Function('checkpoint','process','state','caseName','guardOnly','pins','refused','save',body)(()=>{},process,state,caseName,caseName==='builtin-dual',{platform:'darwin',arch:'arm64'},reason=>{refusal=reason;throw Error('SYNTHETIC_STOP');},()=>saves.push(JSON.parse(JSON.stringify(state))));}catch(error){assert.equal(error.message,'SYNTHETIC_STOP');}
  return {state,saves,refusal};
 }
@@ -37,4 +38,11 @@ test('successful preflight and multiple failure retain exact boolean results',()
  for(const n of ['permissionReady','environmentRestricted','architectureMatches'])assert.equal(failed.state.preflightBoundary[n],false);
  assert.equal(failed.state.preflightBoundary.platformMatches,true);
  assert.ok(!JSON.stringify(failed.state).includes('UNTRUSTED_'));
+});
+test('actual preflight refuses mismatched or unknown config binding before native admission',()=>{
+ for(const bindingConfig of [{status:'READ_HASH_MISMATCH',pinsPlatform:'darwin',pinsArch:'arm64'},
+  {status:'READ_MATCHED',pinsPlatform:'UNKNOWN',pinsArch:'arm64'}]){
+  const result=exercise({bindingConfig});assert.equal(result.refusal,'BINDING_CONFIG_HASH_REFUSED');
+  assert.deepEqual(result.saves.at(-1).bindingConfig,bindingConfig);
+ }
 });

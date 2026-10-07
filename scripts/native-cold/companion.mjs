@@ -24,7 +24,14 @@ const checkpoint=globalThis.__immediateBuiltinCheckpoint??(()=>{});
 checkpoint('C_EXIT_CAPTURE');
 const exitImmediately=captureImmediateExit(process);
 const root=dirname(fileURLToPath(import.meta.url));
-const {source,pins,installed}=JSON.parse(fs.readFileSync(join(root,'binding-config.json'),'utf8'));
+const bindingBytes=fs.readFileSync(join(root,'binding-config.json'));
+const bindingSHA256=createHash('sha256').update(bindingBytes).digest('hex');
+const bindingExpected=new URL(import.meta.url).hash.slice(1);
+const {source,pins,installed}=JSON.parse(bindingBytes.toString('utf8'));
+const bindingConfigObservation={status:! /^[0-9a-f]{64}$/.test(bindingExpected)?'EXPECTED_HASH_INVALID':bindingSHA256===bindingExpected?'READ_MATCHED':'READ_HASH_MISMATCH',
+ sha256:bindingSHA256,expectedSHA256:/^[0-9a-f]{64}$/.test(bindingExpected)?bindingExpected:null,
+ pinsPlatform:typeof pins.platform==='string'&&['linux','darwin'].includes(pins.platform)?pins.platform:'UNKNOWN',
+ pinsArch:typeof pins.arch==='string'&&['x64','arm64'].includes(pins.arch)?pins.arch:'UNKNOWN'};
 const target=source+'/node_modules/'+pins.bindings[0].packageRelativeSDKFile;
 const sha=pins.bindings[0].sha256;
 const traceFile=join(root,'safe-runtime-trace.json');
@@ -36,6 +43,7 @@ let guardPreflightReady=false;
 const now=()=>new Date().toISOString();
 const state={pid:process.pid,startUTC:now(),endUTC:null,stage:'COMPANION_STARTED',setupReady:false,explicitApprovedAddonFlag:process.execArgv.includes('--allow-addons')&&process.execArgv.includes('--permission'),environmentRestricted:false,sqliteGuardVerified:false,resolveCalls:0,resolveCompleted:false,resolveStartUTC:null,resolveEndUTC:null,resolveAgentPresent:null,outerErrorCode:'UNRECORDED',nativeLoadAttempts:0,nativeLoads:0,nativeAttempts:[],nativeCalls:0,nativeCallStartUTC:null,nativeCallEndUTC:null,nativeCallbackErrno:null,nativeReturnCategory:'UNRECORDED',nativeFdOwned:false,nativeFdIdentity:null,nativeFdClosedBeforeExit:null,networkAttempts:0,spawnAttempts:0,workerAttempts:0,sqliteConstructAttempts:0,modelAttempts:null,boundaryRefusals:[],setupFailureCode:'NONE',targetSHA256:sha,systemLoads:0,narbLoads:0,narbInfoQueries:0,narbRequireCalls:0,narbCalls:[],terminalRefusalCategory:null};
 state.installedIdentity=null;
+state.bindingConfig=bindingConfigObservation;
 state.preflightBoundary={status:'NOT_CHECKED',caseRecognized:null,permissionReady:null,environmentRestricted:null,platformMatches:null,architectureMatches:null};
 let nativeFd;
 const atomicSave=createBuiltinObservationWriter(fs,root,'TRACE',process.pid,caseName);
@@ -83,6 +91,7 @@ try{
  state.preflightBoundary={status:'CHECKED',caseRecognized:['builtin-dual','cold1','cold2'].includes(caseName),permissionReady,
   environmentRestricted:state.environmentRestricted,platformMatches:process.platform===pins.platform,architectureMatches:process.arch===pins.arch};
  save();
+ if(state.bindingConfig.status!=='READ_MATCHED'||state.bindingConfig.pinsPlatform==='UNKNOWN'||state.bindingConfig.pinsArch==='UNKNOWN')refused('BINDING_CONFIG_HASH_REFUSED');
  if(!state.preflightBoundary.caseRecognized)refused('PREFLIGHT_BOUNDARY_REFUSED');
  if(!permissionReady||!state.environmentRestricted||process.platform!==pins.platform||process.arch!==pins.arch)refused('PREFLIGHT_BOUNDARY_REFUSED');
  if(!guardOnly)verifyInstalled('before');

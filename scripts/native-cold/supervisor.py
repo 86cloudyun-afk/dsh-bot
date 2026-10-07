@@ -10,7 +10,7 @@ ENV_KEYS={'DSH_HOME','DSH_BOT_TEST_ROOT','TMPDIR','TZ','LANG'}
 
 CODES={'NONE','UNRECORDED','gateway/internal','ERR_ACCESS_DENIED','ERR_DLOPEN_DISABLED','ERR_DLOPEN_FAILED','MODULE_NOT_FOUND','ERR_MODULE_NOT_FOUND','ERR_ASSERTION','ERR_TEST_FAILURE','SQLITE_GUARD_BINDING_REFUSED','SQLITE_GUARD_INSTALL_REFUSED','SQLITE_CONSTRUCTION_REFUSED'}
 
-REFUSALS={'PREFLIGHT_BOUNDARY_REFUSED','OTHER_ADDON_LOAD_REFUSED','PINNED_ADDON_HASH_REFUSED','ADDON_LOAD_LIMIT_REFUSED','ADDON_ATTEMPT_RECORD_LIMIT_REFUSED','NATIVE_EXPORT_SURFACE_REFUSED','NATIVE_CALL_LIMIT_REFUSED','NATIVE_ARGUMENT_REFUSED','TEMP_FILE_INVENTORY_LIMIT_REFUSED','TEMP_SYMLINK_REFUSED','NON_SYNTHETIC_FD_REFUSED','SQLITE_CONSTRUCTION_REFUSED','NETWORK_OPERATION_REFUSED','CHILD_PROCESS_REFUSED','WORKER_REFUSED','SQLITE_GUARD_BINDING_REFUSED','SQLITE_GUARD_INSTALL_REFUSED','RESOLVE_GUARD_BINDING_REFUSED','RESOLVE_CALL_LIMIT_REFUSED'}
+REFUSALS={'BINDING_CONFIG_HASH_REFUSED','PREFLIGHT_BOUNDARY_REFUSED','OTHER_ADDON_LOAD_REFUSED','PINNED_ADDON_HASH_REFUSED','ADDON_LOAD_LIMIT_REFUSED','ADDON_ATTEMPT_RECORD_LIMIT_REFUSED','NATIVE_EXPORT_SURFACE_REFUSED','NATIVE_CALL_LIMIT_REFUSED','NATIVE_ARGUMENT_REFUSED','TEMP_FILE_INVENTORY_LIMIT_REFUSED','TEMP_SYMLINK_REFUSED','NON_SYNTHETIC_FD_REFUSED','SQLITE_CONSTRUCTION_REFUSED','NETWORK_OPERATION_REFUSED','CHILD_PROCESS_REFUSED','WORKER_REFUSED','SQLITE_GUARD_BINDING_REFUSED','SQLITE_GUARD_INSTALL_REFUSED','RESOLVE_GUARD_BINDING_REFUSED','RESOLVE_CALL_LIMIT_REFUSED'}
 
 TRACE_KEYS={'pid','startUTC','endUTC','stage','setupReady','explicitApprovedAddonFlag','environmentRestricted','sqliteGuardVerified','resolveCalls','resolveCompleted','resolveStartUTC','resolveEndUTC','resolveAgentPresent','outerErrorCode','nativeLoadAttempts','nativeLoads','nativeAttempts','nativeCalls','nativeCallStartUTC','nativeCallEndUTC','nativeCallbackErrno','nativeReturnCategory','nativeFdOwned','nativeFdIdentity','nativeFdClosedBeforeExit','networkAttempts','spawnAttempts','workerAttempts','sqliteConstructAttempts','modelAttempts','boundaryRefusals','setupFailureCode','targetSHA256'}
 
@@ -71,12 +71,18 @@ def synthetic_env(root):
 
 
 def atomic_create(path,value,*,rollback_on_failure=False):
+    try:raw=(json.dumps(value,ensure_ascii=False,indent=2)+'\n').encode()
+    except (TypeError,ValueError):raise SafetyError('EVIDENCE_WRITE_FAILED') from None
+    return atomic_create_bytes(path,raw,rollback_on_failure=rollback_on_failure)
+
+def atomic_create_bytes(path,raw,*,rollback_on_failure=False):
     """Durable exclusive install. Never truncate an existing evidence file."""
+    require(type(raw) is bytes,'EVIDENCE_WRITE_FAILED')
     path=Path(path);temporary=None;installed=False
     try:
         fd,name=tempfile.mkstemp(prefix='.defensive-evidence-',dir=path.parent);temporary=Path(name)
         with os.fdopen(fd,'wb') as file:
-            file.write((json.dumps(value,ensure_ascii=False,indent=2)+'\n').encode());file.flush();os.fsync(file.fileno())
+            file.write(raw);file.flush();os.fsync(file.fileno())
         os.link(temporary,path);installed=True
         directory=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY)
         try:os.fsync(directory)
@@ -96,9 +102,9 @@ def atomic_create(path,value,*,rollback_on_failure=False):
 
 def supervise_once(args,cwd,env,timeout=20,*,popen=subprocess.Popen,node_check=checked_node,on_started=None,allow_addons=False,supervisor_signals=None,budget=None):
     result=Capture(childCreated=False,childPID=None,returncode=None,terminationExitCode=None,terminationSignal=None,processStopped=True,timedOut=False,terminated=False,killed=False,outputComplete=False,errorCategories=[])
-    child=None;deadline=None;kill_reserve=0
+    child=None;deadline=None;stop_deadline=None;kill_reserve=0
     clock=budget.clock if budget is not None else time.monotonic
-    def remaining(reserve=0):return max(0,deadline-clock()-reserve)
+    def remaining(reserve=0):return max(0,(stop_deadline if stop_deadline is not None else deadline)-clock()-reserve)
     try:
         with budget.phase('CHILD_NODE_IDENTITY') if budget is not None else nullcontext():
             node=node_check();require(args[0]==str(node),'NODE_ARGUMENT_REFUSED')
@@ -108,7 +114,7 @@ def supervise_once(args,cwd,env,timeout=20,*,popen=subprocess.Popen,node_check=c
         require(supervisor_signals is None or supervisor_signals.received is None,'SUPERVISOR_SIGNAL')
         deadline=min(clock()+timeout,budget.child_deadline()) if budget is not None else clock()+timeout
         allowance=remaining();require(allowance>0,'DEADLINE_REFUSED')
-        kill_reserve=min(1,allowance/4);stop_reserve=min(4,allowance/2)
+        kill_reserve=min(1,allowance/4);stop_reserve=0 if budget is not None else min(4,allowance/2)
         child=popen(args,cwd=cwd,env=dict(env),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         result.update(childCreated=True,childPID=child.pid,processStopped=False)
         if budget is not None:budget.check()
@@ -118,38 +124,44 @@ def supervise_once(args,cwd,env,timeout=20,*,popen=subprocess.Popen,node_check=c
         if on_started is not None:
             with budget.phase('START_RECEIPT') if budget is not None else nullcontext():on_started(child.pid)
         result.stdout,result.stderr=child.communicate(timeout=remaining(stop_reserve));result['outputComplete']=True
-    except subprocess.TimeoutExpired:result['timedOut']=True;result['errorCategories'].append('TIMEOUT')
+        if budget is not None:budget.check()
+    except subprocess.TimeoutExpired:
+        result['timedOut']=True;result['errorCategories'].append('TIMEOUT')
+        if budget is not None:
+            try:budget.fail()
+            except SafetyError as error:result['errorCategories'].append(error.code)
     except SupervisorStop:result['errorCategories'].append('SUPERVISOR_SIGNAL')
     except SafetyError as error:result['errorCategories'].append(error.code)
     except BaseException:result['errorCategories'].append('SUPERVISION_FAILURE' if child is not None else 'CHILD_CREATION_FAILED')
     finally:
         if supervisor_signals is not None:supervisor_signals.interruptible=False
         if child is not None:
-            alive=True
-            try:
-                alive=child.poll() is None
-            except BaseException:result['errorCategories'].append('CHILD_STATE_UNREADABLE')
-            if alive:
-                result['terminated']=True
-                try:child.terminate()
-                except ProcessLookupError:pass
-                except BaseException:result['errorCategories'].append('TERMINATE_FAILED')
-            if not result['outputComplete']:
-                try:result.stdout,result.stderr=child.communicate(timeout=remaining(kill_reserve));result['outputComplete']=True
-                except BaseException:
-                    result['killed']=True
-                    try:child.kill()
+            with budget.safety_phase('CHILD_STOP_CONFIRMATION') if budget is not None else nullcontext():
+                if budget is not None:stop_deadline=clock()+4;kill_reserve=1
+                alive=True
+                try:alive=child.poll() is None
+                except BaseException:result['errorCategories'].append('CHILD_STATE_UNREADABLE')
+                if alive:
+                    result['terminated']=True
+                    try:child.terminate()
                     except ProcessLookupError:pass
-                    except BaseException:result['errorCategories'].append('KILL_FAILED')
-                    try:result.stdout,result.stderr=child.communicate(timeout=remaining());result['outputComplete']=True
-                    except BaseException:result['errorCategories'].append('TERMINAL_SUPERVISION_FAILURE')
-            try:
-                result['returncode']=child.poll()
-                if result['returncode'] is not None:
-                    try:os.kill(child.pid,0)
-                    except ProcessLookupError:result['processStopped']=True
-            except BaseException:pass
-            if not result['processStopped']:result['errorCategories'].append('PROCESS_STOP_UNVERIFIED')
+                    except BaseException:result['errorCategories'].append('TERMINATE_FAILED')
+                if not result['outputComplete']:
+                    try:result.stdout,result.stderr=child.communicate(timeout=remaining(kill_reserve));result['outputComplete']=True
+                    except BaseException:
+                        result['killed']=True
+                        try:child.kill()
+                        except ProcessLookupError:pass
+                        except BaseException:result['errorCategories'].append('KILL_FAILED')
+                        try:result.stdout,result.stderr=child.communicate(timeout=remaining());result['outputComplete']=True
+                        except BaseException:result['errorCategories'].append('TERMINAL_SUPERVISION_FAILURE')
+                try:
+                    result['returncode']=child.poll()
+                    if result['returncode'] is not None:
+                        try:os.kill(child.pid,0)
+                        except ProcessLookupError:result['processStopped']=True
+                except BaseException:pass
+                if not result['processStopped']:result['errorCategories'].append('PROCESS_STOP_UNVERIFIED')
     result['terminationExitCode']=result['returncode'] if result['returncode'] is not None and result['returncode']>=0 else None
     if result['returncode'] is not None and result['returncode']<0:
         try:result['terminationSignal']=signal.Signals(-result['returncode']).name
@@ -157,7 +169,7 @@ def supervise_once(args,cwd,env,timeout=20,*,popen=subprocess.Popen,node_check=c
     return result
 
 
-def persist_and_cleanup(root,receipt,completion,record,stopped,eligible,*,writer=None,remover=None,budget=None):
+def persist_and_cleanup(root,receipt,completion,record,stopped,eligible,*,writer=None,remover=None,budget=None,cleanup_permitted=True):
     writer=atomic_create if writer is None else writer
     remover=shutil.rmtree if remover is None else remover
     out={'status':'DIAGNOSTIC_WRITE_FAILED','diagnosticPersisted':False,'temporaryDirectoryRemoved':False,'safeToRunOtherApprovedCase':False}
@@ -165,14 +177,14 @@ def persist_and_cleanup(root,receipt,completion,record,stopped,eligible,*,writer
         if budget is None:writer(receipt,record)
         else:
             try:
-                with budget.phase('RESULT_RECEIPT'):writer(receipt,record,rollback_on_failure=True)
+                with budget.safety_phase('RESULT_RECEIPT') if budget.failed or not eligible else budget.phase('RESULT_RECEIPT'):writer(receipt,record,rollback_on_failure=True)
             except SafetyError:
                 if not budget.failed:raise
                 if not Path(receipt).exists():
                     with budget.safety_phase('RESULT_RECEIPT'):writer(receipt,record,rollback_on_failure=True)
         out['diagnosticPersisted']=True
         if budget is None:out['diagnosticSHA256']=sha(receipt)
-        elif budget.failed:
+        elif budget.failed or not eligible:
             with budget.safety_phase('RECEIPT_HASH'):out['diagnosticSHA256']=sha(receipt)
         else:
             try:
@@ -182,7 +194,8 @@ def persist_and_cleanup(root,receipt,completion,record,stopped,eligible,*,writer
                 with budget.safety_phase('RECEIPT_HASH'):out['diagnosticSHA256']=sha(receipt)
     except BaseException:return out
     out['status']='PROCESS_STOP_UNVERIFIED'
-    if stopped and root is None:
+    if not cleanup_permitted:out['status']='BINDING_EVIDENCE_NOT_PERSISTED'
+    elif stopped and root is None:
         out['temporaryDirectoryRemoved']=True;out['status']='NO_CASE_DIRECTORY_CREATED'
     elif stopped:
         try:
@@ -196,7 +209,7 @@ def persist_and_cleanup(root,receipt,completion,record,stopped,eligible,*,writer
         else:
             out['budgetBeforeCompletionReceipt']=budget.snapshot()
             try:
-                with budget.phase('CLEANUP_RECEIPT'):writer(completion,out,rollback_on_failure=True)
+                with budget.safety_phase('CLEANUP_RECEIPT') if budget.failed or not eligible else budget.phase('CLEANUP_RECEIPT'):writer(completion,out,rollback_on_failure=True)
             except SafetyError:
                 if not budget.failed:raise
                 out['safeToRunOtherApprovedCase']=False;out['budgetBeforeCompletionReceipt']=budget.snapshot()
