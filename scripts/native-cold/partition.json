@@ -1,0 +1,79 @@
+{
+  "baseHead": "26f3fe74aa52705fcdd8ff212d5754ce6afe0663",
+  "baseTree": "7b893443d88a7d7fd2b64c71cb7f365692c9f835",
+  "originalFiles": {
+    "test/acceptance-source.test.mjs": "df16e96bcd11b4c9ced7e25eda22333d94c3421548afac7643662c4047cee3bd",
+    "test/adapter.test.mjs": "e7cca78320667bfc7e85bcd307e6a49b6c8c44f397c270549e74609abce1ff43",
+    "test/autonomy.test.mjs": "f2691b45b1bf0f5327fc4e8603ba715e23c4263811cb5c270bcd29c6e2244995",
+    "test/bot-chain-continuation.test.mjs": "f94551ac9f77255d829e962722ef884f4f4d8af10379e7611307bb9586a91a04",
+    "test/bot-chain-deadline.test.mjs": "77dec1b3293157c863cddfad9e991582bbe5724a6806b68c2863cab77ed8431c",
+    "test/bot-chain-guard.test.mjs": "bdecefa2581415fbf4bf2c382895e94badf78057284dc53a9396912cbe889a8a",
+    "test/bot-chain-intake.test.mjs": "405c7f78bd2d009b0e0a0348e426d5ad58ae65ff4009a2eed36de674af12f0cd",
+    "test/bot-chain-profile.test.mjs": "bded559b1821803775900abdd55f6e62467992cf62fa9558a5375ba5ef86604c",
+    "test/bot-chain-response.test.mjs": "41629ea896c61a6b2eb3c27ddafb5bebd9e67d13f8d8a380f0be966fdc91f790",
+    "test/bot-client-owner.test.mjs": "a42b075ed843a0bad66556a2005b2e885661db77dd973f77b23b950aaec04f85",
+    "test/bot-native-phase.test.mjs": "eb454d2e8b695e3bf08b6b0a84925ece418ff26565791523a7ec3e788d08f2c3",
+    "test/bot-native-profile-options.test.mjs": "2febe330e17eee1049235f0b094c28bc76577cd919dd9bea6e394568cbc06b95",
+    "test/bot-native-stage-eligibility.test.mjs": "84fb28b963177038405ad583cc8822f5e8cf10bf75a4614553d8883c5064030c",
+    "test/bot-producer.test.mjs": "c0819bee0e2887f0515f8e5c7c7cf71a1e96e61a99c33317e7bb6e3af47c3673",
+    "test/bot-read-channel.test.mjs": "3eab6884688a0d87811d8d734ad1253ba6cd1d39666301eb211ef9d476934e60",
+    "test/bot-read-source.test.mjs": "f38bc0476f1dca09b3b40377a4db19a144cb3f7aadbdaab205666fa27c133a71",
+    "test/cold-result-diagnostic.test.mjs": "5b3359be50d39e5ccdea4abd7e3b043dec3ceab06ef17f11ef3c73104791c510",
+    "test/collaboration.test.mjs": "0c0c1e212f7bf88f1f22ab912298d781e21bc6ae65fd41a3ed0a7394d42d41f5",
+    "test/control.test.mjs": "8ae36e8a8210532854823f2f3dad923450129f04dba1f3e801f07c46177c38b0",
+    "test/guide-acceptance.test.mjs": "5a284b9109aa77663c3cfd55c78e8faf1f7be0e06e1d154803424cc7cc75882c",
+    "test/ledger-memory.test.mjs": "fd38d8d2f0b60878e392d3edaaa9278d7149d810f9d0328ad46cced794d4f9f1",
+    "test/legacy-meeting.test.mjs": "7886370ee16bb32456c67af0bdf3fd9ccde8b59deb2b78cefb433975b6c8e6ec",
+    "test/operation-explanation.test.mjs": "d82d33ad3b1630ba41181ef5da680532e276d184ddea28db5cc86cedba796f92",
+    "test/owner-closure.test.mjs": "abeb7f20865cf98c2e3eabbb465d770bdb8def00f49458189e002b7964793fa3",
+    "test/owner-management.test.mjs": "8360b8a0f59754fa6a07d111a717b7b6dd4feea0a10a521263f8c721f3d708a5",
+    "test/owner-profile.test.mjs": "2e84e2f231b90783c5beaa56b38191e0d1b2394e47ff4a556c1247fb816deb21",
+    "test/owner-read-port.test.mjs": "2ec580ea59145e2a84ca5c0e0784ef3ff6c1d9454262accd2d922f4dc246efc0",
+    "test/package-snapshot.test.mjs": "b49d28c85eb3f37fea982295f662f24aaaa22c12c4b20f3cdc20d91272311116",
+    "test/recovery.test.mjs": "ea021680d18a866fc87786c456b2209c09862be683abf7a0fde3753fcf42c016",
+    "test/runtime-collaboration.test.mjs": "f801a334c4e3a476fba7e1fe5196d8f82f58866f3d3fc1a4602bedd0fbca3209",
+    "test/runtime-control.test.mjs": "0d364e7370384063a4db71ae53a99af52ecbb6323ff40f23a7201afbe9b67b16",
+    "test/runtime-recovery.test.mjs": "765b4764b8f94e6ac3169421381be51d614e4b46a82d2c5239cf229e2c080b00",
+    "test/runtime-ui.test.mjs": "14e525c2e3936759728dc3fec074c20ed5d934cf7884bbd989b67108881d678c",
+    "test/safety.test.mjs": "42158015be2aad81e82844b8be0417382b358075c6fbc513732870376ec6feb9",
+    "test/session-creation.test.mjs": "a88e62ebb909a4665d5b2b1820b5f1a06875a7d979e0517e60d4e7ee99613870",
+    "test/session-mode.test.mjs": "0baf4d60c7e1221c28f76765f1c4aaf249b0eb3e3c96e573124366258ff3955d",
+    "test/ui-ledger-identity.test.mjs": "95fb8095eb7f79b3ba0e0c742742f330d17b11def0f291d13981dbb6d04f830e",
+    "test/ui.test.mjs": "999fd8078d3e69f2096e41cfd907d1908af660dcd92d8a9a348c980ee03e0392",
+    "test/work-sessions.test.mjs": "85a3632d3d4a0b8daf3477c755c2f13bae30f04aafbf4e8f6bac1976042b54a7",
+    "test/working-set.test.mjs": "091ab3044cd22cf47a6fd53321c74f0eaf27164e82559274f1465dd14c754832"
+  },
+  "migrations": [
+    {
+      "from": "test/bot-chain-continuation.test.mjs",
+      "to": "test/bot-chain-continuation.native.mjs",
+      "name": "actual stock Controller resolves existing main only and leaves model IO zero",
+      "declarationSHA256": "1f15b9fd018768b58cb51efc0c820ed8a16b672e7f17ce37b6b63f1a5ab81389",
+      "supportSHA256": "30257dae9e012dfc1c5e560dc0a8a0894a440356ea43c91c697290942e8d8d06",
+      "remainingSHA256": "333b2f4258776c9e2b7b2823fbf928a0289a7318782dbb2f364dcdcb2ac0dbc0",
+      "originalLine": 10
+    },
+    {
+      "from": "test/bot-native-stage-eligibility.test.mjs",
+      "to": "test/bot-native-stage-eligibility.native.mjs",
+      "name": "actual stock Controller resolves same cold main only and preserves both old work unactivated with model IO zero",
+      "declarationSHA256": "8f723f565104b256d8a6f23b85c15f969333c8085955ef0b9aab08e3079ef977",
+      "supportSHA256": "7e556fedca8a54e459b713847ad092996f235b765270d0bbc2615fbba63b64b5",
+      "remainingSHA256": "ea30c22de3f8a94285d0cc5832e9d885e33a9bdfd91a545b6be3e8c122cab4ed",
+      "originalLine": 7
+    }
+  ],
+  "excludedLegacyNativeFiles": [
+    "test/native-controller.native.mjs",
+    "test/operator-read-binding.native.mjs",
+    "test/owner-app.native.mjs",
+    "test/owner-runtime-assembly.native.mjs",
+    "test/working-set.native.mjs"
+  ],
+  "supportFiles": {
+    "test/chain-continuation-fixture.json": "61b81af66fca994e87ed43891de53fb1b3db4a9d5ecdd3c16919c850fba2405c",
+    "test/native-stage-eligibility-fixture.json": "38dc78565732cc79735ce79d37915c54584b0b1fe86cffdef20236031279c612",
+    "test/bot-producer-fixture.mjs": "9a667717d5094f9bb30e576d532d0f1e753fb3a9d0df3e97e3c4d4ab86072341",
+    "test/cold-result-diagnostic.mjs": "a69641c0f6cfd054b612e8c292ffd9470dc6aae77b13febef91e87d2f7cc8b47"
+  }
+}
