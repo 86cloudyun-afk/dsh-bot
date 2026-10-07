@@ -407,7 +407,7 @@ class PrefixPathTests(unittest.TestCase):
 
     def test_sdk_suffix_filter_keeps_the_original_five_content_suffixes(self):
         accepted={'a.js','b.mjs','c.cjs','d.json','e.wasm','.js','nested/module.js'}
-        excluded={'a.JS','b.js.old','c.mjsx','d.json.map','plain','nested/package.JSON'}
+        excluded={'uppercase.JS','b.js.old','c.mjsx','d.json.map','plain','nested/package.JSON'}
         with self.owned() as root:
             for name in accepted|excluded:self.write(root/name,b'owned suffix fixture')
             self.assertEqual({row['path'] for row in I.files_under(root,True)},accepted)
