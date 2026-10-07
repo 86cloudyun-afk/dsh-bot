@@ -9,6 +9,7 @@ import {deriveObservedWorkResponse,deriveMainAcknowledgment} from './bot-chain-r
 import {loadOwnedGenerationSdk,unknownGenerationObservation} from './owned-generation-bridge.mjs';
 import {createOwnedMainGenerationBridge} from './owned-main-generation.mjs';
 import {freezeInitialSessionMode} from './initial-session-blank.mjs';
+import {projectOwnedGenerationEvents} from './owned-generation-input-window.mjs';
 
 const delegatePreparations=new WeakMap();
 function mainDelegateDefinition(entry,execution){return defineTool({name:'dsh_bot_delegate',description:execution?'Create and start one harmless work Session for this owner-bound Bot. Returns pending; observed result arrives later.':'Create a harmless work Session for this owner-bound Bot. Does not execute a model.',
@@ -76,10 +77,10 @@ export function installOwnedBotProducer({ownerCtx,host,caller,originAgent,botId,
    let w=currentWork(row),retained=target(w),messageId=w.delivery?.messageId;if(!messageId)return;
    if(generationControl){const proof=await row.port.collect(row.target);currentWork(row);if(!proof.generationObservation.settlementVerified){if(proof.generationObservation.local==='pending')retry(row);return;}w=proof;retained=target(w);}
    const binding={botId,taskId:w.taskId,sessionId:w.sessionId,generation:w.generation,producerId,originSessionId:originSession.id,...row.provenance.callId?{callId:row.provenance.callId,rootCallId:row.provenance.rootCallId}:{}};
-   const events=retained.session.snapshotEvents(),lastStart=events.findLast(e=>e.type==='turn/start'),lastEnd=events.findLast(e=>e.type==='turn/end');if(!lastEnd||lastStart&&lastStart.seq>lastEnd.seq)return;
+   const ownedWindow=generationControl?await row.port.ownedEventWindow(row.target):null;currentWork(row);const project=events=>ownedWindow?projectOwnedGenerationEvents(ownedWindow,events,{delegate:parentDefinitions.has(w.sessionId)}):events;const events=project(retained.session.snapshotEvents()),lastStart=events.findLast(e=>e.type==='turn/start'),lastEnd=events.findLast(e=>e.type==='turn/end');if(!lastEnd||lastStart&&lastStart.seq>lastEnd.seq)return;
    const waitWitness=row.waitWitness?.();deriveObservedWorkResponse({events,binding,messageId,waitWitness});currentWork(row);requireValue(await ownerCtx.sessions.flush(retained.session),'producer_flush_unconfirmed');currentWork(row);
    const handle=await ownerCtx.sessionPersistence.open(w.sessionId,'read');let result;
-   try{currentWork(row);requireValue(handle.header.id===w.sessionId,'work_response_binding_conflict');const log=await handle.read();currentWork(row);result=deriveObservedWorkResponse({events:log.events,binding,messageId,waitWitness});}finally{await handle.close();currentWork(row);}
+   try{currentWork(row);requireValue(handle.header.id===w.sessionId,'work_response_binding_conflict');const log=await handle.read();currentWork(row);result=deriveObservedWorkResponse({events:project(log.events),binding,messageId,waitWitness});}finally{await handle.close();currentWork(row);}
    if(row.expectedMarker)requireValue(result.text.trim()===row.expectedMarker,'work_response_marker_conflict');currentWork(row);
    const routeId=digest({producerId,taskId:w.taskId,generation:w.generation});requireValue(!host.ledger.get('workObservedResponse',routeId),'work_response_conflict');
    if(generationControl){const bridge=await ownedMain();currentWork(row);admission=await bridge.admit(live);currentWork(row);}

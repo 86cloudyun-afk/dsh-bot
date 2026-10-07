@@ -1,6 +1,7 @@
 /** Shared private main-source admission. Serialized rows are selectors, never native authority. */
 import {canonical,digest,requireValue} from './errors.mjs';
 import {loadOwnedGenerationSdk,unknownGenerationObservation} from './owned-generation-bridge.mjs';
+import {ownedGenerationInputWindow} from './owned-generation-input-window.mjs';
 
 const sources=new WeakMap();
 const key=(...p)=>canonical(p);
@@ -43,5 +44,6 @@ export function createOwnedMainGenerationBridge({host,ownerCtx,source,botId,botE
   if(!run.generation)return unconfirmed(fenced);if(run.cancelled)return inspect(binding,checkpoint);run.cancelled=true;
   const value=await source.cancel(run.generation);current(checkpoint);return apply(binding,value,sdk,checkpoint);
  }
- return Object.freeze({admit,inspect,cancel,restore});
+ async function ownedEventWindow(binding,checkpoint){const value=await inspect(binding,checkpoint);current(checkpoint);if(!value.generationObservation.settlementVerified)return null;const run=state.runs.get(binding.generation),sdk=await native(checkpoint),view=await source.inspect(run.generation);current(checkpoint);requireValue(sdk.isOwnedGenerationReceipt(view.receipt,source,binding)===true,'main_generation_receipt_conflict');const window=await ownedGenerationInputWindow(source,ownerCtx,view.receipt,binding);current(checkpoint);return window;}
+ return Object.freeze({admit,inspect,cancel,restore,ownedEventWindow});
 }
