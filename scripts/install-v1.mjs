@@ -2,12 +2,14 @@
 import * as fs from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {join,dirname,resolve,relative,isAbsolute,sep} from 'node:path';
-import {fileURLToPath,pathToFileURL} from 'node:url';
-import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {createHash,randomUUID} from 'node:crypto';
+import {registerHooks} from 'node:module';
 import {spawn} from 'node:child_process';
 
 const CLI_VERSION='0.2.0-rc.2',NODE_VERSION='24.19.0',ownErrors=new WeakSet();
 const TERM_GRACE_MS=250,STOP_CONFIRMATION_MS=750;
+const ioErrors=new Set(['ENOENT','EACCES','EPERM','EEXIST','ENOTDIR','EIO','ENOMEM','ELOOP','ERR_ACCESS_DENIED']),failurePreservations=new WeakMap();
 const fail=code=>{const cause=Object.assign(new Error(code),{code});ownErrors.add(cause);return cause;};
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const inside=(root,path)=>path===root||path.startsWith(root+sep);
@@ -16,6 +18,35 @@ const safe=path=>typeof path==='string'&&path!==''&&!isAbsolute(path)&&!path.inc
 const digest=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const parseJson=bytes=>{try{return JSON.parse(bytes.toString('utf8'));}catch{throw fail('THIN_ARTIFACT_JSON_INVALID');}};
 const tools=Object.freeze({installer:'scripts/install-v1.mjs',consumer:'scripts/assemble-distribution-runtime.mjs',guiInstaller:'scripts/install-bot-gui-profile.mjs',packageSnapshot:'scripts/package-snapshot.mjs',runtimeExporter:'tools/runtime-export/export.mjs'});
+function capturedExecution(captured,records){
+ const namespace=new URL('file:///__dsh_v1_captured__/'+randomUUID()+'/'),sources=new Map(),loaded=new Set(),index=[];
+ for(const path of Object.values(tools)){
+  const bytes=captured.get(path),record=records.get(path),source=bytes.toString('utf8'),url=new URL(path,namespace).href;
+  if(!Buffer.from(source,'utf8').equals(bytes))throw fail('THIN_TOOL_ENCODING_INVALID');
+  sources.set(url,source);index.push(Object.freeze({path,bytes:record.bytes,sha256:record.sha256,mode:record.mode,url}));
+ }
+ const hook=registerHooks({
+  resolve(specifier,context,nextResolve){
+   if(sources.has(specifier))return{url:specifier,shortCircuit:true};
+   if(context.parentURL?.startsWith(namespace.href)){
+    if(specifier.startsWith('node:'))return nextResolve(specifier,context);
+    let url;try{url=new URL(specifier,context.parentURL).href;}catch{throw fail('THIN_HELPER_IMPORT_UNDECLARED');}
+    if(!sources.has(url))throw fail('THIN_HELPER_IMPORT_UNDECLARED');
+    return{url,shortCircuit:true};
+   }
+   if(specifier.startsWith(namespace.href))throw fail('THIN_HELPER_IMPORT_UNDECLARED');
+   return nextResolve(specifier,context);
+  },
+  load(url,context,nextLoad){
+   if(url.startsWith(namespace.href)){
+    if(!sources.has(url))throw fail('THIN_HELPER_IMPORT_UNDECLARED');
+    loaded.add(url);return{format:'module',source:sources.get(url),shortCircuit:true};
+   }
+   return nextLoad(url,context);
+  }
+ });
+ return Object.freeze({importTool:key=>import(new URL(tools[key],namespace).href),close:()=>hook.deregister(),evidence:()=>({mode:'CAPTURED_DESCRIPTOR_PINNED_SOURCES',mappedTools:index,capturedSourceIndexSha256:sha(JSON.stringify(index.map(({url,...record})=>record))),executionMapSha256:sha(JSON.stringify(index)),loadedTools:index.filter(record=>loaded.has(record.url)).map(record=>record.path)})});
+}
 async function canonical(path,directory=false){
  if(typeof path!=='string'||!isAbsolute(path)||resolve(path)!==path||path.includes('\0')||prohibited(path))throw fail('CANONICAL_INPUT_REQUIRED');
  const stat=await fs.lstat(path);
@@ -83,7 +114,7 @@ async function npmEnvironment(output,checkOwnership){
  }
  return environment;
 }
-async function runNpmChild({outputIdentity,arguments_,environment,sdk,timeout,checkOwnership}){
+async function runNpmChild({outputIdentity,arguments_,environment,sdk,timeout}){
  return new Promise((resolvePromise,reject)=>{
   let child,pid,timer,killTimer,confirmationTimer,pollTimer,confirming=false,timedOut=false,finished=false,leaderExited=false,exitCode,reason='GROUP_REMAINS',spawnFailed=false;
   const finish=cause=>{
@@ -111,9 +142,8 @@ async function runNpmChild({outputIdentity,arguments_,environment,sdk,timeout,ch
    if(confirming||finished)return;confirming=true;
    confirmationTimer=setTimeout(()=>unknown(reason),STOP_CONFIRMATION_MS);poll();
   };
-  const signalOwned=async signal=>{
+  const signalOwned=signal=>{
    if(finished||!identityMatches())return;
-   try{await checkOwnership();}catch{unknown('OUTPUT_OWNERSHIP_CHANGED');return;}
    if(finished||!identityMatches()||leaderExited||child.exitCode!==null||child.signalCode!==null)return;
    const remains=probeGroup();if(finished||remains!==true)return;
    // A live original leader anchors this group. Do not follow mutable PID
@@ -121,7 +151,7 @@ async function runNpmChild({outputIdentity,arguments_,environment,sdk,timeout,ch
    try{process.kill(-pid,signal);}catch(cause){if(cause.code!=='ESRCH')reason='STOP_SIGNAL_DENIED';}
   };
   const stopOwned=()=>{
-   beginConfirmation();if(finished)return;void signalOwned('SIGTERM');killTimer=setTimeout(()=>{void signalOwned('SIGKILL');},TERM_GRACE_MS);
+   beginConfirmation();if(finished)return;signalOwned('SIGTERM');killTimer=setTimeout(()=>signalOwned('SIGKILL'),TERM_GRACE_MS);
   };
   try{child=spawn(process.execPath,arguments_,{cwd:sdk,env:environment,stdio:'ignore',detached:true});}catch{finish(fail('SDK_INSTALL_SPAWN_FAILED'));return;}
   child.once('error',()=>{if(finished)return;if(!Number.isInteger(pid)){finish(fail('SDK_INSTALL_SPAWN_FAILED'));return;}spawnFailed=true;stopOwned();});
@@ -132,31 +162,32 @@ async function runNpmChild({outputIdentity,arguments_,environment,sdk,timeout,ch
 }
 async function installSdk({output,outputIdentity,npmCliPath,npmCliBytes,lockBytes,lock,timeout,checkOwnership}){
  const sdk=join(output,'sdk'),cache=join(output,'npm-cache'),userconfig=join(output,'empty-user.npmrc'),globalconfig=join(output,'empty-global.npmrc');
- for(const path of [sdk,cache,join(output,'npm-home'),join(output,'npm-home/config'),join(output,'npm-tmp')])await fs.mkdir(path,{mode:0o700});
- const writeJson=(path,value)=>fs.writeFile(path,JSON.stringify(value,null,2)+'\n',{flag:'wx',mode:0o600});
- await writeJson(join(sdk,'package.json'),officialProject(lock));await fs.writeFile(join(sdk,'package-lock.json'),lockBytes,{flag:'wx',mode:0o600});
- await fs.writeFile(userconfig,'',{flag:'wx',mode:0o600});await fs.writeFile(globalconfig,'',{flag:'wx',mode:0o600});
+ for(const path of [sdk,cache,join(output,'npm-home'),join(output,'npm-home/config'),join(output,'npm-tmp')]){await checkOwnership();await fs.mkdir(path,{mode:0o700});}
+ const writePrivate=async(path,bytes)=>{await checkOwnership();await fs.writeFile(path,bytes,{flag:'wx',mode:0o600});};
+ await writePrivate(join(sdk,'package.json'),JSON.stringify(officialProject(lock),null,2)+'\n');await writePrivate(join(sdk,'package-lock.json'),lockBytes);
+ await writePrivate(userconfig,'');await writePrivate(globalconfig,'');
  const wrapper=join(output,'npm-entry.mjs');
  // Execute the safely read CommonJS npm entry bytes, retaining its original
  // filename for public npm's relative module resolution. Node never rereads
  // the caller-controlled entry pathname after the canonical descriptor read.
  const source=`import Module from 'node:module';\nimport {dirname} from 'node:path';\nconst filename=${JSON.stringify(npmCliPath)};\nconst entry=new Module(filename);entry.filename=filename;entry.paths=Module._nodeModulePaths(dirname(filename));process.argv=[process.execPath,filename,...process.argv.slice(2)];process.mainModule=entry;Module._cache[filename]=entry;entry._compile(Buffer.from(${JSON.stringify(npmCliBytes.toString('base64'))},'base64').toString('utf8'),filename);entry.loaded=true;\n`;
- await fs.writeFile(wrapper,source,{flag:'wx',mode:0o600});await checkOwnership();
+ await writePrivate(wrapper,source);await checkOwnership();
  const environment=await npmEnvironment(output,checkOwnership),arguments_=[wrapper,'ci','--ignore-scripts','--no-audit','--no-fund','--strict-ssl=true','--userconfig',userconfig,'--globalconfig',globalconfig,'--cache',cache,'--registry','https://registry.npmjs.org/','--include=dev','--include=optional'];
- const npmProcess=await runNpmChild({outputIdentity,arguments_,environment,sdk,timeout,checkOwnership});
+ const npmProcess=await runNpmChild({outputIdentity,arguments_,environment,sdk,timeout});
  await checkOwnership();
  await readSafe(join(sdk,'package-lock.json'),{bytes:lockBytes.length,sha256:sha(lockBytes),mode:0o600});
  return{sdk,evidence:{cliVersion:CLI_VERSION,lockSha256:sha(lockBytes),npmCliSha256:sha(npmCliBytes),freshCache:true,emptyConfigs:true,strictTls:true,registry:'https://registry.npmjs.org/',lifecycleScriptsExecuted:false,timeoutMs:timeout,npmProcess}};
 }
-async function unpackProduct({materials,descriptor,records,output,checkOwnership}){
- const metadata=await import(pathToFileURL(join(materials,tools.packageSnapshot))),{bytes:manifestBytes}=await readSafe(join(materials,descriptor.product.manifest),records.get(descriptor.product.manifest)),manifest=parseJson(manifestBytes);
+async function unpackProduct({materials,descriptor,records,output,checkOwnership,execution}){
+ await checkOwnership();const metadata=await execution.importTool('packageSnapshot');await checkOwnership();
+ const{bytes:manifestBytes}=await readSafe(join(materials,descriptor.product.manifest),records.get(descriptor.product.manifest)),manifest=parseJson(manifestBytes);
  const{bytes:archive}=await readSafe(join(materials,descriptor.product.archive),records.get(descriptor.product.archive));
  if(manifest.format!==1||manifest.buildId!==descriptor.product.buildId||manifest.packageSourceClean!==true||manifest.tarball!==relative(dirname(descriptor.product.manifest),descriptor.product.archive)||manifest.packageSHA256!==sha(archive)||!Array.isArray(manifest.files)||!['sourceHead','sourceTree'].every(key=>/^[a-f0-9]{40}$/.test(manifest[key]??''))||typeof manifest.sourceRoot!=='string'||!isAbsolute(manifest.sourceRoot)||resolve(manifest.sourceRoot)!==manifest.sourceRoot)throw fail('PRODUCT_SNAPSHOT_INVALID');
  let files;try{files=metadata.decodePackageArchive(archive);metadata.validatePackageClosure(files);}catch{throw fail('PRODUCT_ARCHIVE_INVALID');}
  const index=[...files.keys()].sort().map(path=>({path,bytes:files.get(path).length,sha256:sha(files.get(path)),mode:files.modes.get(path)}));
  if(index.some(file=>!safe(file.path))||JSON.stringify(index)!==JSON.stringify(manifest.files))throw fail('PRODUCT_SNAPSHOT_INVALID');
  await checkOwnership();const product=join(output,'product');await fs.mkdir(product,{mode:0o700});
- for(const file of index)await writeRecord(product,file,files.get(file.path));
+ for(const file of index){await checkOwnership();await writeRecord(product,file,files.get(file.path));}
  return{product,manifest,manifestBytes,packageSnapshot:Object.freeze({manifestPath:join(materials,descriptor.product.manifest),manifestSHA256:sha(manifestBytes),buildId:descriptor.product.buildId})};
 }
 
@@ -174,10 +205,11 @@ export async function installV1(options){
  await canonical(dirname(output),true);await canonical(options.npmCliPath);
  if([options.bundleDirectory,options.npmCliPath].some(path=>inside(path,output)||inside(output,path)))throw fail('EXCLUSIVE_OUTPUT_OUTSIDE_INPUTS_REQUIRED');
  try{await fs.lstat(output);throw fail('OUTPUT_ALREADY_EXISTS');}catch(cause){if(cause.code!=='ENOENT')throw cause;}
- for(const file of selection.selected)await readSafe(join(options.bundleDirectory,file.path),file);
+ const capturedTools=new Map();for(const file of selection.selected){const{bytes}=await readSafe(join(options.bundleDirectory,file.path),file);if(Object.values(tools).includes(file.path))capturedTools.set(file.path,Buffer.from(bytes));}
  const{bytes:npmCliBytes,stat:npmCliStat}=await readSafe(options.npmCliPath),npmCliRecord={bytes:npmCliBytes.length,sha256:sha(npmCliBytes),mode:npmCliStat.mode&0o777};
- let claimed,created=false;
- const checkOwnership=async()=>{const stat=await fs.lstat(output);if(!claimed||!stat.isDirectory()||stat.isSymbolicLink()||stat.ino!==claimed.ino||stat.dev!==claimed.dev||(stat.mode&0o7777)!==0o700||(claimed.mode&0o7777)!==0o700||await fs.realpath(output)!==output)throw fail('OUTPUT_OWNERSHIP_CHANGED');};
+ let claimed,created=false,execution;
+ const matchesOwnership=stat=>claimed&&stat.isDirectory()&&!stat.isSymbolicLink()&&stat.ino===claimed.ino&&stat.dev===claimed.dev&&(stat.mode&0o7777)===0o700&&(claimed.mode&0o7777)===0o700;
+ const checkOwnership=async()=>{const before=await fs.lstat(output);if(!matchesOwnership(before))throw fail('OUTPUT_OWNERSHIP_CHANGED');const actual=await fs.realpath(output),after=await fs.lstat(output);if(actual!==output||!matchesOwnership(after)||before.mtimeMs!==after.mtimeMs||before.ctimeMs!==after.ctimeMs)throw fail('OUTPUT_OWNERSHIP_CHANGED');};
  try{
   try{await fs.mkdir(output,{mode:0o700});}catch(cause){if(cause.code==='EEXIST')throw fail('OUTPUT_ALREADY_EXISTS');throw cause;}created=true;claimed=await fs.lstat(output);await checkOwnership();
   const materials=join(output,'materials');await fs.mkdir(materials,{mode:0o700});
@@ -186,28 +218,31 @@ export async function installV1(options){
   await checkOwnership();
   for(const file of selection.selected)await readSafe(join(materials,file.path),file);
   const self=await readSafe(fileURLToPath(import.meta.url));if(sha(self.bytes)!==selection.records.get(tools.installer).sha256)throw fail('THIN_INSTALLER_IDENTITY_MISMATCH');
+  execution=capturedExecution(capturedTools,selection.records);
   const target=selection.target,overlayManifestPath=target.overlayDirectory+'/artifact-manifest.json',overlay=parseJson((await readSafe(join(materials,overlayManifestPath),selection.records.get(overlayManifestPath))).bytes);
   if(overlay.format!==2||overlay.platform!==process.platform||overlay.arch!==process.arch||overlay.corePackageCount!==74||overlay.packages?.length!==74||overlay.externalPackages?.length!==28)throw fail('THIN_OVERLAY_INVALID');
-  const product=await unpackProduct({materials,descriptor,records:selection.records,output,checkOwnership});
+  const product=await unpackProduct({materials,descriptor,records:selection.records,output,checkOwnership,execution});
   const lockFile=selection.records.get(descriptor.officialSdk.lock),{bytes:lockBytes}=await readSafe(join(materials,lockFile.path),lockFile),lock=parseJson(lockBytes);
   const{sdk,evidence:sdkInstallation}=await installSdk({output,outputIdentity:{directory:output,ino:claimed.ino,dev:claimed.dev,mode:claimed.mode&0o777},npmCliPath:options.npmCliPath,npmCliBytes,lockBytes,lock,timeout,checkOwnership});
-  const path=key=>join(materials,key),pin=key=>selection.records.get(key).sha256,consumer=await import(pathToFileURL(path(tools.consumer)));
+  const path=key=>join(materials,key),pin=key=>selection.records.get(key).sha256;await checkOwnership();const consumer=await execution.importTool('consumer');
   await checkOwnership();
   const runtime=await consumer.assembleDistributionRuntime({officialRoot:sdk,officialLockPath:join(sdk,'package-lock.json'),expectedOfficialLockSha256:sha(lockBytes),overlayDirectory:path(target.overlayDirectory),expectedManifestSha256:pin(overlayManifestPath),sourceIdentityPath:path(target.sourceIdentity),expectedSourceIdentitySha256:pin(target.sourceIdentity),sourceLockPath:path(target.sourceLock),registryDirectory:path(descriptor.registry.directory),registryReceiptsPath:path(descriptor.registry.receipts),productRoot:product.product,outputDirectory:join(output,'runtime'),publicLicensePath:path(descriptor.licenses.public),expectedPublicLicenseSha256:pin(descriptor.licenses.public),nativeLicensePath:path(descriptor.licenses.native),expectedNativeLicenseSha256:pin(descriptor.licenses.native),muslCopyrightPath:path(descriptor.licenses.muslCopyright),expectedMuslCopyrightSha256:pin(descriptor.licenses.muslCopyright),muslSourceNoticesPath:path(descriptor.licenses.muslSourceNotices),expectedMuslSourceNoticesSha256:pin(descriptor.licenses.muslSourceNotices)});
   await checkOwnership();await consumer.verifyDistributionRuntime({directory:runtime.runtimeDirectory,expectedManifestSha256:runtime.manifestSha256});
-  const helper=await import(pathToFileURL(path(tools.guiInstaller))),gui=await helper.installBotGuiProfile({directory:join(output,'profile'),productRoot:product.product,runtimeRoot:runtime.runtimeDirectory,cwd:join(output,'work'),packagePlacement:'snapshot',packageSnapshot:product.packageSnapshot,packageSourceMode:'verified-export'});
+  await checkOwnership();const helper=await execution.importTool('guiInstaller');await checkOwnership();
+  const gui=await helper.installBotGuiProfile({directory:join(output,'profile'),productRoot:product.product,runtimeRoot:runtime.runtimeDirectory,cwd:join(output,'work'),packagePlacement:'snapshot',packageSnapshot:product.packageSnapshot,packageSourceMode:'verified-export'});
   await checkOwnership();
   for(const file of selection.selected){await readSafe(join(options.bundleDirectory,file.path),file);await readSafe(join(materials,file.path),file);}
   await readSafe(options.descriptorPath,descriptorRecord);await readSafe(options.npmCliPath,npmCliRecord);
-  const result={format:1,classification:'PRIVATE_LOCAL_THIN_INSTALLATION',installationDirectory:output,bundleDescriptorSha256:options.expectedDescriptorSha256,target:target.id,nodeVersion:NODE_VERSION,platform:process.platform,arch:process.arch,runtimeDirectory:runtime.runtimeDirectory,runtimeManifestPath:runtime.manifestPath,runtimeManifestSha256:runtime.manifestSha256,profileDirectory:join(output,'profile'),home:gui.home,cwd:gui.cwd,profile:gui.profile,dsh:gui.dsh,configPath:join(gui.home,'profiles',gui.profile,'cordis.patch.yml'),corePackageCount:74,externalPackageCount:28,gui,sdkInstallation,selectedInputFileCount:selection.selected.length,selectedInputFileIndexSha256:sha(JSON.stringify(selection.selected)),productManifestSha256:sha(product.manifestBytes),modelsEnabled:false,credentialReferences:['DEEPSEEK_API_KEY'],credentialsCreated:false,publicReleaseQualified:false,sandboxEnforcementVerified:false,manualStartup:{executable:process.execPath,arguments:[gui.dsh,'--profile',gui.profile,'--port','3080','--no-open'],environment:{DSH_HOME:gui.home}}};
-  const resultBytes=Buffer.from(JSON.stringify(result,null,2)+'\n'),manifestPath=join(output,'installation-manifest.json');await fs.writeFile(manifestPath,resultBytes,{flag:'wx',mode:0o600});await checkOwnership();
+  const result={format:1,classification:'PRIVATE_LOCAL_THIN_INSTALLATION',installationDirectory:output,bundleDescriptorSha256:options.expectedDescriptorSha256,target:target.id,nodeVersion:NODE_VERSION,platform:process.platform,arch:process.arch,runtimeDirectory:runtime.runtimeDirectory,runtimeManifestPath:runtime.manifestPath,runtimeManifestSha256:runtime.manifestSha256,profileDirectory:join(output,'profile'),home:gui.home,cwd:gui.cwd,profile:gui.profile,dsh:gui.dsh,configPath:join(gui.home,'profiles',gui.profile,'cordis.patch.yml'),corePackageCount:74,externalPackageCount:28,gui,sdkInstallation,helperExecution:execution.evidence(),selectedInputFileCount:selection.selected.length,selectedInputFileIndexSha256:sha(JSON.stringify(selection.selected)),productManifestSha256:sha(product.manifestBytes),modelsEnabled:false,credentialReferences:['DEEPSEEK_API_KEY'],credentialsCreated:false,publicReleaseQualified:false,sandboxEnforcementVerified:false,manualStartup:{executable:process.execPath,arguments:[gui.dsh,'--profile',gui.profile,'--port','3080','--no-open'],environment:{DSH_HOME:gui.home}}};
+  const resultBytes=Buffer.from(JSON.stringify(result,null,2)+'\n'),manifestPath=join(output,'installation-manifest.json');await checkOwnership();await fs.writeFile(manifestPath,resultBytes,{flag:'wx',mode:0o600});await checkOwnership();
   return{...result,installationManifestPath:manifestPath,installationManifestSha256:sha(resultBytes),ownership:{ino:claimed.ino,dev:claimed.dev}};
  }catch(cause){
-  if(ownErrors.has(cause)&&cause.code==='SDK_INSTALL_STOP_UNKNOWN'){cause.cleanupErrorCategory='SDK_CHILD_STOP_UNKNOWN';throw cause;}
-  if(created&&!claimed)cause.cleanupErrorCategory='OUTPUT_OWNERSHIP_UNAVAILABLE';
-  if(claimed)try{await checkOwnership();await fs.rm(output,{recursive:true,force:true});}catch(cleanup){if(cleanup.code!=='ENOENT')cause.cleanupErrorCategory=cleanup.code==='OUTPUT_OWNERSHIP_CHANGED'?cleanup.code:'CLEANUP_FAILED';}
-  throw cause;
- }
+  if(!created)throw cause;
+  const code=ownErrors.has(cause)?cause.code:ioErrors.has(cause?.code)?cause.code:'THIN_INSTALL_FAILED',failure=Object.assign(new Error(code),{code});if(ownErrors.has(cause))ownErrors.add(failure);
+  const preservation=Object.freeze({state:'PRESERVED_AFTER_FAILURE',automaticRecursiveDeletion:false,identityKnown:Boolean(claimed),outputIdentity:Object.freeze({directory:output,ino:claimed?.ino??null,dev:claimed?.dev??null,mode:claimed?claimed.mode&0o777:null})});failure.failurePreservation=preservation;failurePreservations.set(failure,preservation);
+  if(ownErrors.has(cause)&&cause.code==='SDK_INSTALL_STOP_UNKNOWN'){failure.cleanupErrorCategory='SDK_CHILD_STOP_UNKNOWN';failure.stopConfirmation=cause.stopConfirmation;}
+  throw failure;
+ }finally{execution?.close();}
 }
 export function parseV1InstallArguments(values){
  const flags={'--bundle':'bundleDirectory','--descriptor':'descriptorPath','--descriptor-sha256':'expectedDescriptorSha256','--output':'outputDirectory','--npm-cli':'npmCliPath','--npm-timeout-ms':'npmTimeoutMs'},options={npmTimeoutMs:120000},seen=new Set();
@@ -219,5 +254,5 @@ export function parseV1InstallArguments(values){
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  try{process.stdout.write(JSON.stringify(await installV1(parseV1InstallArguments(process.argv.slice(2))))+'\n');}
- catch(cause){const io=new Set(['ENOENT','EACCES','EPERM','EEXIST','ENOTDIR','EIO','ENOMEM','ELOOP','ERR_ACCESS_DENIED']);const errorCategory=ownErrors.has(cause)?cause.code:io.has(cause?.code)?'THIN_IO_FAILED':'THIN_INSTALL_FAILED';const cleanupErrorCategory=cause?.cleanupErrorCategory===undefined?undefined:['OUTPUT_OWNERSHIP_UNAVAILABLE','OUTPUT_OWNERSHIP_CHANGED','CLEANUP_FAILED','SDK_CHILD_STOP_UNKNOWN'].includes(cause.cleanupErrorCategory)?cause.cleanupErrorCategory:'CLEANUP_FAILED';const stopUnknown=ownErrors.has(cause)&&cause.code==='SDK_INSTALL_STOP_UNKNOWN',message=JSON.stringify({errorCategory,cleanupErrorCategory,...stopUnknown?{stopConfirmation:cause.stopConfirmation}:{}})+'\n';if(stopUnknown){const deadline=setTimeout(()=>process.exit(1),100);process.stderr.write(message,()=>{clearTimeout(deadline);process.exit(1);});}else{process.stderr.write(message);process.exitCode=1;}}
+ catch(cause){const errorCategory=ownErrors.has(cause)?cause.code:ioErrors.has(cause?.code)?'THIN_IO_FAILED':'THIN_INSTALL_FAILED',stopUnknown=ownErrors.has(cause)&&cause.code==='SDK_INSTALL_STOP_UNKNOWN',preservation=failurePreservations.get(cause),message=JSON.stringify({errorCategory,...preservation?{failurePreservation:preservation}:{},...stopUnknown?{cleanupErrorCategory:'SDK_CHILD_STOP_UNKNOWN',stopConfirmation:cause.stopConfirmation}:{}})+'\n';if(stopUnknown){const deadline=setTimeout(()=>process.exit(1),100);process.stderr.write(message,()=>{clearTimeout(deadline);process.exit(1);});}else{process.stderr.write(message);process.exitCode=1;}}
 }

@@ -17,6 +17,10 @@ const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const sri=bytes=>'sha512-'+createHash('sha512').update(bytes).digest('base64');
 const write=async(path,bytes,mode=0o644)=>{await fs.mkdir(dirname(path),{recursive:true});await fs.writeFile(path,bytes,{mode});await fs.chmod(path,mode);};
 const json=(path,value)=>write(path,JSON.stringify(value,null,2)+'\n');
+async function preservedFailure(promise,options,code){
+ const cause=await promise.then(()=>assert.fail('installation must fail'),cause=>cause);if(code)assert.equal(cause.code,code);
+ const record=cause.failurePreservation;assert.equal(record.state,'PRESERVED_AFTER_FAILURE');assert.equal(record.automaticRecursiveDeletion,false);assert.equal(record.identityKnown,true);const stat=await fs.stat(options.outputDirectory);assert.equal(stat.ino,record.outputIdentity.ino);assert.equal(stat.dev,record.outputIdentity.dev);assert.equal(stat.mode&0o777,0o700);return cause;
+}
 const toolPaths={installer:'scripts/install-v1.mjs',consumer:'scripts/assemble-distribution-runtime.mjs',guiInstaller:'scripts/install-bot-gui-profile.mjs',packageSnapshot:'scripts/package-snapshot.mjs',runtimeExporter:'tools/runtime-export/export.mjs'};
 async function fixture(t){
  const parent=process.env.DSH_BOT_TEST_ROOT||'/workspace/dsh-v1-evidence/distribution-consumer';await fs.mkdir(parent,{recursive:true});
@@ -87,7 +91,7 @@ test('input mutation during its actual descriptor read is refused',async t=>{
 test('input mutation between initial verification and the actual copy is refused',async t=>{
  const{options,target}=await fixture(t),selected=join(options.bundleDirectory,target.sourcePacket);let count=0,changed=false;
  const reads=observeReads(t,async path=>{if(path!==selected||++count!==2)return;changed=true;await fs.appendFile(path,'changed during copy');});
- await assert.rejects(async()=>module.installV1(options),{code:'THIN_INPUT_CHANGED'});reads.restore();assert.equal(changed,true);await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+ await preservedFailure(module.installV1(options),options,'THIN_INPUT_CHANGED');reads.restore();assert.equal(changed,true);
 });
 test('existing caller output remains untouched',async t=>{
  const{options}=await fixture(t);await fs.mkdir(options.outputDirectory);await write(join(options.outputDirectory,'caller.txt'),'CALLER_REMAINS');
@@ -150,13 +154,16 @@ async function fullFixture(t,{failure=false,hang=false,replaceOutput=false,chang
  await refresh();return{...base,productManifest};
 }
 test('thin files install an actual coherent private runtime and relocated GUI export without Git',async t=>{
- const{options,productManifest}=await fullFixture(t),result=await module.installV1(options);
+ const{options,descriptor,productManifest}=await fullFixture(t),result=await module.installV1(options);
  assert.equal(result.modelsEnabled,false);assert.deepEqual(result.credentialReferences,['DEEPSEEK_API_KEY']);assert.equal(result.credentialsCreated,false);assert.equal(result.publicReleaseQualified,false);
  assert.equal(result.corePackageCount,74);assert.equal(result.externalPackageCount,28);assert.equal(result.gui.packageInstallation.packageSourceMode,'verified-export');assert.equal(result.gui.packageInstallation.recordedSourceRoot,productManifest.sourceRoot);assert.equal(result.gui.packageInstallation.sourceHead,productManifest.sourceHead);assert.equal(result.gui.packageInstallation.sourceTree,productManifest.sourceTree);
  assert.deepEqual(result.manualStartup.arguments.slice(1),['--profile','dsh-bot-gui','--port','3080','--no-open']);assert.equal(result.manualStartup.environment.DSH_HOME,result.home);assert.equal(result.manualStartup.arguments.includes('--enable-model-requests'),false);
  const observation=JSON.parse(await fs.readFile(join(result.installationDirectory,'sdk/npm-install-observation.json')));assert.equal(observation.cacheInitiallyEmpty,true);assert.equal(observation.emptyConfigs,true);assert.equal(observation.envNames.includes('NODE_OPTIONS'),false);
  const startup=await import(pathToFileURL(join(result.installationDirectory,'product/src/bot-gui-startup.mjs')));assert.equal(startup.parseBotGuiArguments([]).modelRequestsEnabled,false);assert.equal(startup.parseBotGuiArguments(['--enable-model-requests']).modelRequestsEnabled,true);
  const consumer=await import(pathToFileURL(join(result.installationDirectory,'materials/scripts/assemble-distribution-runtime.mjs')));assert.equal((await consumer.verifyDistributionRuntime({directory:result.runtimeDirectory,expectedManifestSha256:result.runtimeManifestSha256})).verified,true);
+ assert.equal(result.helperExecution.mode,'CAPTURED_DESCRIPTOR_PINNED_SOURCES');assert.deepEqual(result.helperExecution.loadedTools,Object.values(toolPaths).filter(path=>path!==toolPaths.installer));assert.equal(result.helperExecution.mappedTools.length,5);
+ for(const record of result.helperExecution.mappedTools){const pinned=descriptor.files.find(file=>file.path===record.path);assert.equal(record.sha256,pinned.sha256);assert.equal(record.bytes,pinned.bytes);assert.equal(record.mode,pinned.mode);assert.match(record.url,/^file:\/\/\/__dsh_v1_captured__\/[a-f0-9-]{36}\//);await assert.rejects(fs.lstat(new URL(record.url)),{code:'ENOENT'});}
+ assert.equal(result.helperExecution.executionMapSha256,sha(JSON.stringify(result.helperExecution.mappedTools)));assert.equal(result.helperExecution.capturedSourceIndexSha256,sha(JSON.stringify(result.helperExecution.mappedTools.map(({url,...record})=>record))));
  await assert.rejects(fs.lstat(join(result.installationDirectory,'product/.git')),{code:'ENOENT'});await assert.rejects(fs.lstat(join(result.installationDirectory,'lifecycle-was-run')),{code:'ENOENT'});
 });
 test('unselected platform files are never read or required',async t=>{
@@ -165,16 +172,16 @@ test('unselected platform files are never read or required',async t=>{
  const reads=observeReads(t);await module.installV1(options);reads.restore();assert.equal(reads.paths.some(path=>path.includes('/host/other/')),false);
 });
 test('authenticated product archive traversal is refused before npm is started',async t=>{
- const{options,root}=await fullFixture(t,{unsafeProduct:true});await assert.rejects(module.installV1(options),{code:'PRODUCT_ARCHIVE_INVALID'});await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});await assert.rejects(fs.lstat(join(root,'owned-escape.txt')),{code:'ENOENT'});
+ const{options,root}=await fullFixture(t,{unsafeProduct:true});await preservedFailure(module.installV1(options),options,'PRODUCT_ARCHIVE_INVALID');await assert.rejects(fs.lstat(join(root,'owned-escape.txt')),{code:'ENOENT'});
 });
-test('failed npm child reports a bounded category and cleans the owned output',async t=>{
- const{options}=await fullFixture(t,{failure:true});await assert.rejects(module.installV1(options),{code:'SDK_INSTALL_FAILED'});await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+test('failed npm child reports a bounded category and preserves the failed output',async t=>{
+ const{options}=await fullFixture(t,{failure:true});await preservedFailure(module.installV1(options),options,'SDK_INSTALL_FAILED');
 });
 test('npm timeout terminates its owned child even when SIGTERM is ignored',async t=>{
- const{options}=await fullFixture(t,{hang:true}),start=Date.now();await assert.rejects(module.installV1(options),{code:'SDK_INSTALL_TIMEOUT'});assert.ok(Date.now()-start<6000);await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+ const{options}=await fullFixture(t,{hang:true}),start=Date.now();await preservedFailure(module.installV1(options),options,'SDK_INSTALL_TIMEOUT');assert.ok(Date.now()-start<6000);
 });
-test('npm-stage output replacement is preserved by inode cleanup',async t=>{
- const{options}=await fullFixture(t,{replaceOutput:true});const cause=await module.installV1(options).then(()=>assert.fail('replacement must fail'),cause=>cause);assert.equal(cause.code,'OUTPUT_OWNERSHIP_CHANGED');assert.equal(cause.cleanupErrorCategory,'OUTPUT_OWNERSHIP_CHANGED');assert.equal(await fs.readFile(join(options.outputDirectory,'caller.txt'),'utf8'),'CALLER_REPLACEMENT_REMAINS');
+test('npm-stage output replacement is preserved without automatic deletion',async t=>{
+ const{options}=await fullFixture(t,{replaceOutput:true});const cause=await module.installV1(options).then(()=>assert.fail('replacement must fail'),cause=>cause);assert.equal(cause.code,'OUTPUT_OWNERSHIP_CHANGED');assert.equal(cause.failurePreservation.automaticRecursiveDeletion,false);assert.equal(await fs.readFile(join(options.outputDirectory,'caller.txt'),'utf8'),'CALLER_REPLACEMENT_REMAINS');
 });
 test('CLI isolates synthetic credential/config environment without printing it',async t=>{
  const{options,root}=await fullFixture(t),sentinel='OWNED_SYNTHETIC_PRIVATE_VALUE';await write(join(root,'owned-user.npmrc'),'not to be read');
@@ -192,11 +199,11 @@ for(const kind of ['unsafe-path','registry-port'])test('official lock '+kind+' i
  if(kind==='unsafe-path')lock.packages['node_modules/../node_modules/fixture']=binding;else lock.packages['node_modules/fixture']={...binding,resolved:'https://registry.npmjs.org:8443/fixture/-/fixture-1.0.0.tgz'};
  const bytes=Buffer.from(JSON.stringify(lock,null,2)+'\n');await write(join(options.bundleDirectory,path),bytes);Object.assign(descriptor.files.find(file=>file.path===path),{bytes:bytes.length,sha256:sha(bytes)});await refresh();
  let spawns=0;const original=mutableChild.spawn;t.mock.method(mutableChild,'spawn',(...args)=>{spawns++;return original(...args);});syncBuiltinESMExports();t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
- await assert.rejects(module.installV1(options),{code:'OFFICIAL_SDK_LOCK_INVALID'});assert.equal(spawns,0);await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+ await preservedFailure(module.installV1(options),options,'OFFICIAL_SDK_LOCK_INVALID');assert.equal(spawns,0);
 });
-test('changed installation directory mode is refused and preserved during cleanup',async t=>{
+test('changed installation directory mode is refused and preserved without automatic deletion',async t=>{
  const{options}=await fullFixture(t,{changeOutputMode:true}),cause=await module.installV1(options).then(()=>assert.fail('output mode drift must fail'),cause=>cause);
- assert.equal(cause.code,'OUTPUT_OWNERSHIP_CHANGED');assert.equal(cause.cleanupErrorCategory,'OUTPUT_OWNERSHIP_CHANGED');assert.equal((await fs.stat(options.outputDirectory)).mode&0o777,0o755);
+ assert.equal(cause.code,'OUTPUT_OWNERSHIP_CHANGED');assert.equal(cause.failurePreservation.automaticRecursiveDeletion,false);assert.equal((await fs.stat(options.outputDirectory)).mode&0o777,0o755);
 });
 test('legitimate public CA inputs are safely copied for the npm child',async t=>{
  const{options,root}=await fullFixture(t),certificate=join(root,'owned-public-ca.pem');await write(certificate,'owned synthetic certificate\n');
@@ -209,24 +216,24 @@ test('replaced public CA input is refused before delegated Node reads or npm spa
  const previous=process.env.NODE_EXTRA_CA_CERTS;process.env.NODE_EXTRA_CA_CERTS=certificate;t.after(()=>{if(previous===undefined)delete process.env.NODE_EXTRA_CA_CERTS;else process.env.NODE_EXTRA_CA_CERTS=previous;});
  let replaced=false,spawns=0;const reads=observeReads(t,null,async path=>{if(path!==certificate||replaced)return;replaced=true;await fs.unlink(certificate);await fs.symlink(outside,certificate);});
  const original=mutableChild.spawn;t.mock.method(mutableChild,'spawn',(...args)=>{spawns++;return original(...args);});syncBuiltinESMExports();
- await assert.rejects(module.installV1(options));reads.restore();assert.equal(replaced,true);assert.equal(spawns,0);assert.equal(reads.paths.includes(outside),false);assert.equal(reads.paths.includes(certificate),false);await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+ await preservedFailure(module.installV1(options),options);reads.restore();assert.equal(replaced,true);assert.equal(spawns,0);assert.equal(reads.paths.includes(outside),false);assert.equal(reads.paths.includes(certificate),false);
 });
 test('late npm entry mode drift cannot retain its first verified input identity',async t=>{
  const{options}=await fullFixture(t);let changed=false;
  const reads=observeReads(t,async path=>{if(changed||!path.endsWith('/sdk/node_modules/@deepseek-ai/dsh/package.json'))return;changed=true;await fs.chmod(options.npmCliPath,0o600);});
- await assert.rejects(module.installV1(options),{code:'THIN_FILE_HASH_MODE_MISMATCH'});reads.restore();assert.equal(changed,true);await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+ await preservedFailure(module.installV1(options),options,'THIN_FILE_HASH_MODE_MISMATCH');reads.restore();assert.equal(changed,true);
 });
 test('late descriptor mode drift cannot retain its first verified input identity',async t=>{
  const{options}=await fullFixture(t);let changed=false;
  const reads=observeReads(t,async path=>{if(changed||!path.endsWith('/sdk/node_modules/@deepseek-ai/dsh/package.json'))return;changed=true;await fs.chmod(options.descriptorPath,0o600);});
- await assert.rejects(module.installV1(options),{code:'THIN_FILE_HASH_MODE_MISMATCH'});reads.restore();assert.equal(changed,true);await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+ await preservedFailure(module.installV1(options),options,'THIN_FILE_HASH_MODE_MISMATCH');reads.restore();assert.equal(changed,true);
 });
 test('CLI sanitizes unknown delegated errors even when their code imitates an installer category',async t=>{
  const{options,descriptor,refresh}=await fullFixture(t),path=descriptor.tools.consumer,bytes=Buffer.from("export async function assembleDistributionRuntime(){const cause=new Error('PRIVXYZ');cause.code='THIN_FILE_HASH_MODE_MISMATCH';throw cause;}\n");
  await write(join(options.bundleDirectory,path),bytes);Object.assign(descriptor.files.find(file=>file.path===path),{bytes:bytes.length,sha256:sha(bytes)});await refresh();
  const flags={'--bundle':'bundleDirectory','--descriptor':'descriptorPath','--descriptor-sha256':'expectedDescriptorSha256','--output':'outputDirectory','--npm-cli':'npmCliPath','--npm-timeout-ms':'npmTimeoutMs'},args=[join(import.meta.dirname,'install-v1.mjs'),...Object.entries(flags).flatMap(([flag,key])=>[flag,String(options[key])])];
  const result=spawnSync(process.execPath,args,{env:{PATH:'/usr/local/bin:/usr/bin:/bin',LANG:'C'},encoding:'utf8',timeout:15000});
- assert.equal(result.status,1);assert.equal(result.stdout,'');assert.deepEqual(JSON.parse(result.stderr),{errorCategory:'THIN_INSTALL_FAILED'});assert.equal(result.stderr.includes('PRIVXYZ'),false);await assert.rejects(fs.lstat(options.outputDirectory),{code:'ENOENT'});
+ assert.equal(result.status,1);assert.equal(result.stdout,'');const report=JSON.parse(result.stderr);assert.equal(report.errorCategory,'THIN_INSTALL_FAILED');assert.equal(report.failurePreservation.state,'PRESERVED_AFTER_FAILURE');assert.equal(report.failurePreservation.automaticRecursiveDeletion,false);assert.equal(result.stderr.includes('PRIVXYZ'),false);assert.equal((await fs.stat(options.outputDirectory)).ino,report.failurePreservation.outputIdentity.ino);
 });
 
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -276,12 +283,12 @@ for(const kind of ['changed','unavailable'])test(kind+' npm PID metadata never r
   assert.equal(cause.code,'SDK_INSTALL_STOP_UNKNOWN');assert.equal(cause.stopConfirmation.pid,child.pid);assert.equal(signals.some(item=>item.pid===process.pid||item.pid===-process.pid),false);assert.equal(signals.some(item=>item.signal!==0),false);assert.equal((await fs.stat(f.options.outputDirectory)).mode&0o777,0o700);
  }finally{process.kill=originalKill;await h.stop();await pending;}
 });
-test('a replaced output during live npm is preserved without any destructive child signal',async t=>{
+test('a replaced output is preserved while its original live npm group is stopped',async t=>{
  const f=await fullFixture(t,{hang:true}),h=await guardedNpmHarness(t,f,{live:true}),originalKill=process.kill,signals=[];let pending;
  process.kill=(pid,signal)=>{signals.push({pid,signal});return h.realKill(pid,signal);};
  try{
   pending=module.installV1(f.options).then(()=>assert.fail('changed output cannot pass'),cause=>cause);await h.ready();await fs.rename(f.options.outputDirectory,f.options.outputDirectory+'.owned-retained');await fs.mkdir(f.options.outputDirectory,{mode:0o700});await write(join(f.options.outputDirectory,'caller.txt'),'CALLER_FOREIGN_OUTPUT_REMAINS');
-  const cause=await bounded(pending,2300);assert.equal(cause.code,'SDK_INSTALL_STOP_UNKNOWN');assert.equal(cause.cleanupErrorCategory,'SDK_CHILD_STOP_UNKNOWN');assert.equal(signals.some(item=>item.signal!==0),false);assert.equal(await fs.readFile(join(f.options.outputDirectory,'caller.txt'),'utf8'),'CALLER_FOREIGN_OUTPUT_REMAINS');assert.equal((await fs.stat(f.options.outputDirectory+'.owned-retained')).mode&0o777,0o700);
+  const cause=await bounded(pending,2300);assert.equal(cause.code,'SDK_INSTALL_TIMEOUT');assert.equal(cause.failurePreservation.automaticRecursiveDeletion,false);assert.deepEqual(signals.filter(item=>item.signal!==0).map(item=>item.signal),['SIGTERM','SIGKILL']);assert.equal(signals.every(item=>item.pid===-h.captured.pid),true);assert.equal(await fs.readFile(join(f.options.outputDirectory,'caller.txt'),'utf8'),'CALLER_FOREIGN_OUTPUT_REMAINS');assert.equal((await fs.stat(f.options.outputDirectory+'.owned-retained')).mode&0o777,0o700);assert.equal(cause.failurePreservation.outputIdentity.ino,(await fs.stat(f.options.outputDirectory+'.owned-retained')).ino);
  }finally{process.kill=originalKill;await h.stop();await pending;}
 });
 test('actual CLI exits bounded on STOP_UNKNOWN while retaining its guarded live npm child and output',{skip:process.platform!=='linux'?'owned Linux process-start identity teardown is qualified on Linux only':false},async t=>{
@@ -303,4 +310,48 @@ test('actual CLI exits bounded on STOP_UNKNOWN while retaining its guarded live 
   for(let i=0;i<150;i++){state=await ownState();if(state==='GONE'||state==='Z'){stopped=true;break;}await delay(20);}assert.equal(stopped,true,'external harness must confirm the exact guarded child can no longer write');
   process.stdout.write(JSON.stringify({ownedCliNpmTeardown:{pid:identity.pid,group:identity.group,startIdentityMatched:true,state,stopped,network:0,model:0,native:0,extraChild:0}})+'\n');
  }
+});
+test('failure always preserves the newly claimed output without a recursive delete attempt',async t=>{
+ const f=await fixture(t),selected=join(f.options.outputDirectory,'materials',f.target.sourcePacket),open=mutableFs.open,rm=mutableFs.rm;let fault=false,originalIdentity,deleteAttempts=0;
+ t.mock.method(mutableFs,'open',async(path,...args)=>{if(path===selected&&!fault){fault=true;originalIdentity=await fs.stat(f.options.outputDirectory);throw Object.assign(Error('owned I2 read failure'),{code:'EIO'});}return open(path,...args);});
+ t.mock.method(mutableFs,'rm',async(path,...args)=>{if(path===f.options.outputDirectory)deleteAttempts++;return rm(path,...args);});syncBuiltinESMExports();t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ const cause=await module.installV1(f.options).then(()=>assert.fail('owned fault must fail'),cause=>cause);assert.equal(fault,true);assert.equal(cause.code,'EIO');const after=await fs.stat(f.options.outputDirectory);
+ assert.equal(after.ino,originalIdentity.ino);assert.equal(after.dev,originalIdentity.dev);assert.equal(after.mode&0o777,0o700);assert.equal(deleteAttempts,0);assert.equal(cause.failurePreservation.state,'PRESERVED_AFTER_FAILURE');assert.equal(cause.failurePreservation.automaticRecursiveDeletion,false);assert.equal(cause.failurePreservation.outputIdentity.ino,originalIdentity.ino);
+});
+test('ownership replacement during awaited canonical check is refused before material writes',async t=>{
+ const f=await fixture(t),output=f.options.outputDirectory,realpath=mutableFs.realpath;let mutationTriggered=false,originalIdentity,replacementIdentity;
+ t.mock.method(mutableFs,'realpath',async(path,...args)=>{const value=await realpath(path,...args);if(path===output&&!mutationTriggered){mutationTriggered=true;originalIdentity=await fs.stat(output);await fs.rename(output,output+'.owned-retained');await fs.mkdir(output,{mode:0o700});await write(join(output,'caller.txt'),'CALLER_CANONICAL_RACE_REMAINS',0o600);replacementIdentity=await fs.stat(output);}return value;});syncBuiltinESMExports();t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ const cause=await module.installV1(f.options).then(()=>assert.fail('replaced root must fail'),cause=>cause);assert.equal(mutationTriggered,true);assert.equal(cause.code,'OUTPUT_OWNERSHIP_CHANGED');assert.equal(await fs.readFile(join(output,'caller.txt'),'utf8'),'CALLER_CANONICAL_RACE_REMAINS');assert.deepEqual(await fs.readdir(output),['caller.txt']);
+ assert.equal((await fs.stat(output)).ino,replacementIdentity.ino);assert.equal((await fs.stat(join(output,'caller.txt'))).mode&0o777,0o600);assert.equal(cause.failurePreservation.outputIdentity.ino,originalIdentity.ino);assert.equal(cause.failurePreservation.automaticRecursiveDeletion,false);
+});
+test('caller bytes modes and inode survive a triggered replacement and source fault',async t=>{
+ const f=await fixture(t),output=f.options.outputDirectory,selected=join(output,'materials',f.target.sourcePacket),open=mutableFs.open,rm=mutableFs.rm;let mutationTriggered=false,originalIdentity,replacementIdentity,deleteAttempts=0;
+ t.mock.method(mutableFs,'open',async(path,...args)=>{if(path===selected&&!mutationTriggered){mutationTriggered=true;originalIdentity=await fs.stat(output);await fs.rename(output,output+'.owned-retained');await fs.mkdir(output,{mode:0o750});await fs.chmod(output,0o750);await write(join(output,'caller.txt'),'CALLER_FAILURE_RACE_REMAINS',0o640);replacementIdentity=await fs.stat(output);throw Object.assign(Error('owned I2 source failure'),{code:'EIO'});}return open(path,...args);});
+ t.mock.method(mutableFs,'rm',async(path,...args)=>{if(path===output)deleteAttempts++;return rm(path,...args);});syncBuiltinESMExports();t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ const cause=await module.installV1(f.options).then(()=>assert.fail('source fault must fail'),cause=>cause);assert.equal(mutationTriggered,true);assert.equal(cause.code,'EIO');assert.equal(deleteAttempts,0);assert.equal(await fs.readFile(join(output,'caller.txt'),'utf8'),'CALLER_FAILURE_RACE_REMAINS');assert.equal((await fs.stat(join(output,'caller.txt'))).mode&0o777,0o640);const after=await fs.stat(output);assert.equal(after.ino,replacementIdentity.ino);assert.equal(after.dev,replacementIdentity.dev);assert.equal(after.mode&0o777,0o750);assert.equal(cause.failurePreservation.outputIdentity.ino,originalIdentity.ino);assert.equal(cause.failurePreservation.automaticRecursiveDeletion,false);
+});
+test('a late replaced output is refused before importing an unreviewed consumer',async t=>{
+ const{options}=await fullFixture(t),retained=options.outputDirectory+'.owned-retained',marker=join(options.outputDirectory,'unreviewed-import-executed');let canonicalReads=0,mutationTriggered=false,originalIdentity,replacementIdentity,sentinelIdentity;
+ const reads=observeReads(t,null,async path=>{
+  if(path!==join(options.outputDirectory,'sdk/package-lock.json')||++canonicalReads!==3)return;
+  originalIdentity=await fs.stat(options.outputDirectory);await fs.rename(options.outputDirectory,retained);await fs.mkdir(options.outputDirectory,{mode:0o700});await write(join(options.outputDirectory,'caller.txt'),'CALLER_LATE_REPLACEMENT',0o600);
+  await write(join(options.outputDirectory,'materials/scripts/assemble-distribution-runtime.mjs'),`import fs from 'node:fs/promises';\nawait fs.writeFile(${JSON.stringify(marker)},'UNREVIEWED_IMPORT_EXECUTED',{flag:'wx',mode:0o600});\nexport async function assembleDistributionRuntime(){throw Error('ASSEMBLY_MUST_NOT_EXECUTE');}\n`);
+  replacementIdentity=await fs.stat(options.outputDirectory);sentinelIdentity=await fs.stat(join(options.outputDirectory,'caller.txt'));mutationTriggered=true;
+ });
+ const cause=await module.installV1(options).then(()=>assert.fail('replacement must refuse installation'),cause=>cause);reads.restore();assert.equal(mutationTriggered,true);assert.equal(canonicalReads,3);assert.equal(cause.code,'OUTPUT_OWNERSHIP_CHANGED');
+ assert.equal(cause.failurePreservation.outputIdentity.ino,originalIdentity.ino);assert.equal(cause.failurePreservation.outputIdentity.dev,originalIdentity.dev);assert.equal(cause.failurePreservation.automaticRecursiveDeletion,false);
+ const after=await fs.stat(options.outputDirectory),sentinelAfter=await fs.stat(join(options.outputDirectory,'caller.txt'));assert.equal(after.ino,replacementIdentity.ino);assert.equal(after.dev,replacementIdentity.dev);assert.equal(after.mode&0o777,0o700);assert.equal(sentinelAfter.ino,sentinelIdentity.ino);assert.equal(sentinelAfter.dev,sentinelIdentity.dev);assert.equal(sentinelAfter.mode&0o777,0o600);assert.equal(await fs.readFile(join(options.outputDirectory,'caller.txt'),'utf8'),'CALLER_LATE_REPLACEMENT');
+ await assert.rejects(fs.lstat(marker),{code:'ENOENT'});assert.deepEqual((await fs.readdir(options.outputDirectory)).sort(),['caller.txt','materials']);
+});
+test('replacement after the ownership check never executes pathname helper bytes',async t=>{
+ const{options}=await fullFixture(t),retained=options.outputDirectory+'.owned-retained',marker=join(options.outputDirectory,'unreviewed-import-executed');let canonicalReads=0,ownershipStats=0,phaseReady=false,mutationTriggered=false,originalIdentity,replacementIdentity;
+ const reads=observeReads(t,null,async path=>{if(path===join(options.outputDirectory,'sdk/package-lock.json')&&++canonicalReads===3)phaseReady=true;});
+ const lstat=mutableFs.lstat;t.mock.method(mutableFs,'lstat',async(path,...args)=>{const stat=await lstat(path,...args);if(String(path)!==options.outputDirectory||!phaseReady||++ownershipStats!==2)return stat;originalIdentity=stat;await fs.rename(options.outputDirectory,retained);await fs.mkdir(options.outputDirectory,{mode:0o700});await write(join(options.outputDirectory,'caller.txt'),'CALLER_AFTER_OWNERSHIP_CHECK',0o600);await write(join(options.outputDirectory,'materials/scripts/assemble-distribution-runtime.mjs'),`import fs from 'node:fs/promises';\nawait fs.writeFile(${JSON.stringify(marker)},'UNREVIEWED_IMPORT_EXECUTED',{flag:'wx',mode:0o600});\nexport async function assembleDistributionRuntime(){throw Error('ASSEMBLY_MUST_NOT_EXECUTE');}\n`);replacementIdentity=await fs.stat(options.outputDirectory);mutationTriggered=true;return stat;});syncBuiltinESMExports();
+ const cause=await module.installV1(options).then(()=>assert.fail('replacement must refuse installation'),cause=>cause);reads.restore();assert.equal(mutationTriggered,true);assert.equal(canonicalReads,3);assert.equal(cause.code,'OUTPUT_OWNERSHIP_CHANGED');
+ await assert.rejects(fs.lstat(marker),{code:'ENOENT'});const after=await fs.stat(options.outputDirectory);assert.equal(after.ino,replacementIdentity.ino);assert.equal(after.dev,replacementIdentity.dev);assert.equal(after.mode&0o777,0o700);assert.equal(await fs.readFile(join(options.outputDirectory,'caller.txt'),'utf8'),'CALLER_AFTER_OWNERSHIP_CHECK');assert.equal(cause.failurePreservation.outputIdentity.ino,originalIdentity.ino);assert.equal(cause.failurePreservation.automaticRecursiveDeletion,false);assert.deepEqual((await fs.readdir(options.outputDirectory)).sort(),['caller.txt','materials']);
+});
+test('captured helpers cannot execute an undeclared source file',async t=>{
+ const{options,root,descriptor,refresh}=await fullFixture(t),unreviewed=join(root,'unreviewed-helper.mjs'),marker=join(root,'unreviewed-helper-executed');await write(unreviewed,`import fs from 'node:fs/promises';await fs.writeFile(${JSON.stringify(marker)},'UNREVIEWED_EXECUTED',{flag:'wx'});\n`);
+ const bytes=Buffer.from(`import ${JSON.stringify(pathToFileURL(unreviewed).href)};\nexport async function assembleDistributionRuntime(){throw Error('ASSEMBLY_MUST_NOT_EXECUTE');}\n`);await write(join(options.bundleDirectory,toolPaths.consumer),bytes);Object.assign(descriptor.files.find(file=>file.path===toolPaths.consumer),{bytes:bytes.length,sha256:sha(bytes)});await refresh();
+ const reads=observeReads(t);await preservedFailure(module.installV1(options),options,'THIN_HELPER_IMPORT_UNDECLARED');reads.restore();assert.equal(reads.paths.includes(unreviewed),false);await assert.rejects(fs.lstat(marker),{code:'ENOENT'});
 });

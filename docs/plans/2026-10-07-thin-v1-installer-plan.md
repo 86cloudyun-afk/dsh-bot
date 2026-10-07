@@ -17,7 +17,7 @@
 - Caller-provided descriptor SHA-256; canonical/O_NOFOLLOW reads; every provided needed selected file binds hash, bytes and mode.
 - No complete official SDK bytes in the thin artifact, no lifecycle/native/model/CLI startup during installation.
 - Fresh empty npm cache/config/Home; strict TLS and fixed HTTPS registry; filtered child environment and bounded timeout.
-- Fresh exclusive output/profile/work; cleanup only retained owned inode/device; no old Home/config/credentials.
+- Fresh exclusive output/profile/work; every created failure is preserved without automatic recursive removal; no old Home/config/credentials.
 - Private qualification only; model gate false by default and credential reference only.
 
 ## Review focus
@@ -26,7 +26,7 @@
 - An unselected target may be unavailable; selecting it must still be refused on the wrong host.
 - Input mutation between validation/copy or within a descriptor read must never produce an accepted installation.
 - npm user settings, inherited provider keys and lifecycle flags must not affect the fresh child operation.
-- A replaced installation directory must survive failure cleanup; timeout must terminate the owned child group.
+- A replaced installation directory must survive every failure without new assembly writes; timeout must confirm the original owned group stopped or return bounded `SDK_INSTALL_STOP_UNKNOWN`.
 
 ### Task 1: Trusted thin input and material boundary
 
@@ -64,7 +64,7 @@ Fresh installer tests pass 34/34 without a worktree `node_modules`; unchanged ex
 
 The attempted full project suite reports 371/413 passing, with 42 failures caused by absent stock SDK imports and their dependent guard/producer assertions. The GUI profile suite likewise cannot load `@deepseek-ai/cordis-plugin-include` in this SDK-absent worktree. These failures remain recorded; the actual new installer fixture exercises the unchanged GUI helper after synthetic fresh SDK installation. No existing source, test runner, dependency manifest or frozen consumer code was changed. Full integrated-source/real-SDK validation belongs to the later parent-owned integration gate, together with final coherent product/Host pins and a real thin first install.
 
-### Authorized review repair: bounded process-group stop confirmation
+### Prior authorized review repair: bounded process-group stop confirmation
 
 Independent exact `ce43756` review rejected I1: EPERM on both group and child termination left the timeout pending until the external owned harness stopped the child. The original report and exact source remain frozen. This repair retains the trusted files/npm/SDK boundaries.
 
@@ -75,3 +75,18 @@ Independent exact `ce43756` review rejected I1: EPERM on both group and child te
 - [x] Run fresh complete installer tests (40/40) and unchanged GUI/package tests (15/15), then commit exact source for parent-owned fresh independent review.
 
 Group remainder is simulated at the OS query boundary after a real leader exits; it is not claimed as an actual descendant-process reproduction. API harness teardown confirms each actual group is absent. The Linux CLI teardown separately checks captured process-start identity and confirms the exact orphaned child is stopped (including zombie state, which is not group-absence evidence); it makes no claim of native sandbox enforcement. New repair evidence is separate from all original reports and logs. No real SDK, native, model or network operations are performed.
+
+### Authorized review repair: preserve every failed installation
+
+Independent exact `53da328` review closed the prior stop-deadline issue but reproduced a new ownership race: replacement during an awaited realpath permitted signalling under the old path-based rule, and the failure cleanup actually deleted caller replacement bytes. The original report and RED fixtures remain unchanged. The parent explicitly changed the contract to preserve every created failure and separate original live-child stop authority from directory-name ownership. Adding more asynchronous checks around recursive removal cannot make that removal atomic.
+
+- [x] Independently replay both original await-race RED cases, including actual caller deletion, in the separate `thin-preserve-repair/independent-original-i2-red.log`.
+- [x] Record focused RED regressions for unchanged failed-root preservation, material writes into a replacement, exact caller bytes/modes/inodes preservation and late unreviewed helper import, including replacement after a completed ownership check.
+- [x] Remove every recursive removal from the installer. Return fixed `PRESERVED_AFTER_FAILURE` evidence with the original identity on all post-creation errors, without further filesystem operations in the failure handler.
+- [x] Recheck directory inode/device/private mode after realpath, before material writes, helper imports, delegated assembly/profile writes and acceptance. Stop only the immutable original still-live child/group, independently of output replacement.
+- [x] Prove Node 24.19 captured-source hooks with real relative and builtin imports. Execute delegated tools from captured descriptor-pinned bytes through a private virtual module map, reject undeclared imports, record the derived mapping and deregister the hook on every exit. Do not treat asynchronous pre/post-import checks as executable-source safety.
+- [x] Run fresh complete installer and unchanged GUI/package tests, preserving actual guarded child teardown receipts, then commit only the five owned files for a fresh exact independent review.
+
+The old 53da328 output-ownership signal rule and removal assertions describe that frozen revision, not this revised contract. The external fixture harness alone removes its test directories after child-stop confirmation. Failed real installations and intermediate materials remain for explicit external inspection/cleanup. Separate focused RED tests reproduced unreviewed imports before a missing ownership check and after a completed ownership check; both replacement fixtures' markers must stay absent after the captured-source repair. Fresh qualification of the parent's newer preserving consumer and final coherent product/Host bundle pins remain separate gates.
+
+The fresh preserving-installer suite passes 46/46 in `thin-preserve-repair/fresh-full-installer.log`. It includes actual guarded child teardown receipts with network/model/native/extra-child counters all zero, group absence for API fixtures and captured start-identity/stopped-state confirmation for the CLI orphan fixture. The initial unchanged-suite invocation lacked its required package fixture and failed 8 cases; that log is retained. After preparing the current source through a fresh offline, ignore-scripts npm pack with an exclusive cache/config view, the original safety-guarded GUI startup/bootstrap/package suite passes 15/15 in `fresh-unchanged-gui-package-qualified.log`. No real SDK download, native execution, model call or final runtime assembly occurred. The synthetic consumer integration still deliberately uses the frozen ede605ce fixture bytes; final bundle assembly must select the parent's separately reviewed preserving consumer and GUI/package helper pins.
