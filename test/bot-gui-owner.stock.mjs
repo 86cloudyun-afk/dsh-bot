@@ -52,6 +52,23 @@ async function runtime(directory,{initialMode}={}) {
 }
 const create = {operationId:'gui-create-original',nonce:'gui-create-original-nonce',name:'One Bot'};
 
+test('fresh GUI original fixes the parent and child policy before effects and rejects an altered stored policy on restart',async()=>{
+ const install=await installer(),directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-delegation-policy-')),f=await runtime(directory);
+ const expected={parentWorkTools:'delegate',childWorkTools:'none',maxDepth:1,workLimit:15},input={...expected};
+ const app=await install({...f.options,delegationPolicy:input});
+ try{
+  input.workLimit=16;const created=await f.call('createBot',create);assert.equal(created.value.state,'unknown');
+  const ledger=new Ledger(join(directory,'bot-gui.sqlite'));
+  try{const row=ledger.get('guiCreationOperation',create.operationId);assert.deepEqual(row.initialDelegationPolicy,expected);
+    ledger.put('guiCreationOperation',create.operationId,{...row,initialDelegationPolicy:{...expected,workLimit:16}});
+  }finally{ledger.close();}
+  assert.equal(f.ctx.agents.list().length,0);
+ }finally{await app.dispose();await f.dispose();}
+ const restarted=await runtime(directory);
+ try{await assert.rejects(()=>install(restarted.options),{code:'gui_delegation_policy_changed'});assert.equal(restarted.ctx.agents.list().length,0);}
+ finally{await restarted.dispose();}
+});
+
 test('formal GUI refuses an SDK without a genuine journal before any native creation and preserves its original UNKNOWN',async()=>{
  const install=await installer(),directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-no-journal-')),f=await runtime(directory);
  const app=await install({...f.options,route:{provider:'deepseek-official',model:'deepseek-flash',reasoning:'off'}});

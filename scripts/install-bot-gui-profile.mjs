@@ -3,6 +3,7 @@ import {mkdir, writeFile, realpath} from 'node:fs/promises';
 import {join, resolve, isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {installProductPackage} from './package-snapshot.mjs';
+import {GUI_DELEGATION_POLICY} from '../src/bot-gui-delegation-policy.mjs';
 
 const disabled = [
   'preset-standard','preset-ptc','preset-minimal','preset-cordis',
@@ -71,6 +72,7 @@ export async function installBotGuiProfile({directory, productRoot, runtimeRoot,
       {id:'bot-gui-preset',name:'@deepseek-ai/dsh-agent-preset',config:{id:'dsh-bot/empty',plugins:[]}},
       {id:'bot-gui-closed-intake',name:'dsh-bot/bot-chain-intake',config:{}},
       {id:'bot-gui-owner',name:'dsh-bot/bot-gui-owner-app',config:{homeDirectory:home,cwd:work,agentPreset:'dsh-bot/empty',
+        delegationPolicy:GUI_DELEGATION_POLICY,
         initialMode:{permissionPreset:'workspace-write',sandboxMode:'workspace-write',approvalPolicy:'ask'}}},
       {id:'dsh-bot',name:'dsh-bot',config:{guiOwner:true}},
       {id:'bot-gui-surface',name:'dsh-bot-gui-surface',config:{}},

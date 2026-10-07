@@ -48,6 +48,8 @@ test('fresh GUI profile installs packed owner with real BrowserAuth and an empty
   assert.equal(added.find(p => p.id === 'bot-gui-owner').config.cwd, r.cwd);
   assert.deepEqual(added.find(p => p.id === 'bot-gui-owner').config.initialMode,
     {permissionPreset:'workspace-write',sandboxMode:'workspace-write',approvalPolicy:'ask'});
+  assert.deepEqual(added.find(p => p.id === 'bot-gui-owner').config.delegationPolicy,
+    {parentWorkTools:'delegate',childWorkTools:'none',maxDepth:1,workLimit:15});
   assert.deepEqual(patch.find(p => p.id === 'sandbox-policy')?.config,
     {mode:'workspace-write',workspaceRoot:r.cwd});
   assert.deepEqual(patch.find(p => p.id === 'approval')?.config,{policy:'ask'});
