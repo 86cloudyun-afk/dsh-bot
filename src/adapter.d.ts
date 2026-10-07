@@ -39,9 +39,11 @@ export declare class DshAdapter {
  /** Private owned creation port; scopeOf must return the exact mounted Agent identity. */
  ownedCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;durable?:boolean;initialization?:InitialSessionModeSnapshot}):OwnedCreationPort;
  /** Explicit private creation: actual prepared SDK brand and retained native handle are required. */
- ownedGenerationCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;role:'main'|'work';prepareGeneration:(intent:CreationIntent,options:Readonly<{mode:'create'|'resume';delegateTool?:ToolDefinition}>)=>OwnedGenerationPreparation|Promise<OwnedGenerationPreparation>;isCurrent:()=>boolean;initialization?:InitialSessionModeSnapshot}):OwnedGenerationCreationPort;
+ ownedGenerationCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;role:'main'|'work';delegateTool?:ToolDefinition;prepareGeneration:(intent:CreationIntent,options:Readonly<{mode:'create'|'resume';delegateTool?:ToolDefinition}>)=>OwnedGenerationPreparation|Promise<OwnedGenerationPreparation>;isCurrent:()=>boolean;initialization?:InitialSessionModeSnapshot}):OwnedGenerationCreationPort;
  /** Called once with the exact registered native ToolDefinition before first main input. */
  bindOwnedMainGeneration(port:OwnedCreationPort,intent:CreationIntent,delegateTool:ToolDefinition):object;
+ /** Native parent-work policy must already own this exact registered definition. */
+ bindOwnedWorkGeneration(port:OwnedCreationPort,intent:CreationIntent,delegateTool:ToolDefinition):object;
  unsupported<T extends string>(operation:T):UnsupportedOperation<T>;
  selectSessionModel():UnsupportedOperation<'selectSessionModel'>;
  dispatch():UnsupportedOperation<'dispatchPermit'>;

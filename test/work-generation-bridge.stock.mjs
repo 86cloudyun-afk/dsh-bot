@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {scopeOf} from '@deepseek-ai/dsh-scope';
 import {createUserMessage} from '@deepseek-ai/dsh-llm';
+import {defineTool} from '@deepseek-ai/dsh-tools';
 import {SessionCreationDriver} from '../src/session-creation.mjs';
 import {generationFixture,envelope,tick,syntheticResponse} from './work-generation-fixture.mjs';
 
@@ -84,4 +85,13 @@ test('actual SDK private resume rejects a copied resume label without SDK prepar
  assert.equal(typeof port.resumeOwnedSession,'function');
  await assert.rejects(()=>port.resumeOwnedSession(intent),e=>e.code==='unsupported_owned_generation_preparation');
  assert.equal(f.ctx.agents.get(intent.sessionId),undefined);assert.equal(f.ctx.sessions.get(intent.sessionId),undefined);assert.equal(f.requests(),0);
+});
+
+test('actual SDK zero-work source cannot acquire delegate authority from a private tool label',async t=>{
+ const f=await generationFixture(t),definition=defineTool({name:'dsh_bot_delegate',description:'Synthetic denied zero-work upgrade',parameters:{},output:{schema:{type:'object',additionalProperties:true},render:()=>[]},async execute(){return{};}}),intent={operationId:'work-tool-label-refused',sessionId:`session-${crypto.randomUUID()}`,cwd:f.directory,agentPreset:'synthetic/empty',kind:'execution',botId:f.bot.botId,botEpoch:1,configVersion:f.bot.configVersion,authorityEpoch:1};
+ const port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'work',delegateTool:definition,isCurrent:()=>true,prepareGeneration:i=>f.prepareGeneration(i)});
+ await port.createOwnedSession(intent);assert.equal((await port.inspectOwnedCreation(intent)).scopedTools,0);
+ const unregister=f.ctx.agents.get(intent.sessionId).ctx.tools.register(definition);t.after(unregister);
+ assert.equal(typeof f.host.adapter.bindOwnedWorkGeneration,'function');
+ assert.throws(()=>f.host.adapter.bindOwnedWorkGeneration(port,intent,definition),e=>e.code==='GENERATION_TOOL_POLICY_CHANGED');assert.equal(f.requests(),0);
 });
