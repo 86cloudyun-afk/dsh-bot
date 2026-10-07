@@ -33,4 +33,6 @@ The renderer's required optional Session scope uses `slots.installScope` with a 
 
 The stock layout title receives an explicitly empty ordinary-Session UI roster through `slots.provideRoot`; this is separate from the owned Bot Sessions. Unrelated public Workspace views and the dynamic Cordis client runner are disabled. The stock settings client remains because it provides `configForms` to locale and theme; no settings navigation is rendered by this profile.
 
+The fresh GUI profile selects Chinese through the official locale preference. The visible surface groups Bot identity, main goal/reply, original receipts, and work target/result/stop states, with modest spacing, input sizing, and status colors. Internal plugin/authority diagnostics and future-feature placeholders do not appear in the product flow. UNKNOWN receipts, pending stops, retained slots, and disabled sending remain explicit.
+
 Stock browser boot manifests omit Host row configuration. The profile therefore installs a private `dsh-bot-gui-surface` package with empty host/client behavior. Its exact package ID in the official boot graph activates this UI composition. The marker carries no authority; every read and mutation still uses the authenticated owner RPC bindings.
