@@ -52,7 +52,7 @@ def original_terminal_valid(t,pid,case):
 
 
 def terminal_valid(t,pid,case):
- extra={'systemLoads':0,'narbLoads':0,'narbInfoQueries':0,'narbRequireCalls':0,'narbCalls':[],'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED'}
+ extra={'systemLoads':0,'narbLoads':0,'narbInfoQueries':0,'narbRequireCalls':0,'narbCalls':[],'terminalRefusalCategory':'OTHER_ADDON_LOAD_REFUSED','installedIdentity':None}
  if type(t) is not dict or not all(k in t and exact(t[k],v) for k,v in extra.items()):return False
  core={k:v for k,v in t.items() if k not in extra};events=core.get('nativeAttempts')
  if type(events) is not list or len(events)!=1:return False

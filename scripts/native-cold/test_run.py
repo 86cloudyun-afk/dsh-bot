@@ -128,6 +128,9 @@ class RunTests(unittest.TestCase):
             elif kind=='missingPass':data['counts']['pass']=0
             else:data['counts'][kind]=1
             self.assertFalse(cold_eligible(trace=data['trace'],counts=data['counts'],diagnostics=data['diagnostics'],returncode=0,stopped=True,complete=True,errors=[],pins=True),kind)
+        for field in ('checkedBefore','checkedAfter'):
+            data=copy.deepcopy(fixture);data['trace']['installedIdentity'][field]=False
+            self.assertFalse(cold_eligible(trace=data['trace'],counts=data['counts'],diagnostics=data['diagnostics'],returncode=0,stopped=True,complete=True,errors=[],pins=True),field)
 
 if __name__ == '__main__':
     unittest.main()

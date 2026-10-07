@@ -4,7 +4,8 @@
   "builtin-harness.mjs": "d533fe8e69f20cfe1016ca96b8504d5a642acfac713f4fc7080b1810e45a0dbf",
   "observer.mjs": "b1cbfd07a3d0ba72329c6d4f933c7a593bbe3705d2e32a162c1b0e6858a7d624",
   "dual-guard.mjs": "4a3dfd638184f242bf10c64633c2b43c19240f1258bce9d1bd1293341602c011",
-  "companion.mjs": "ee70ba5ed954eb6f230a964b5a48da36f94b425a4711905c2c937351564b77ec",
+  "companion.mjs": "cf391924e1fd365de59b0a693be7bb8d03bb26252aa655ab2a6a5bb8919603c4",
   "model-stop.mjs": "6b8b00d7147c7f392e44d4b6e3554b7ffbe1d3d7077f309d5fb41ab458d76d85",
-  "builtin-tripwire.mjs": "b20d439a032eb0753b5830494e944e1a6f172bc8167fe6fb0e99ff19e44222a7"
+  "builtin-tripwire.mjs": "b20d439a032eb0753b5830494e944e1a6f172bc8167fe6fb0e99ff19e44222a7",
+  "installed-identity.mjs": "9953073815f439968fd82c9fc28abd51a8f51222ff7b6a7b2d5a29660770e463"
 }

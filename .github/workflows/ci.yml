@@ -31,6 +31,7 @@ jobs:
           node scripts/test.mjs scripts/native-cold/policy.test.mjs
           env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/test_contract.py
           env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/test_run.py
+          env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/test_installed_identity.py
           env -i PATH="$PATH" LANG=C python3 -B scripts/native-cold/contract.py
       - name: Static module and spec inventory checks
         if: always()
@@ -60,10 +61,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: One builtin denial proof then two real cold cases with pinned native identities
         run: |
+          node scripts/native-cold/prepare-current.mjs "$RUNNER_TEMP/native-cold-current" "${{ github.sha }}"
           python3 -B scripts/native-cold/run.py \
             --expected-sha "${{ github.sha }}" \
             --node "$(command -v node)" \
             --temp-dir "$RUNNER_TEMP" \
+            --current-dir "$RUNNER_TEMP/native-cold-current" \
             --evidence-dir "$RUNNER_TEMP/native-cold-evidence"
       - name: Retain typed receipts and cleanup outcomes only
         if: always()

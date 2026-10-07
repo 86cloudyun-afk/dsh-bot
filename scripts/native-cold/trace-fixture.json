@@ -97,7 +97,15 @@
         "outcome": "RETURNED"
       }
     ],
-    "terminalRefusalCategory": null
+    "terminalRefusalCategory": null,
+    "installedIdentity": {
+      "sdkManifestSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "packageSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "sourceHead": "cccccccccccccccccccccccccccccccccccccccc",
+      "sourceTree": "dddddddddddddddddddddddddddddddddddddddd",
+      "checkedBefore": true,
+      "checkedAfter": true
+    }
   },
   "counts": {
     "tests": 1,

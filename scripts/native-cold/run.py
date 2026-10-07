@@ -21,6 +21,7 @@ import builtin_policy as B
 import diagnostic as C
 import supervisor as R
 import trace_policy as T
+import installed_identity as I
 from contract import check_partition, select_platform, Refused
 
 HERE = Path(__file__).resolve().parent
@@ -45,6 +46,7 @@ def git(*args):
 def check_context(ctx):
     R.require(git('rev-parse','HEAD')==ctx['head'] and git('rev-parse','HEAD^{tree}')==ctx['tree'] and git('status','--porcelain')=='','SOURCE_CHANGED_REFUSED')
     R.checked_node()
+    I.check(ctx,SOURCE)
     R.require(R.sha(HERE/'platforms.json')==ctx['platformsSHA256'],'PLATFORM_PINS_CHANGED_REFUSED')
     R.require(check_partition(SOURCE)==ctx['partition'],'PARTITION_CHANGED_REFUSED')
     for name,digest in ctx['helpers'].items():
@@ -80,12 +82,19 @@ def context(args):
     with node.open('rb') as file:
         R.require(architecture(file.read(32),pins),'NODE_ARCHITECTURE_REFUSED')
     helpers=json.loads((HERE/'bundle-pins.json').read_text())
+    current=Path(args.current_dir)
+    R.require(current.parent.resolve(strict=True)==temp and current.is_dir() and not current.is_symlink() and current.resolve(strict=True)==current,'CURRENT_INSTALLATION_ROOT_REFUSED')
+    installation_bytes,_,installation_sha=I.fixed(current/'installation-record.json',1024*1024)
+    installation=json.loads(installation_bytes)
+    R.require(installation['schemaVersion']==1 and installation['scope']=='CURRENT_NATIVE_PRODUCT_AND_SDK','INSTALLATION_RECORD_REFUSED')
     ctx={'head':args.expected_sha,'tree':git('rev-parse','HEAD^{tree}'),'pins':pins,'node':node,'temp':temp,'evidence':evidence,
-         'helpers':helpers,'partition':check_partition(SOURCE),'platformsSHA256':R.sha(HERE/'platforms.json')}
+         'helpers':helpers,'partition':check_partition(SOURCE),'platformsSHA256':R.sha(HERE/'platforms.json'),
+         'current':current,'installation':installation,'installationRecordSHA256':installation_sha}
     T.configure(pins);B.BUNDLE_PINS=helpers
     check_context(ctx)
     R.atomic_create(evidence/'identity.json',{'authorization':AUTHORIZATION,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],
         'platform':pins,'nodeSHA256':R.NODE_SHA,'helperSHA256':helpers,'partition':ctx['partition'],
+        'installedIdentity':installation,'installationRecordSHA256':installation_sha,
         'maximumChildren':3,'maximumColdChildren':2,'deadlinesSeconds':{'builtin':5,'cold':20},'noRetry':True,
         'childEnvironmentKeys':sorted(R.ENV_KEYS),'childObservationDurability':'NON_DURABLE','productionDurabilityEstablished':False})
     return ctx
@@ -94,7 +103,9 @@ def prepare(root,ctx):
     for name,digest in ctx['helpers'].items():
         path=root/name;path.write_bytes((HERE/name).read_bytes());path.chmod(0o600)
         R.require(R.regular(path) and R.sha(path)==digest,'COPY_PIN_REFUSED')
-    (root/'binding-config.json').write_text(json.dumps({'source':str(SOURCE),'pins':ctx['pins']}))
+    installed={'current':str(ctx['current']),'recordSHA256':ctx['installationRecordSHA256'],'sdkManifestSHA256':ctx['installation']['sdkManifestSHA256'],
+               'packageSHA256':ctx['installation']['packageSHA256'],'head':ctx['head'],'tree':ctx['tree']}
+    (root/'binding-config.json').write_text(json.dumps({'source':str(SOURCE),'pins':ctx['pins'],'installed':installed}))
     (root/'binding-config.json').chmod(0o600)
 
 def collect_cold(root,pid,case,helpers):
@@ -167,13 +178,13 @@ def run_case(case,ctx,prior=None):
                        '--import',(root/'companion.mjs').as_uri()+'?'+case,str(root/'builtin-harness.mjs'),'catch-fallback']
             else:
                 entry=json.loads((HERE/'partition.json').read_text())['migrations'][int(case[-1])-1]['to']
-                args+=['--allow-addons','--allow-fs-read='+str(SOURCE),'--allow-fs-read='+str(root),'--allow-fs-write='+str(root),
-                       '--experimental-test-isolation=none','--import',str(SOURCE/'scripts/test-safety.mjs'),
-                       '--import',(root/'companion.mjs').as_uri()+'?'+case,'--test','--test-reporter=tap',str(SOURCE/entry)]
+                args+=['--allow-addons','--allow-fs-read='+str(SOURCE/'node_modules'),'--allow-fs-read='+str(SOURCE/'package-lock.json'),'--allow-fs-read='+str(ctx['current']),'--allow-fs-read='+str(root),'--allow-fs-write='+str(root),
+                       '--experimental-test-isolation=none','--import',str(ctx['current']/'product/scripts/test-safety.mjs'),
+                       '--import',(root/'companion.mjs').as_uri()+'?'+case,'--test','--test-reporter=tap',str(ctx['current']/'product'/entry)]
             R.atomic_create(paths['launch'],{'case':case,'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'maximumChildRuns':1,
                 'deadlineSeconds':5 if case=='builtin-dual' else 20,'argv':args,'environmentKeys':sorted(R.ENV_KEYS),
                 'SDKReadGrant':case!='builtin-dual','allowAddons':case!='builtin-dual','modelNetworkDatabaseAllowed':False})
-            child=R.supervise_bounded(args,root if case=='builtin-dual' else SOURCE,R.synthetic_env(root),5 if case=='builtin-dual' else 20,
+            child=R.supervise_bounded(args,root if case=='builtin-dual' else ctx['current']/'product',R.synthetic_env(root),5 if case=='builtin-dual' else 20,
                 allow_addons=case!='builtin-dual',supervisor_signals=stop,
                 on_started=lambda pid:R.atomic_create(paths['started'],{'pid':pid,'startUTC':R.now()}))
             errors.extend(child['errorCategories'])
@@ -182,6 +193,7 @@ def run_case(case,ctx,prior=None):
                 trace,observation=collect_cold(root,child['childPID'],case,ctx['helpers'])
                 counts,diagnostics=R.parse_output(child.stdout)
             check_context(ctx)
+            if case!='builtin-dual':R.require(trace['installedIdentity']==I.check(ctx,SOURCE),'CHILD_INSTALLED_IDENTITY_REFUSED')
             startup=C.collect_startup(child.stdout,child.stderr,child['returncode'],trace['stage'],owned_root=str(root))
             if startup['classificationTruncated']:errors.append('OUTPUT_TRUNCATED')
             if startup['startupErrorCategory'] in {'NODE_PERMISSION_REFUSAL','NATIVE_ADDON_PERMISSION','AMBIGUOUS_FAILURE'}:errors.append('STARTUP_REFUSED')
@@ -251,7 +263,7 @@ def preflight_failure(args,category):
 
 def main():
     parser=argparse.ArgumentParser()
-    for name in ('expected-sha','node','temp-dir','evidence-dir'):parser.add_argument('--'+name,required=True)
+    for name in ('expected-sha','node','temp-dir','evidence-dir','current-dir'):parser.add_argument('--'+name,required=True)
     args=parser.parse_args()
     try:ctx=context(args)
     except R.SafetyError as error:
@@ -272,7 +284,12 @@ def main():
         results.append({'case':case,'status':'BLOCKED_OR_FAIL','errors':[error.code],'pid':None})
     except BaseException:
         results.append({'case':case,'status':'BLOCKED_OR_FAIL','errors':['PARENT_COMPLETION_FAILURE'],'pid':None})
-    summary={'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'status':'PASS' if len(results)==3 and all(r['status']=='PASS' for r in results) else 'BLOCKED_OR_FAIL',
+    installation_record={'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'installedIdentity':ctx['installation'],
+        'installationRecordSHA256':ctx['installationRecordSHA256'],'results':results,'actualSDKNativeExecutedByBuilder':False}
+    stopped=all(r.get('processStopped',r.get('pid') is None) is True for r in results)
+    installation_completion=R.persist_and_cleanup(ctx['current'],ctx['evidence']/'installation-receipt.json',ctx['evidence']/'installation-cleanup.json',installation_record,stopped,len(results)==3 and all(r['status']=='PASS' for r in results))
+    summary={'sourceHead':ctx['head'],'sourceTree':ctx['tree'],'status':'PASS' if len(results)==3 and all(r['status']=='PASS' for r in results) and installation_completion['safeToRunOtherApprovedCase'] else 'BLOCKED_OR_FAIL',
+        'installationCompletion':installation_completion,
         'results':results,'actualChildren':sum(r['pid'] is not None for r in results),'maximumChildren':3,
         'unstartedCases':[c for c in CASES if c not in [r['case'] for r in results if r['pid'] is not None]],'noRetry':True,
         'legacyNativeNotIncluded':ctx['partition']['legacyNativeNotIncluded'],'productionDurabilityEstablished':False}

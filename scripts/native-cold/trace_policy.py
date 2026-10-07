@@ -3,7 +3,8 @@ import supervisor as R
 import ledger as LEG
 from supervisor import require,SafetyError,TRACE_KEYS,CODES,REFUSALS
 STAGES=R.STAGES|{"NATIVE_ADMISSION_REFUSED"}
-EXTRA_KEYS={'systemLoads','narbLoads','narbInfoQueries','narbRequireCalls','narbCalls','terminalRefusalCategory'}
+EXTRA_KEYS={'systemLoads','narbLoads','narbInfoQueries','narbRequireCalls','narbCalls','terminalRefusalCategory','installedIdentity'}
+TERMINAL_CATEGORIES_EXTRA={'NATIVE_LOCK_BOUNDARY_REFUSED','NATIVE_LOCK_CALLBACK_REFUSED','NATIVE_LOCK_RESULT_REFUSED','DNS_GUARD_INSTALL_REFUSED','DNS_GUARD_BINDING_REFUSED','INSTALLED_CONTENT_IDENTITY_REFUSED'}
 
 TERMINAL_CATEGORIES={'OTHER_ADDON_LOAD_REFUSED','PINNED_ADDON_HASH_REFUSED','ADDON_LOAD_LIMIT_REFUSED','NARB_API_LIMIT_REFUSED','NARB_ARGUMENT_REFUSED','NARB_INFO_LIMIT_REFUSED','NARB_MODULE_REFUSED','NARB_REQUIRE_LIMIT_REFUSED','NARB_API_REFUSED','NARB_CALL_FAILED','NARB_BINDING_INFO_REFUSED','NARB_MODULE_RESULT_REFUSED','NATIVE_EXPORT_SURFACE_REFUSED','NATIVE_WRAP_FAILED','ORIGINAL_DLOPEN_FAILED','OBSERVATION_COMMIT_REFUSED'}|REFUSALS|{'MODEL_OPERATION_REFUSED','MODEL_GUARD_BINDING_REFUSED'}
 
@@ -81,7 +82,12 @@ def trace_valid(t,pid):
   require(type(t) is dict and set(t)==TRACE_KEYS|EXTRA_KEYS,'DUAL_TRACE_SCHEMA_REFUSED')
   integer=lambda x,max:type(x) is int and 0<=x<=max
   require(all(integer(t[k],limit) for k,limit in [('systemLoads',1),('narbLoads',1),('narbInfoQueries',2),('narbRequireCalls',1),('nativeLoads',2),('nativeLoadAttempts',3)]),'DUAL_TRACE_COUNTER_REFUSED')
-  require(t['terminalRefusalCategory'] is None or t['terminalRefusalCategory'] in TERMINAL_CATEGORIES,'DUAL_TRACE_ENUM_REFUSED')
+  require(t['terminalRefusalCategory'] is None or t['terminalRefusalCategory'] in TERMINAL_CATEGORIES|TERMINAL_CATEGORIES_EXTRA,'DUAL_TRACE_ENUM_REFUSED')
+  installed=t['installedIdentity']
+  if installed is not None:
+   require(type(installed) is dict and set(installed)=={'sdkManifestSHA256','packageSHA256','sourceHead','sourceTree','checkedBefore','checkedAfter'},'INSTALLED_TRACE_REFUSED')
+   require(all(type(installed[k]) is str and re.fullmatch('[0-9a-f]{64}',installed[k]) for k in ['sdkManifestSHA256','packageSHA256']) and all(type(installed[k]) is str and re.fullmatch('[0-9a-f]{40}',installed[k]) for k in ['sourceHead','sourceTree']),'INSTALLED_TRACE_REFUSED')
+   require(type(installed['checkedBefore']) is bool and type(installed['checkedAfter']) is bool,'INSTALLED_TRACE_REFUSED')
   events=t['nativeAttempts'];require(type(events) is list and len(events)==t['nativeLoadAttempts'],'DUAL_TRACE_LEDGER_REFUSED');loaded={'SYSTEM':0,'NARB':0};allowed=set()
   for index,e in enumerate(events,1):
    require(type(e) is dict and set(e)=={'index','targetId','admission','reason','outcome','identity'} and type(e['index']) is int and e['index']==index and e['targetId'] in {'SYSTEM','NARB','UNKNOWN'},'DUAL_TRACE_LEDGER_REFUSED')
@@ -112,6 +118,7 @@ def trace_valid(t,pid):
 def cold_eligible(*,trace,counts,diagnostics,returncode,stopped,complete,errors,pins):
  if not trace_valid(trace,trace.get('pid') if type(trace) is dict else None) or errors or not pins or not stopped or not complete or returncode!=0:return False
  if trace['terminalRefusalCategory'] is not None or trace['nativeLoadAttempts']!=2 or trace['narbLoads']!=1 or trace['systemLoads']!=1 or trace['narbInfoQueries']!=2 or trace['narbRequireCalls']!=1:return False
+ if trace['installedIdentity'] is None or trace['installedIdentity']['checkedBefore'] is not True or trace['installedIdentity']['checkedAfter'] is not True:return False
  if any(e['admission']!='ALLOW' or e['outcome']!='LOADED' or e['reason']!='NONE' for e in trace['nativeAttempts']):return False
  if any(e['admission']!='ALLOW' or e['outcome']!='RETURNED' for e in trace['narbCalls']):return False
  if counts.get('tests')!=1 or counts.get('pass')!=1 or counts.get('fail')!=0 or counts.get('cancelled')!=0 or len(diagnostics)!=1:return False
