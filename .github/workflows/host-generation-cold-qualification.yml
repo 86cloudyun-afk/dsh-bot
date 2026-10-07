@@ -44,7 +44,7 @@ jobs:
             --source-packet "$GITHUB_WORKSPACE/scripts/host-generation-cold/materials/host-source-packet"
       - name: Verify the final generation journal and actual native contracts
         run: |
-          export TMPDIR="$(python3 -B - <<'PY'
+          dsh_offline_tmp="$(python3 -B - <<'PY'
           from pathlib import Path
           import json, os, stat
           evidence = (Path(os.environ['RUNNER_TEMP']) / 'host-evidence').resolve(strict=True)
@@ -60,6 +60,7 @@ jobs:
           print(directory)
           PY
           )"
+          export TMPDIR="$dsh_offline_tmp"
           python3 -B scripts/host-generation-cold/recipes/offline-tests.py \
             --target "${{ matrix.platform }}-${{ matrix.arch }}" \
             --source "$RUNNER_TEMP/host-source" \
