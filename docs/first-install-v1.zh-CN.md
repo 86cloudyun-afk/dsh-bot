@@ -6,14 +6,14 @@
 
 支持的安装目标为 Linux x64 与 macOS arm64，使用 Node **24.19.0** 及其正常安装的 npm。安装需要访问公共 npm registry，下载由随包 lock 锁定的官方 DSH SDK；无需已有 DSH 安装、Git、旧 Home 或模型密钥。安装不会启动服务或模型。
 
-把薄安装包解压到自己的固定目录。从交付清单取得 `thin-bundle.json` 的实际 SHA-256；仅对未知来源的下载自行计算哈希，不能确定其可信来源。所有路径使用没有符号链接别名的绝对路径。
+把薄安装包解压到自己的固定目录。从交付清单取得 `thin-install-descriptor.json` 的实际 SHA-256；仅对未知来源的下载自行计算哈希，不能确定其可信来源。所有路径使用没有符号链接别名的绝对路径。
 
 选择尚不存在的安装目录，并先创建其父目录。安装结束前不要同时修改、移动或替换安装目录。以下示例假定安装包位于 `/opt/dsh-bot-v1-thin`，已创建父目录 `/opt/dsh-bot-installations`，npm 入口为 `/usr/local/lib/node_modules/npm/bin/npm-cli.js`。按自己的 Node 安装位置和可写目录替换这些路径。
 
 ```sh
 node /opt/dsh-bot-v1-thin/scripts/install-v1.mjs \
   --bundle /opt/dsh-bot-v1-thin \
-  --descriptor /opt/dsh-bot-v1-thin/thin-bundle.json \
+  --descriptor /opt/dsh-bot-v1-thin/thin-install-descriptor.json \
   --descriptor-sha256 交付清单中的实际64位SHA256 \
   --output /opt/dsh-bot-installations/my-bot-v1 \
   --npm-cli /usr/local/lib/node_modules/npm/bin/npm-cli.js \
