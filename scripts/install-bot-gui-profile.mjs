@@ -29,9 +29,10 @@ const disabled = [
 ];
 
 export async function installBotGuiProfile({directory, productRoot, runtimeRoot, cwd,
-  packagePlacement='snapshot', packageSnapshot}) {
+  packagePlacement='snapshot', packageSnapshot,packageSourceMode='recorded-root'}) {
   if (![directory,productRoot,runtimeRoot,cwd].every(v => typeof v === 'string' && isAbsolute(v))) throw Error('gui_absolute_paths_required');
   if (packagePlacement !== 'snapshot') throw Error('gui_packed_package_required');
+  if (!['recorded-root','verified-export'].includes(packageSourceMode)) throw Error('gui_package_source_mode_invalid');
   const product = await realpath(productRoot), runtime = await realpath(runtimeRoot);
   const root = resolve(directory), work = resolve(cwd);
   const within = (p, parent) => p === parent || p.startsWith(parent + '/');
@@ -41,7 +42,7 @@ export async function installBotGuiProfile({directory, productRoot, runtimeRoot,
   const home = join(root,'home'), profile = 'dsh-bot-gui', dir = join(home,'profiles',profile);
   await mkdir(join(dir,'node_modules'), {recursive:true,mode:0o700});
   const packageInstallation = await installProductPackage({directory:join(dir,'node_modules','dsh-bot'),
-    productRoot:product, packagePlacement, packageSnapshot:packageSnapshot && Object.freeze({...packageSnapshot})});
+    productRoot:product, packagePlacement,packageSourceMode,packageSnapshot:packageSnapshot && Object.freeze({...packageSnapshot})});
   const surfaceDir=join(dir,'node_modules','dsh-bot-gui-surface');
   await mkdir(surfaceDir,{mode:0o700});
   await writeFile(join(surfaceDir,'package.json'),JSON.stringify({name:'dsh-bot-gui-surface',private:true,type:'module',
@@ -83,13 +84,28 @@ export async function installBotGuiProfile({directory, productRoot, runtimeRoot,
   return result;
 }
 
+export function parseBotGuiInstallArguments(values){
+  const names=['directory','product','runtime','cwd','snapshot-manifest','snapshot-digest','snapshot-build-id'],args={verifiedExport:false},seen=new Set();
+  if(!Array.isArray(values)||!values.every(value=>typeof value==='string'))throw Error('gui_install_arguments_invalid');
+  for(let i=0;i<values.length;i++){
+    const flag=values[i];
+    if(seen.has(flag))throw Error('gui_install_arguments_invalid');
+    seen.add(flag);
+    if(flag==='--verified-export'){args.verifiedExport=true;continue;}
+    const key=flag.startsWith('--')?flag.slice(2):'',value=values[++i];
+    if(!names.includes(key)||typeof value!=='string'||!value||value.startsWith('--'))throw Error('gui_install_arguments_invalid');
+    args[key]=value;
+  }
+  if(!names.every(name=>Object.hasOwn(args,name)))throw Error('gui_install_arguments_invalid');
+  return Object.freeze(args);
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const args = {};
-  for (let i=2;i<process.argv.length;i+=2) args[process.argv[i].replace(/^--/,'')] = process.argv[i+1];
   try {
+    const args=parseBotGuiInstallArguments(process.argv.slice(2));
     process.stdout.write(JSON.stringify(await installBotGuiProfile({directory:args.directory,productRoot:args.product,
-      runtimeRoot:args.runtime,cwd:args.cwd,packageSnapshot:args['snapshot-manifest']?{manifestPath:args['snapshot-manifest'],
-        manifestSHA256:args['snapshot-digest'],buildId:args['snapshot-build-id']}:undefined}))+'\n');
+      runtimeRoot:args.runtime,cwd:args.cwd,packageSourceMode:args.verifiedExport?'verified-export':'recorded-root',packageSnapshot:{manifestPath:args['snapshot-manifest'],
+        manifestSHA256:args['snapshot-digest'],buildId:args['snapshot-build-id']}}))+'\n');
   } catch {
     process.stderr.write('{"errorCategory":"gui_profile_unconfirmed"}\n');
     process.exitCode = 1;

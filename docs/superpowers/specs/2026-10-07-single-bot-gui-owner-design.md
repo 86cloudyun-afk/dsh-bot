@@ -35,4 +35,8 @@ The stock layout title receives an explicitly empty ordinary-Session UI roster t
 
 The fresh GUI profile selects Chinese through the official locale preference. The visible surface groups Bot identity, main goal/reply, original receipts, and work target/result/stop states, with modest spacing, input sizing, and status colors. Internal plugin/authority diagnostics and future-feature placeholders do not appear in the product flow. UNKNOWN receipts, pending stops, retained slots, and disabled sending remain explicit.
 
+### Relocated reviewed exports
+
+The default package installer keeps its exact recorded source-root check. Final reviewed source bundles can explicitly choose `packageSourceMode: 'verified-export'`, with the original trusted manifest SHA256/buildId pin. This verifies the unchanged tar hash, canonical product file closure, bytes, hashes, modes, and installed copy without needing `.git` or the original directory to exist. The receipt keeps the original source root/head/tree/clean state and separately records the actual verified export root; no manifest is rewritten and no current Git clean state is inferred. Extra files inside the published closure, changed source modes/bytes, links, or incomplete pins refuse installation. Reviewed installer/helper files can remain outside the unchanged product package closure.
+
 Stock browser boot manifests omit Host row configuration. The profile therefore installs a private `dsh-bot-gui-surface` package with empty host/client behavior. Its exact package ID in the official boot graph activates this UI composition. The marker carries no authority; every read and mutation still uses the authenticated owner RPC bindings.

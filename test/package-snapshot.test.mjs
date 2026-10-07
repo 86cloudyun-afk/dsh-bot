@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,mkdir,readdir,lstat} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,mkdir,readdir,lstat,chmod} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 const mod = await import('../scripts/package-snapshot.mjs').catch(e => {if(e.code==='ERR_MODULE_NOT_FOUND')return {};throw e;});
@@ -49,4 +49,37 @@ test('snapshot archive rejects path escape, links and special modes before extra
 test('snapshot closure refuses missing exports and missing relative runtime modules',()=>{
  assert.equal(typeof mod.validatePackageClosure,'function');const files=new Map([['package.json',Buffer.from(JSON.stringify({name:'dsh-bot',version:'0.1.0-alpha.1',private:true,files:['src','cordis.patch.yml','README.md'],exports:{'.':'./src/main.mjs'}}))],['README.md',Buffer.from('synthetic')],['cordis.patch.yml',Buffer.from('[]')]]);
  assert.throws(()=>mod.validatePackageClosure(files),{message:'package_snapshot_closure_incomplete'});files.set('src/main.mjs',Buffer.from('export const fixture = true;'));assert.equal(mod.validatePackageClosure(files).name,'dsh-bot');files.set('src/main.mjs',Buffer.from("import './missing.mjs';"));assert.throws(()=>mod.validatePackageClosure(files),{message:'package_snapshot_closure_incomplete'});
+});
+
+async function relocatedExport(){
+ const pin=await context(),manifest=JSON.parse(await readFile(pin.manifestPath)),root=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'relocated-export-')),source=join(root,'source');
+ await mkdir(source);
+ for(const file of manifest.files){const path=join(source,file.path);await mkdir(dirname(path),{recursive:true});await writeFile(path,await readFile(join(productRoot,file.path)),{mode:file.mode});await chmod(path,file.mode);}
+ return{source,directory:join(root,'installed'),pin,manifest};
+}
+test('explicit verified export installs an exact relocated no-git source and retains original provenance; default still refuses',async()=>{
+ const f=await relocatedExport(),before=await readFile(f.pin.manifestPath);
+ await assert.rejects(lstat(join(f.source,'.git')),{code:'ENOENT'});
+ const options={directory:f.directory,productRoot:f.source,packagePlacement:'snapshot',packageSnapshot:f.pin};
+ await assert.rejects(mod.installProductPackage(options),{message:'package_snapshot_stale_or_invalid'});
+ await assert.rejects(lstat(f.directory),{code:'ENOENT'});
+ const receipt=await mod.installProductPackage({...options,packageSourceMode:'verified-export'});
+ assert.equal(receipt.packageSourceMode,'verified-export');assert.equal(receipt.recordedSourceRoot,f.manifest.sourceRoot);assert.equal(receipt.verifiedExportRoot,f.source);
+ assert.equal(receipt.sourceHead,f.manifest.sourceHead);assert.equal(receipt.sourceTree,f.manifest.sourceTree);assert.equal(receipt.sourceWorktreeClean,f.manifest.sourceWorktreeClean);
+ assert.equal(receipt.packageSHA256,f.manifest.packageSHA256);assert.equal(receipt.fileCount,f.manifest.files.length);
+ assert.deepEqual(await readFile(f.pin.manifestPath),before,'never rewrite the trusted manifest to pretend relocation is the original checkout');
+ assert.deepEqual(await readFile(join(f.directory,'src/client/client.js')),await readFile(join(productRoot,'src/client/client.js')));
+});
+test('verified export requires its explicit mode and trusted pin; changed bytes, modes or extra closure files fail before installation',async()=>{
+ for(const mutation of ['bytes','mode','extra','pin','mode-name']){
+  const f=await relocatedExport(),path=join(f.source,'src/bot-chain-intake.mjs');
+  const options={directory:f.directory,productRoot:f.source,packagePlacement:'snapshot',packageSnapshot:f.pin,packageSourceMode:'verified-export'};
+  if(mutation==='bytes')await writeFile(path,'changed exported source');
+  if(mutation==='mode')await chmod(path,0o755);
+  if(mutation==='extra')await writeFile(join(f.source,'src/unreviewed.mjs'),'export const unreviewed=true;');
+  if(mutation==='pin')options.packageSnapshot=undefined;
+  if(mutation==='mode-name')options.packageSourceMode='automatic-relocation';
+  await assert.rejects(mod.installProductPackage(options),mutation);
+  await assert.rejects(lstat(f.directory),{code:'ENOENT'});
+ }
 });

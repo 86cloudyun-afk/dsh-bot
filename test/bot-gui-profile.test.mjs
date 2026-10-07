@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, readFile, readdir, lstat} from 'node:fs/promises';
-import {join} from 'node:path';
+import {mkdtemp, readFile, readdir, lstat,mkdir,writeFile,chmod} from 'node:fs/promises';
+import {join,dirname} from 'node:path';
 import {packageSnapshotOptions} from './package-snapshot-fixture.mjs';
 import {applyEntryPatches,entryListSchema} from '@deepseek-ai/cordis-plugin-include';
 import yaml from 'js-yaml';
@@ -88,4 +88,30 @@ test('GUI profile refuses reuse and source/runtime nesting before writes', async
   await assert.rejects(() => install(o));
   await assert.rejects(() => install({...o,directory:join(o.productRoot,'unsafe-new-home')}));
   await assert.rejects(() => install({...o,cwd:join(o.directory,'inside-installation')}));
+});
+
+test('GUI installer parses an explicit verified-export boolean without consuming a following path flag',async()=>{
+ const module=await import('../scripts/install-bot-gui-profile.mjs');
+ assert.equal(typeof module.parseBotGuiInstallArguments,'function');
+ const flags=['--verified-export','--directory','/fresh/install','--product','/relocated/export','--runtime','/frozen/runtime','--cwd','/fresh/work',
+   '--snapshot-manifest','/trusted/manifest.json','--snapshot-digest','a'.repeat(64),'--snapshot-build-id','trusted-build'];
+ const parsed=module.parseBotGuiInstallArguments(flags);
+ assert.equal(parsed.verifiedExport,true);assert.equal(parsed.directory,'/fresh/install');assert.equal(parsed.product,'/relocated/export');
+ for(const bad of [flags.slice(0,-2),[...flags,'--verified-export'],[...flags,'--unrecognized'],['--verified-export','true',...flags.slice(1)],['--directory','--product']])
+  assert.throws(()=>module.parseBotGuiInstallArguments(bad));
+});
+
+test('GUI verified export installs from a fresh moved no-git product while preserving the trusted recorded checkout',async()=>{
+ const install=await installer(),o=await options(),source=join(await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'gui-export-')),'source');
+ const manifest=JSON.parse(await readFile(o.packageSnapshot.manifestPath));await mkdir(source);
+ for(const file of manifest.files){const path=join(source,file.path);await mkdir(dirname(path),{recursive:true});await writeFile(path,await readFile(join(o.productRoot,file.path)),{mode:file.mode});await chmod(path,file.mode);}
+ await assert.rejects(lstat(join(source,'.git')),{code:'ENOENT'});
+ const installed=await install({...o,productRoot:source,packageSourceMode:'verified-export'});
+ assert.equal(installed.packageInstallation.recordedSourceRoot,manifest.sourceRoot);
+ assert.equal(installed.packageInstallation.verifiedExportRoot,source);
+ assert.equal(installed.packageInstallation.packageSourceMode,'verified-export');
+ assert.equal(installed.packageInstallation.sourceWorktreeClean,manifest.sourceWorktreeClean);
+ assert.equal(installed.packageInstallation.packageSHA256,manifest.packageSHA256);
+ assert.deepEqual(await readFile(join(installed.home,'profiles',installed.profile,'node_modules','dsh-bot','src/bot-gui-owner-app.mjs')),
+   await readFile(join(o.productRoot,'src/bot-gui-owner-app.mjs')));
 });
