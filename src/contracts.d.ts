@@ -136,7 +136,10 @@ export interface WorkSessionView extends WorkDelegation {
  readonly creationOperationId:string|null;readonly creationReceipt:CreationProof|null;readonly sessionCreation:WorkSessionCreation;readonly delivery:WorkDeliveryReceipt|null;
  readonly slotLease:WorkSlotLease|null;readonly summary:string|null;readonly unsupported:WorkUnsupportedCode|null;
  readonly evidenceKind:'unsupported'|'offline-synthetic';readonly nativeRuntimeVerified:false;
+ readonly generationObservation:WorkGenerationObservation;
 }
+/** Serializable observations only; local return or usage defaults never imply settlement. */
+export interface WorkGenerationObservation {readonly local:'unknown'|'pending'|'returned';readonly remote:'UNKNOWN'|'settled';readonly usageKnown:boolean;readonly usage:Readonly<{inputTokens:number;outputTokens:number;totalTokens?:number;cacheReadTokens?:number;cacheWriteTokens?:number;reasoningTokens?:number}>|null;readonly settlementVerified:boolean}
 export interface WorkSessionSnapshot {readonly work:readonly WorkSessionView[];readonly held:number;readonly limit:15;readonly coverage:'owner-contract-ledger';readonly nativeCoverageVerified:false}
 /** Returned only by the exact privately retained source, never accepted as a port input. */
 export interface WorkRuntimeReceipt {

@@ -1,6 +1,7 @@
 import { requireValue,text } from './errors.mjs';
 import { emptyPresetCatalog,normalizePresetCatalog,presetId } from './session-mode.mjs';
 import {freezeInitialSessionMode,isBlankInitialSessionEvents} from './initial-session-blank.mjs';
+import {loadOwnedGenerationSdk} from './owned-generation-bridge.mjs';
 export const REQUIRED_NATIVE=Object.freeze(['session_model','dispatch_freeze','operation_lookup','run_fence','resource_settlement','producer','scope_enforce','interaction_capacity']);
 // Cordis Service.tracker is public per-instance metadata; property reads create fresh proxies.
 // Compare that identity only. Keep calling through the traced service, never unwrap its implementation.
@@ -81,6 +82,20 @@ export class DshAdapter {
       }
     });
     durablePorts.set(port,verified);return port;
+  }
+  /** Explicit future-SDK path. Public-lock and synthetic contexts cannot create protected sessions. */
+  ownedGenerationCreationPort(sessionIds,{scopeOf,role,prepareGeneration,isCurrent}) {
+    requireValue(Array.isArray(sessionIds)&&sessionIds.length>0&&typeof scopeOf==='function'&&['main','work'].includes(role)&&typeof prepareGeneration==='function'&&typeof isCurrent==='function','invalid_creation_options');
+    const owned=new Set(sessionIds.map(id=>text(id,'sessionId',200))),context=this.context;
+    const check=i=>{requireValue(owned.has(i?.sessionId),'scope_denied');requireValue(context&&this.context===context&&isCurrent()===true,'host_disconnected');};
+    return Object.freeze({
+      createOwnedSession:async i=>{
+        check(i);await loadOwnedGenerationSdk();check(i);
+        const {Context}=await import('@deepseek-ai/cordis');check(i);requireValue(context instanceof Context,'unsupported_host_identity');
+        requireValue(false,'unsupported_native_creation');
+      },
+      inspectOwnedCreation:async i=>{check(i);return null;}
+    });
   }
   unsupported(operation) { return {status:'unsupported',operation,reason:'Missing verified native contract; no native mutation issued'}; }
   selectSessionModel() { return this.unsupported('selectSessionModel'); }
