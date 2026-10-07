@@ -3,7 +3,8 @@ import {mkdir, writeFile, realpath} from 'node:fs/promises';
 import {join, resolve, isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {installProductPackage} from './package-snapshot.mjs';
-import {GUI_DELEGATION_POLICY} from '../src/bot-gui-delegation-policy.mjs';
+// Descriptive profile metadata; the private app validates it before any native effect.
+const GUI_DELEGATION_POLICY=Object.freeze({parentWorkTools:'delegate',childWorkTools:'none',maxDepth:1,workLimit:15});
 
 const disabled = [
   'preset-standard','preset-ptc','preset-minimal','preset-cordis',
