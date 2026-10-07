@@ -33,14 +33,15 @@ export function syntheticResponse({finish=true,usage=true,text='Synthetic work r
 }
 export const envelope=(command,payload,revision=null,epochs={})=>({operationId:crypto.randomUUID(),nonce:crypto.randomUUID(),command,payloadDigest:digest(payload),expectedRevision:revision,expectedEpochs:epochs,authorizationRef:'native-owner',rootHumanInstructionRef:'explicit-synthetic-native-loop',createdAt:new Date().toISOString(),deadline:null});
 export const tick=()=>new Promise(resolve=>setImmediate(resolve));
+export async function observeUntil(read,predicate,timeoutMs=2000){const deadline=performance.now()+timeoutMs;do{const value=await read();if(predicate(value))return value;await tick();}while(performance.now()<deadline);throw Error('SYNTHETIC_NATIVE_OBSERVATION_TIMEOUT');}
 
-export async function generationFixture(t,fetcher=()=>syntheticResponse()) {
+export async function generationFixture(t,fetcher=()=>syntheticResponse(),options={}) {
  const Native=await import('@deepseek-ai/dsh-experimental-native-run');
  if(typeof Native.prepareOwnedGenerationSource!=='function'||typeof Native.isPreparedOwnedGenerationSource!=='function')throw Error('FUTURE_NATIVE_GENERATION_SDK_REQUIRED');
  if(typeof Provider.DeepSeekProtectedProviders!=='function')throw Error('FUTURE_PROTECTED_PROVIDER_SDK_REQUIRED');
- const directory=await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'generation-')),ctx=new Context();ctx.baseUrl=new URL(`file://${directory}/fixture.json`).href;
- const originalFetch=globalThis.fetch,started=Promise.withResolvers();let requests=0;globalThis.fetch=async(...args)=>{requests++;started.resolve();return fetcher(...args);};
- const ledger=new Ledger(join(directory,'product.sqlite'));t.after(async()=>{globalThis.fetch=originalFetch;await ctx.fiber.dispose();ledger.close();});
+ const directory=options.directory??await mkdtemp(join(process.env.DSH_BOT_TEST_ROOT,'generation-')),ctx=new Context();ctx.baseUrl=new URL(`file://${directory}/fixture.json`).href;
+ const originalFetch=globalThis.fetch,requestWaiters=new Set();let requests=0;globalThis.fetch=async(...args)=>{requests++;for(const waiter of requestWaiters)if(requests>=waiter.count)waiter.resolve();return fetcher(...args);};
+ const ledger=options.ledger??new Ledger(join(directory,'product.sqlite'));t.after(async()=>{globalThis.fetch=originalFetch;await ctx.fiber.dispose();if(options.ledger===undefined)ledger.close();});
  ctx.provide('agentDefaultModel',{currentSelection:()=>route});ctx.provide('attachments',{});ctx.provide('fileUploads',{registerAgentResolver:()=>()=>{}});ctx.provide('fs',{});ctx.provide('workspaceRegistry',{archivedSessionIds:[],list:()=>[],get:()=>undefined});ctx.provide('typert',{lookups:{register:()=>()=>{},configure:()=>()=>{}},contexts:{configureHost:()=>()=>{}}});
  await ctx.plugin(Loader);
  const provider={name:'keyless-synthetic-provider-owner',inject:['llm'],apply(child){Provider.registerDeepSeekProvider(child,'deepseek-official',{options:()=>Provider.resolveAdapterOptions({reasoningEffort:'off',maxTokens:16,retryPolicy:{mode:'normal',maxRetries:1,backoff:{initialDelayMs:1,maxDelayMs:1,jitterRatio:0}}}),resolveAuth:async()=>({headers:{}})});}};
@@ -49,8 +50,8 @@ export async function generationFixture(t,fetcher=()=>syntheticResponse()) {
  await writeFile(join(directory,'fixture.json'),JSON.stringify(rows));await ctx.loader.root.update(rows);await ctx.loader.await();for(const entry of ctx.loader.entries())await entry.fiber?.await();
  const caller=ctx.fiber,host=new Host({ledger,ownerHumanId:'synthetic-sdk-loop-owner',ownerCapability:caller,adapter:new DshAdapter(ctx)});await host.adapter.refreshSessionModeCatalog();
  const command=(name,payload,revision=null,epochs={})=>host.executeOwned(caller,envelope(name,payload,revision,epochs),payload).result;
- const bot=command('createBot',{name:'Synthetic Generation Bot',config:{contact:{provider:route.provider,model:route.model},agentPreset:preset}});
+ const bot=options.botId===undefined?command('createBot',{name:'Synthetic Generation Bot',config:{contact:{provider:route.provider,model:route.model},agentPreset:preset}}):host.object('bot',options.botId);
  const prepareGeneration=(intent,role='work')=>({prepared:Native.prepareOwnedGenerationSource({ownerCtx:ctx,providerFactory:ctx.deepseekProtectedProviders.lookup(route.provider),sessionId:intent.sessionId,role,route,isCurrent:()=>true}),route});
- const waitRequest=async()=>{let timer;try{await Promise.race([started.promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('SYNTHETIC_NATIVE_DISPATCH_TIMEOUT')),2000);})]);}finally{clearTimeout(timer);}};
+ const waitRequest=async(count=1)=>{if(requests>=count)return;const pending=Promise.withResolvers(),waiter={count,resolve:pending.resolve};requestWaiters.add(waiter);let timer;try{await Promise.race([pending.promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('SYNTHETIC_NATIVE_DISPATCH_TIMEOUT')),2000);})]);}finally{clearTimeout(timer);requestWaiters.delete(waiter);}};
  return {Native,ctx,ledger,host,caller,bot,directory,command,prepareGeneration,requests:()=>requests,waitRequest};
 }

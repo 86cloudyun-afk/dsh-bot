@@ -179,6 +179,8 @@ export interface OwnedWorkSessionPort {
  readonly query:(selection:{readonly task_ids?:readonly string[]})=>WorkSessionSnapshot;
  readonly admit:(envelope:CommandEnvelope,payload:WorkTarget)=>Receipt<WorkSessionView>;
  readonly createSession:(envelope:CommandEnvelope,target:WorkTarget)=>Promise<WorkSessionView>;
+ /** Genuine sealed-history source restore; performs no model send or old-input replay. */
+ readonly restoreSession:(target:WorkTarget)=>Promise<WorkSessionView>;
  readonly queueMessage:(envelope:CommandEnvelope,target:WorkTarget,signal?:AbortSignal)=>Promise<WorkSessionView>;
  /** Wake original once and retain held/unknown when native terminal support is absent. */
  readonly executeMessage:(envelope:CommandEnvelope,target:WorkTarget,signal?:AbortSignal)=>Promise<WorkSessionView>;
