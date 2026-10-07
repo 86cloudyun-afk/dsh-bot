@@ -9,7 +9,7 @@ def fixed(path,maximum=512*1024*1024):
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     with os.fdopen(fd,'rb') as file:
         opened=os.fstat(file.fileno());R.require((opened.st_dev,opened.st_ino,opened.st_size)==(before.st_dev,before.st_ino,before.st_size),'INSTALLED_CONTENT_IDENTITY_REFUSED')
-        data=file.read(maximum+1);after=os.fstat(file.fileno());last=path.lstat()
+        data=file.read(before.st_size+1);after=os.fstat(file.fileno());last=path.lstat()
     R.require(len(data)==before.st_size and (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns)==(before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns,before.st_ctime_ns) and (last.st_dev,last.st_ino,last.st_size)==(before.st_dev,before.st_ino,before.st_size),'INSTALLED_CONTENT_IDENTITY_REFUSED')
     return data,stat.S_IMODE(before.st_mode),hashlib.sha256(data).hexdigest()
 

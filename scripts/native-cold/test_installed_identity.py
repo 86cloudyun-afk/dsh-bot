@@ -1,6 +1,8 @@
 """Synthetic files and bytes only. No SDK/Node children or network."""
 import copy,hashlib,json,stat,tempfile,unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 import installed_identity as I
 import supervisor as R
 
@@ -56,5 +58,99 @@ class InstalledTests(unittest.TestCase):
             self.assertEqual(set(inventory),{'schemaVersion','scope','lockSHA256','packages','files'})
             self.assertEqual(len(inventory['files']),2)
             self.assertEqual([r['path'] for r in inventory['files']],['synthetic-sdk/index.js','synthetic-sdk/package.json'])
+
+class FixedReadTests(unittest.TestCase):
+    @contextmanager
+    def owned_file(self,data):
+        with tempfile.TemporaryDirectory(prefix='dsh-fixed-read-',dir='/tmp') as d:
+            path=Path(d).resolve(strict=True)/'owned.bin';path.write_bytes(data);path.chmod(0o600)
+            yield path
+
+    @contextmanager
+    def observe_real_read(self,*,before_read=None,after_read=None):
+        """Transparent observer: bytes and metadata still come from the real owned file."""
+        original=I.os.fdopen;requests=[];lengths=[]
+        @contextmanager
+        def wrapped(fd,mode):
+            with original(fd,mode) as real:
+                class Reader:
+                    def fileno(self):return real.fileno()
+                    def read(self,size):
+                        requests.append(size)
+                        if before_read is not None:before_read()
+                        data=real.read(size);lengths.append(len(data))
+                        if after_read is not None:after_read()
+                        return data
+                yield Reader()
+        with patch.object(I.os,'fdopen',side_effect=wrapped):yield requests,lengths
+
+    def test_read_request_is_verified_file_size_plus_one(self):
+        for data in (b'',b'\x00',bytes(range(256))*257):
+            with self.subTest(bytes=len(data)),self.owned_file(data) as path,self.observe_real_read() as observed:
+                I.fixed(path)
+                self.assertEqual(observed[0],[len(data)+1])
+                self.assertEqual(observed[1],[len(data)])
+
+    def test_full_binary_content_digest_and_mode_are_retained_at_size_limit(self):
+        for data in (b'',b'\x00',bytes(range(256))*257):
+            with self.subTest(bytes=len(data)),self.owned_file(data) as path:
+                actual,mode,digest=I.fixed(path,maximum=len(data))
+                self.assertEqual(actual,data);self.assertEqual(mode,0o600)
+                self.assertEqual(digest,hashlib.sha256(data).hexdigest())
+
+    def test_growth_between_opened_metadata_and_read_is_refused(self):
+        data=b'owned synthetic original'
+        with self.owned_file(data) as path:
+            def grow():
+                with path.open('ab') as file:file.write(b'+')
+            with self.observe_real_read(before_read=grow) as observed,self.assertRaises(R.SafetyError) as caught:
+                I.fixed(path,maximum=len(data))
+            self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+            self.assertEqual(observed[1],[len(data)+1])
+
+    def test_truncation_between_opened_metadata_and_read_is_refused(self):
+        data=b'owned synthetic original'
+        with self.owned_file(data) as path:
+            def truncate():
+                with path.open('r+b') as file:file.truncate(3)
+            with self.observe_real_read(before_read=truncate) as observed,self.assertRaises(R.SafetyError) as caught:
+                I.fixed(path)
+            self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+            self.assertEqual(observed[1],[3])
+
+    def test_same_bytes_path_replacement_after_open_is_refused(self):
+        data=b'owned synthetic original'
+        with self.owned_file(data) as path:
+            replacement=path.with_name('replacement.bin');replacement.write_bytes(data);replacement.chmod(0o600)
+            with self.observe_real_read(before_read=lambda:replacement.replace(path)) as observed,self.assertRaises(R.SafetyError) as caught:
+                I.fixed(path)
+            self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+            self.assertEqual(observed[1],[len(data)])
+
+    def test_same_size_mutation_after_read_is_refused(self):
+        data=b'owned synthetic original'
+        with self.owned_file(data) as path:
+            with self.observe_real_read(after_read=lambda:path.write_bytes(b'x'*len(data))),self.assertRaises(R.SafetyError) as caught:
+                I.fixed(path)
+            self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+
+    def test_same_bytes_replacement_between_lstat_and_open_is_refused(self):
+        data=b'owned synthetic original'
+        with self.owned_file(data) as path:
+            replacement=path.with_name('replacement.bin');replacement.write_bytes(data);replacement.chmod(0o600);original=I.os.open
+            def replaced(name,flags):replacement.replace(path);return original(name,flags)
+            with patch.object(I.os,'open',side_effect=replaced),self.assertRaises(R.SafetyError) as caught:I.fixed(path)
+            self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
+
+    def test_existing_size_symlink_and_hardlink_limits_still_refuse(self):
+        data=b'owned synthetic original'
+        for change in ('oversize','symlink','hardlink'):
+            with self.subTest(change=change),self.owned_file(data) as path:
+                maximum=len(data)-1 if change=='oversize' else len(data)
+                if change=='symlink':
+                    target=path.with_name('target.bin');path.replace(target);path.symlink_to(target)
+                if change=='hardlink':I.os.link(path,path.with_name('alias.bin'))
+                with self.assertRaises(R.SafetyError) as caught:I.fixed(path,maximum=maximum)
+                self.assertEqual(caught.exception.code,'INSTALLED_CONTENT_IDENTITY_REFUSED')
 
 if __name__=='__main__':unittest.main()
