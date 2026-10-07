@@ -53,7 +53,8 @@ test('fresh GUI profile installs packed owner with real BrowserAuth and an empty
   rows=applyEntryPatches(rows,patch,()=>{});
   assert.equal(rows.find(r=>r.id==='web-startup').disabled,true,'stock Web flags must not swallow owner enablement');
   assert.equal(rows.find(r=>r.id==='bot-gui-startup')?.name,'dsh-bot/bot-gui-startup');
-  assert.equal(rows.find(r=>r.id==='config-editor').disabled,undefined,'stock locale/settings reads need their config service');
+  assert.notEqual(rows.find(r=>r.id==='config-editor').disabled,true,'stock locale/settings reads need their config service');
+  assert.ok(rows.find(r=>r.id==='connection').inject.includes('webServer'),'stock RPC handler captures Connection activation and needs webServer there');
   assert.ok(rows.find(r=>r.id==='connection').config.maxRequestBodyBytes>=280668843,'respect stock aggregate attachment invariant');
 });
 
