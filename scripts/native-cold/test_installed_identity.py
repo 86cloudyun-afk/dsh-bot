@@ -447,6 +447,72 @@ class PrefixPathTests(unittest.TestCase):
                     finally:setattr(owner,name,original_method)
                 self.assertEqual(observed[1],observed[0]);self.assertEqual(observed[0][1],[name])
 
+    def test_live_os_globals_and_stat_function_receive_actual_paths(self):
+        for before_import in (False,True):
+            for binding in ('pathlib-os-stat','pathlib-os-listdir','os-stat-function'):
+                with self.subTest(beforeImport=before_import,binding=binding),self.owned() as root:
+                    target=root/'nested/inside.js';self.write(target,b'owned live OS callback');observed=[]
+                    for implementation in (_C93,None):
+                        module=implementation if implementation is not None else None if before_import else self.identity_copy()
+                        calls=[];original_stat=os.stat;original_list=os.listdir
+                        class CurrentOS:
+                            def __getattr__(self,name):return getattr(os,name)
+                            def stat(self,value,*args,**kwargs):
+                                if os.fspath(value)==str(target):
+                                    calls.append(('stat',type(value).__name__,args,kwargs));value.as_posix()
+                                    raise PermissionError(13,'SYNTHETIC_LIVE_OS_DENIED',str(target))
+                                return original_stat(value,*args,**kwargs)
+                            def listdir(self,value):
+                                if binding=='pathlib-os-listdir':calls.append(('listdir',type(value).__name__,value.as_posix()));return []
+                                return original_list(value)
+                        proxy=CurrentOS();namespace=PosixPath.stat.__globals__
+                        context=patch.object(os,'stat',proxy.stat) if binding=='os-stat-function' else patch.dict(namespace,{'os':proxy})
+                        with context:
+                            if module is None:module=self.identity_copy()
+                            result=self.outcome(lambda:module.files_under(root))
+                        observed.append((result,calls))
+                    self.assertEqual(observed[1],observed[0])
+
+    def test_stock_keyword_defaults_subclass_keeps_native_argument_binding(self):
+        for before_import in (False,True):
+            with self.subTest(beforeImport=before_import),self.owned() as root:
+                self.write(root/'inside.js',b'owned native defaults');observed=[]
+                for implementation in (_C93,None):
+                    module=implementation if implementation is not None else None if before_import else self.identity_copy();calls=[]
+                    class Defaults(dict):
+                        def __contains__(self,key):calls.append(('contains',key));return super().__contains__(key)
+                        def __getitem__(self,key):calls.append(('getitem',key));raise PermissionError(13,'SYNTHETIC_DEFAULT_DICT_DENIED')
+                    with patch.object(PosixPath.stat,'__kwdefaults__',Defaults(follow_symlinks=True)):
+                        if module is None:module=self.identity_copy()
+                        result=self.outcome(lambda:module.files_under(root))
+                    observed.append((result,calls))
+                self.assertEqual(observed[1],observed[0]);self.assertEqual(observed[0][1],[])
+
+    def test_live_os_globals_changed_between_real_entry_observations(self):
+        for empty_listing in (False,True):
+            with self.subTest(emptyListing=empty_listing),self.owned() as root:
+                target=root/'nested/inside.js';self.write(target,b'owned changed OS binding');observed=[]
+                for implementation in (_C93,self.identity_copy()):
+                    calls=[];changed=[];original_stat=os.stat;original_list=os.listdir;namespace=PosixPath.stat.__globals__
+                    class CurrentOS:
+                        def __getattr__(self,name):return getattr(os,name)
+                        def stat(self,value,*args,**kwargs):
+                            if os.fspath(value)==str(target):
+                                calls.append(('stat',type(value).__name__,value.as_posix()))
+                                raise PermissionError(13,'SYNTHETIC_CHANGED_OS_DENIED',str(target))
+                            return original_stat(value,*args,**kwargs)
+                        def listdir(self,value):
+                            calls.append(('listdir',type(value).__name__,value.as_posix()))
+                            return [] if empty_listing else original_list(value)
+                    proxy=CurrentOS()
+                    def stat_call(value,*args,**kwargs):
+                        result=original_stat(value,*args,**kwargs)
+                        if os.fspath(value)==str(root) and not changed:changed.append(True);namespace['os']=proxy
+                        return result
+                    with patch.dict(namespace,{'os':os}),patch.object(os,'stat',stat_call):result=self.outcome(lambda:implementation.files_under(root))
+                    observed.append((result,calls,changed))
+                self.assertEqual(observed[1],observed[0]);self.assertEqual(observed[0][2],[True])
+
     def installation(self,root):
         source=root/'source';sdk=source/'node_modules/synthetic-sdk';sdk.mkdir(parents=True)
         self.write(source/'package-lock.json',json.dumps({'packages':{'node_modules/synthetic-sdk':{'version':'1.0.0','integrity':'sha512-synthetic-fixture'}}}).encode())
