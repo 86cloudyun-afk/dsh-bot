@@ -9,7 +9,14 @@ import {createGuiGenerationPolicy} from './bot-gui-generation-policy.mjs';
 
 const identity=value=>value?.[symbols.original]??value;
 const coordinates=intent=>canonical(['operationId','sessionId','cwd','agentPreset','kind','botId','botEpoch',
-  'configVersion','authorityEpoch','taskId','taskEpoch','taskRevision','workBinding'].map(key=>intent?.[key]??null));
+  'configVersion','authorityEpoch','taskId','taskEpoch','taskRevision','workBinding','workDepth','parentBinding'].map(key=>intent?.[key]??null));
+const positive=value=>Number.isSafeInteger(value)&&value>0;
+const same=(a,b)=>canonical(a??null)===canonical(b??null);
+const fullWorkBinding=binding=>binding&&Object.getPrototypeOf(binding)===Object.prototype
+  &&['botId','taskId','sessionId','configVersion','operationId','nonce','inputMessageId'].every(key=>typeof binding[key]==='string'&&binding[key].length>0)
+  &&['generation','botEpoch','taskEpoch','taskRevision','authorityEpoch'].every(key=>positive(binding[key]))
+  &&typeof binding.messageIdentity==='string'&&/^[a-f0-9]{64}$/.test(binding.messageIdentity)
+  &&same(binding.slotLease,{taskId:binding.taskId,sessionId:binding.sessionId,generation:binding.generation,operationId:binding.operationId});
 
 export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,agentPreset,route,initialization,
   isOwnerCurrent,canModelDispatch}) {
@@ -47,11 +54,39 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
     }
     requireValue(options.create?['prepared','creating'].includes(stored.state):stored.state==='created','gui_native_creation_changed');
   }
-  return Object.freeze({
-    async prepare(intent,options){
+  function originalInput(binding){
+    requireValue(fullWorkBinding(binding),'gui_parent_binding_required');
+    const generation=host.ledger.get('workGeneration',canonical([binding.botId,binding.taskId,binding.generation]));
+    const delivery=host.ledger.get('workDelivery',canonical([binding.botId,binding.taskId,binding.generation]));
+    requireValue(generation&&same(generation.binding,binding)&&same(generation.slotLease,binding.slotLease)
+      &&delivery?.sessionId===binding.sessionId&&delivery.generation===binding.generation&&delivery.operationId===binding.operationId
+      &&delivery.message?.id===binding.inputMessageId&&digest(delivery.message)===binding.messageIdentity,'gui_parent_binding_required');
+  }
+  function parentPlan(intent,options){
+    requireValue(options.role==='work'&&options.delegateTool?.name==='dsh_bot_delegate','gui_parent_delegate_required');
+    originalInput(options.plannedBinding);
+    const work=host.ledger.get('workTask',canonical([intent.botId,intent.workBinding?.task_id])),binding=options.plannedBinding;
+    requireValue(work.depth===0&&intent.workDepth!==1&&binding.botId===intent.botId&&binding.taskId===intent.taskId
+      &&binding.sessionId===intent.sessionId&&binding.generation===work.generation&&binding.botEpoch===intent.botEpoch
+      &&binding.taskEpoch===intent.taskEpoch&&binding.taskRevision===intent.taskRevision&&binding.authorityEpoch===intent.authorityEpoch
+      &&binding.configVersion===intent.configVersion,'gui_parent_binding_required');
+  }
+  function childPlan(intent,options,sdk){
+    requireValue(options.create===true&&options.delegateTool===undefined&&options.plannedBinding===undefined
+      &&intent.workDepth===1&&same(intent.parentBinding,options.parentBinding),'gui_child_binding_required');
+    originalInput(options.parentBinding);
+    const work=host.ledger.get('workTask',canonical([intent.botId,intent.workBinding?.task_id])),binding=options.parentBinding;
+    const parent=host.ledger.list('workTask').find(row=>row.botId===intent.botId&&row.taskId===binding.taskId&&row.sessionId===binding.sessionId);
+    requireValue(work.depth===1&&work.parentTaskId===binding.taskId&&parent?.depth===0&&parent.generation===binding.generation
+      &&parent.botEpoch===intent.botEpoch&&parent.configVersion===intent.configVersion&&parent.authorityEpoch===intent.authorityEpoch
+      &&sdk.isOwnedGenerationSource(options.parentSource,ownerCtx)===true&&typeof sdk.prepareOwnedChildGenerationSource==='function','gui_child_source_required');
+  }
+  async function prepare(intent,options,child=false){
       original(intent,options);const consumedKey=canonical([options.role,intent.sessionId]);
+      if(!child&&options.role==='work'&&options.delegateTool!==undefined)parentPlan(intent,options);
       requireValue(!consumed.has(consumedKey),'gui_native_preparation_consumed');consumed.add(consumedKey);
       const sdk=await loadOwnedGenerationSdk();original(intent,options);
+      if(child)childPlan(intent,options,sdk);
       requireValue(typeof sdk.openOwnedGenerationJournal==='function'&&typeof sdk.isOwnedGenerationJournal==='function','gui_owned_journal_unsupported');
       const directory=ownerCtx.get('deepseekProtectedProviders'),providerFactory=directory?.lookup?.(nativeRoute.provider);
       requireValue(providerFactory,'gui_protected_provider_required');
@@ -60,20 +95,29 @@ export function createGuiGenerationPreparation({ownerCtx,host,homeDirectory,cwd,
       if(!options.create&&options.role==='main')requireValue(options.delegateTool?.name==='dsh_bot_delegate','gui_resume_delegate_required');
       unchanged();
       const journal=await sdk.openOwnedGenerationJournal({ownerCtx,directory:join(homeDirectory,'owned-generations',digest({botId:intent.botId,sessionId:intent.sessionId,role:options.role})),
-        create:options.create,sessionId:intent.sessionId,role:options.role,route:nativeRoute,initialization:mode,session:{cwd,agentPreset}});
+        create:options.create,sessionId:intent.sessionId,role:options.role,...options.role==='work'?{toolPolicy:!child&&options.delegateTool?'delegate':'zero'}:{},
+        route:nativeRoute,initialization:mode,session:{cwd,agentPreset}});
       try{
         unchanged();requireValue(sdk.isOwnedGenerationJournal(journal,ownerCtx,intent.sessionId,options.role)===true,'gui_owned_journal_required');
         const policy=createGuiGenerationPolicy({ledger:host.ledger,ledgerId:host.ledgerInstanceId,botId:intent.botId,botEpoch:intent.botEpoch,
           configVersion:intent.configVersion,authorityEpoch:intent.authorityEpoch,mainSessionId:options.mainSessionId,sessionId:intent.sessionId,
           role:options.role,isOwnerCurrent:()=>{try{current();return true;}catch{return false;}},canModelDispatch});
-        const prepared=sdk.prepareOwnedGenerationSource({ownerCtx,providerFactory,sessionId:intent.sessionId,role:options.role,
-          route:nativeRoute,initialization:mode,journal,isCurrent:policy.isCurrent,canDispatch:policy.canDispatch,
-          ...(options.delegateTool?{delegateTool:options.delegateTool}:{})});
+        const common={ownerCtx,providerFactory,sessionId:intent.sessionId,route:nativeRoute,initialization:mode,journal,
+          isCurrent:policy.isCurrent,canDispatch:policy.canDispatch};
+        if(!child&&options.role==='work'&&options.delegateTool!==undefined)parentPlan(intent,options);
+        if(child)childPlan(intent,options,sdk);
+        const prepared=child?sdk.prepareOwnedChildGenerationSource(options.parentSource,options.parentGeneration,common)
+          :sdk.prepareOwnedGenerationSource({...common,role:options.role,
+            ...(options.role==='work'&&options.delegateTool?{workDelegate:{plannedBinding:options.plannedBinding,delegateTool:options.delegateTool}}
+              :options.delegateTool?{delegateTool:options.delegateTool}:{})});
         unchanged();requireValue(sdk.isPreparedOwnedGenerationSource(prepared,ownerCtx,intent.sessionId,options.role)===true
           &&prepared.mode===(options.create?'create':'resume'),'gui_owned_preparation_required');
         journals.add(journal);return Object.freeze({prepared,route:nativeRoute});
       }catch(error){await journal.close();throw error;}
-    },
+  }
+  return Object.freeze({
+    prepare:(intent,options)=>prepare(intent,options),
+    prepareChild:(intent,options)=>prepare(intent,{...options,role:'work'},true),
     async close(){if(closed)return;closed=true;await Promise.allSettled([...journals].map(journal=>journal.close()));journals.clear();},
   });
 }
