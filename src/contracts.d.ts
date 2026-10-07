@@ -36,6 +36,10 @@ export interface OwnedCreationPort {
  createOwnedSession(intent:CreationIntent):Promise<{sessionId:string}>;
  inspectOwnedCreation(intent:CreationIntent):Promise<CreationProof|null>;
 }
+/** Private SDK-branded history path; the original intent is only an exact selector. */
+export interface OwnedGenerationCreationPort extends OwnedCreationPort {
+ resumeOwnedSession(intent:CreationIntent,options?:Readonly<{delegateTool?:import('@deepseek-ai/dsh-tools').ToolDefinition}>):Promise<{sessionId:string}>;
+}
 export declare class Host {
  constructor(options:{ledger:Ledger;ownerHumanId:string;adapter?:NativeAdapterContract;ownerCapability?:object;workSessionRuntime?:OfflineWorkSessionRuntime});
  execute(actor:TrustedActor,envelope:CommandEnvelope,payload:unknown):Receipt;

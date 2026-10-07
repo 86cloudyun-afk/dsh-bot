@@ -11,7 +11,7 @@ async function work(t,fetcher) {
  const producer={execution:true,provenance:{producerId:'synthetic-owned-producer',ingress:'owner',originSessionId:'synthetic-main'},isCurrent:()=>true,
   createMessage:(binding,provenance,text)=>createUserMessage({content:[{type:'text',text}],source:{kind:'dsh-bot',...provenance,...binding}}),
   send:async()=>{throw Error('RAW_TRANSPORT_MUST_NOT_SEND_NATIVE_GENERATION');},inspect:async()=>false};
- const port=f.host.openOwnedWorkSessionPort(f.caller,{botId:f.bot.botId,botEpoch:1,authorityEpoch:1,producer,creation:{cwd:f.directory,portFor:i=>f.host.adapter.ownedGenerationCreationPort([i.sessionId],{scopeOf,role:'work',prepareGeneration:f.prepareGeneration,isCurrent:()=>true})}});t.after(()=>port.dispose());
+ const port=f.host.openOwnedWorkSessionPort(f.caller,{botId:f.bot.botId,botEpoch:1,authorityEpoch:1,producer,creation:{cwd:f.directory,portFor:i=>f.host.adapter.ownedGenerationCreationPort([i.sessionId],{scopeOf,role:'work',prepareGeneration:i=>f.prepareGeneration(i),isCurrent:()=>true})}});t.after(()=>port.dispose());
  const query=()=>port.query({}).work[0];
  const call=(method,command,payload)=>port[method](envelope(command,payload,query()?.revision??null,{nativeOwner:1,bot:1,...query()?{task:1}:{}}),payload);
  call('delegate','delegateWorkSession',{task_id:'work',goal:'Use synthetic source',completion_condition:'Settle only original branded generation'});
@@ -68,4 +68,20 @@ test('actual SDK protected main creation preserves original contact intent with 
  const f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);assert.equal(intent.kind,undefined);
  const port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'main',isCurrent:()=>true,prepareGeneration:i=>f.prepareGeneration(i,'main')});
  const result=await new SessionCreationDriver({host:f.host,caller:f.caller,port}).run(f.caller,intent.operationId);assert.equal(result.state,'created');assert.equal(result.proof.blank,true);assert.equal(f.host.object('bot',f.bot.botId).contactSessionId,intent.sessionId);assert.equal(f.requests(),0);
+});
+
+test('actual SDK private resume refuses a genuine create preparation before any native effect',async t=>{
+ const f=await generationFixture(t),intent={operationId:'resume-create-refused',sessionId:`session-${crypto.randomUUID()}`,cwd:f.directory,agentPreset:'synthetic/empty',kind:'execution',botId:f.bot.botId,botEpoch:1,configVersion:f.bot.configVersion,authorityEpoch:1,state:'created'};
+ let requestedMode;const port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'work',isCurrent:()=>true,prepareGeneration:(i,options)=>{requestedMode=options.mode;return f.prepareGeneration(i);}});
+ assert.equal(typeof port.resumeOwnedSession,'function');
+ await assert.rejects(()=>port.resumeOwnedSession(intent),e=>e.code==='unsupported_owned_generation_restore');
+ assert.equal(requestedMode,'resume');assert.equal(f.ctx.agents.get(intent.sessionId),undefined);assert.equal(f.ctx.sessions.get(intent.sessionId),undefined);assert.equal(f.requests(),0);
+});
+
+test('actual SDK private resume rejects a copied resume label without SDK preparation identity',async t=>{
+ const f=await generationFixture(t),intent={operationId:'resume-copy-refused',sessionId:`session-${crypto.randomUUID()}`,cwd:f.directory,agentPreset:'synthetic/empty',kind:'execution',botId:f.bot.botId,botEpoch:1,configVersion:f.bot.configVersion,authorityEpoch:1,state:'created'};
+ const port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'work',isCurrent:()=>true,prepareGeneration:i=>{const result=f.prepareGeneration(i);return{...result,prepared:{...result.prepared,mode:'resume'}};}});
+ assert.equal(typeof port.resumeOwnedSession,'function');
+ await assert.rejects(()=>port.resumeOwnedSession(intent),e=>e.code==='unsupported_owned_generation_preparation');
+ assert.equal(f.ctx.agents.get(intent.sessionId),undefined);assert.equal(f.ctx.sessions.get(intent.sessionId),undefined);assert.equal(f.requests(),0);
 });

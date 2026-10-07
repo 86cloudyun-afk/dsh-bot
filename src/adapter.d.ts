@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { scopeOf as nativeScopeOf } from '@deepseek-ai/dsh-scope';
-import type { AgentPresetCatalog,CreationIntent,OwnedCreationPort,OwnedGenerationPreparation } from './contracts.js';
+import type { AgentPresetCatalog,CreationIntent,OwnedCreationPort,OwnedGenerationCreationPort,OwnedGenerationPreparation } from './contracts.js';
 import type {ToolDefinition} from '@deepseek-ai/dsh-tools';
 import type {InitialSessionModeSnapshot} from './initial-session-blank.mjs';
 export declare const REQUIRED_NATIVE:readonly ['session_model','dispatch_freeze','operation_lookup','run_fence','resource_settlement','producer','scope_enforce','interaction_capacity'];
@@ -39,7 +39,7 @@ export declare class DshAdapter {
  /** Private owned creation port; scopeOf must return the exact mounted Agent identity. */
  ownedCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;durable?:boolean;initialization?:InitialSessionModeSnapshot}):OwnedCreationPort;
  /** Explicit private creation: actual prepared SDK brand and retained native handle are required. */
- ownedGenerationCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;role:'main'|'work';prepareGeneration:(intent:CreationIntent)=>OwnedGenerationPreparation|Promise<OwnedGenerationPreparation>;isCurrent:()=>boolean;initialization?:InitialSessionModeSnapshot}):OwnedCreationPort;
+ ownedGenerationCreationPort(sessionIds:readonly string[],options:{scopeOf:typeof nativeScopeOf;role:'main'|'work';prepareGeneration:(intent:CreationIntent,options:Readonly<{mode:'create'|'resume';delegateTool?:ToolDefinition}>)=>OwnedGenerationPreparation|Promise<OwnedGenerationPreparation>;isCurrent:()=>boolean;initialization?:InitialSessionModeSnapshot}):OwnedGenerationCreationPort;
  /** Called once with the exact registered native ToolDefinition before first main input. */
  bindOwnedMainGeneration(port:OwnedCreationPort,intent:CreationIntent,delegateTool:ToolDefinition):object;
  unsupported<T extends string>(operation:T):UnsupportedOperation<T>;
