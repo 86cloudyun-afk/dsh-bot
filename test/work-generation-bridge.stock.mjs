@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {scopeOf} from '@deepseek-ai/dsh-scope';
 import {createUserMessage} from '@deepseek-ai/dsh-llm';
+import {SessionCreationDriver} from '../src/session-creation.mjs';
 import {generationFixture,envelope,tick,syntheticResponse} from './work-generation-fixture.mjs';
 
 async function work(t,fetcher) {
@@ -28,8 +29,8 @@ test('actual SDK synthetic loop reserves before sole native source send and rele
 
 for(const options of [{finish:false},{usage:false}])test(`actual SDK synthetic local return keeps original UNKNOWN slot for ${JSON.stringify(options)}`,async t=>{
  const f=await work(t,()=>syntheticResponse(options));await f.call('executeMessage','prepareWorkSessionExecution',{task_id:'work',generation:1});
- for(let n=0;n<30&&f.ctx.agents.get(f.query().sessionId).status!=='idle';n++)await tick();
- const result=await f.port.collect({task_id:'work',generation:1});assert.equal(result.held,true);assert.equal(result.generationObservation.remote,'UNKNOWN');assert.equal(result.generationObservation.settlementVerified,false);assert.equal(f.requests(),1);
+ let result;for(let n=0;n<30;n++){await tick();result=await f.port.collect({task_id:'work',generation:1});if(result.generationObservation.local==='returned')break;}
+ assert.equal(result.generationObservation.local,'returned');assert.equal(result.held,true);assert.equal(result.generationObservation.remote,'UNKNOWN');assert.equal(result.generationObservation.settlementVerified,false);assert.equal(f.requests(),1);
 });
 
 test('actual SDK synthetic stop observes durable product fence before original abort and keeps remote UNKNOWN',async t=>{
@@ -49,4 +50,22 @@ test('actual SDK synthetic late original receipt cannot release resumed generati
  const newer=f.query();assert.equal(newer.held,true);assert.equal(newer.generation,2);assert.equal(f.port.query({}).held,1);
  for(let n=0;n<2;n++)assert.deepEqual(await f.port.collect({task_id:'work',generation:1}),newer);
  assert.equal(f.port.query({}).held,1);assert.deepEqual(f.query().slotLease,newer.slotLease);
+});
+
+test('actual SDK protected preparation may await private journal work before native creation',async t=>{
+ const f=await generationFixture(t),i={operationId:'async-private-prepare',sessionId:`session-${crypto.randomUUID()}`,cwd:f.directory,agentPreset:'synthetic/empty',kind:'execution',botId:f.bot.botId,botEpoch:1,configVersion:f.bot.configVersion,authorityEpoch:1};
+ let awaited=false;const port=f.host.adapter.ownedGenerationCreationPort([i.sessionId],{scopeOf,role:'work',isCurrent:()=>true,prepareGeneration:async intent=>{await tick();assert.equal(f.ctx.agents.get(i.sessionId),undefined);awaited=true;return f.prepareGeneration(intent);}});
+ assert.equal((await port.createOwnedSession(i)).sessionId,i.sessionId);assert.equal((await port.inspectOwnedCreation(i)).blank,true);assert.equal(awaited,true);assert.equal(f.requests(),0);
+});
+
+test('actual SDK async private preparation checks owner again before first native effect',async t=>{
+ const f=await generationFixture(t),i={operationId:'async-private-owner',sessionId:`session-${crypto.randomUUID()}`,cwd:f.directory,agentPreset:'synthetic/empty',kind:'execution',botId:f.bot.botId,botEpoch:1,configVersion:f.bot.configVersion,authorityEpoch:1};
+ let current=true;const port=f.host.adapter.ownedGenerationCreationPort([i.sessionId],{scopeOf,role:'work',isCurrent:()=>current,prepareGeneration:async intent=>{await tick();const prepared=f.prepareGeneration(intent);current=false;return prepared;}});
+ await assert.rejects(()=>port.createOwnedSession(i),e=>e.code==='host_disconnected');assert.equal(f.ctx.agents.get(i.sessionId),undefined);assert.equal(f.ctx.sessions.get(i.sessionId),undefined);assert.equal(f.requests(),0);
+});
+
+test('actual SDK protected main creation preserves original contact intent with absent kind',async t=>{
+ const f=await generationFixture(t),intent=f.command('prepareContactSession',{botId:f.bot.botId,cwd:f.directory},f.bot.revision);assert.equal(intent.kind,undefined);
+ const port=f.host.adapter.ownedGenerationCreationPort([intent.sessionId],{scopeOf,role:'main',isCurrent:()=>true,prepareGeneration:i=>f.prepareGeneration(i,'main')});
+ const result=await new SessionCreationDriver({host:f.host,caller:f.caller,port}).run(f.caller,intent.operationId);assert.equal(result.state,'created');assert.equal(result.proof.blank,true);assert.equal(f.host.object('bot',f.bot.botId).contactSessionId,intent.sessionId);assert.equal(f.requests(),0);
 });

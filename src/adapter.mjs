@@ -8,7 +8,7 @@ export const REQUIRED_NATIVE=Object.freeze(['session_model','dispatch_freeze','o
 const registryIdentity=registry=>registry?.[Symbol.for('cordis.tracker')] ?? registry;
 const durablePorts=new WeakMap();
 const generationPorts=new WeakMap();
-const creationCoordinates=i=>canonical([i.operationId,i.sessionId,i.cwd,i.agentPreset,i.kind,i.botId,i.botEpoch,i.configVersion,i.authorityEpoch,i.taskId??null,i.taskEpoch??null,i.taskRevision??null]);
+const creationCoordinates=i=>canonical([i.operationId,i.sessionId,i.cwd,i.agentPreset,i.kind??null,i.botId,i.botEpoch,i.configVersion,i.authorityEpoch,i.taskId??null,i.taskEpoch??null,i.taskRevision??null]);
 /** Private exact-port lookup; neither copied ports nor historical JSON recover a source. */
 export function ownedGenerationSourceFor(port,intent){const retained=generationPorts.get(port),row=retained?.rows.get(intent?.operationId);if(!row)return null;retained.check(intent);requireValue(row.coordinates===creationCoordinates(intent),'native_creation_binding_changed');return row.source??null;}
 /** Internal evidence query: labels or copied/wrapped ports cannot mint this identity. */
@@ -99,8 +99,8 @@ export class DshAdapter {
         check(i);const sdk=await loadOwnedGenerationSdk();check(i);
         const {Context}=await import('@deepseek-ai/cordis');check(i);requireValue(context instanceof Context,'unsupported_host_identity');
         requireValue(!rows.has(i.operationId),'native_creation_replay');
-        const preparation=prepareGeneration(Object.freeze(structuredClone(i)));if(preparation&&typeof preparation.then==='function')Promise.resolve(preparation).catch(()=>{});
-        requireValue(preparation&&typeof preparation.then!=='function'&&sdk.isPreparedOwnedGenerationSource(preparation.prepared,context,i.sessionId,role)===true,'unsupported_owned_generation_preparation');
+        const preparation=await prepareGeneration(Object.freeze(structuredClone(i)));check(i);
+        requireValue(preparation&&sdk.isPreparedOwnedGenerationSource(preparation.prepared,context,i.sessionId,role)===true,'unsupported_owned_generation_preparation');
         const route=Object.freeze(structuredClone(preparation.route));requireValue(route&&typeof route.provider==='string'&&typeof route.model==='string'&&Number.isSafeInteger(route.maxTokens)&&route.maxTokens>0&&route.reasoningEffort==='off','invalid_generation_route');
         const presets=context.agentPresets,presetIdentity=registryIdentity(presets),resolved=await presets.resolve(i.agentPreset);check(i);requireValue(registryIdentity(context.agentPresets)===presetIdentity&&resolved.id===i.agentPreset,'mode_registry_changed');
         const row={coordinates:creationCoordinates(i),prepared:preparation.prepared,sdk,source:null};rows.set(i.operationId,row);
