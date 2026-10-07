@@ -86,7 +86,8 @@ export async function guiBaseline(state){
  // Playwright resolves its recorded browser path in the harness process too.
  process.env.PLAYWRIGHT_BROWSERS_PATH=browserEnv.PLAYWRIGHT_BROWSERS_PATH;
  const {chromium}=await import(pathToFileURL(browserEntry).href);
- const executable=await fs.realpath(chromium.executablePath()),browserBinary=await safeRead(executable);
+ const browserBinaryMaxBytes=512*1024*1024;
+ const executable=await fs.realpath(chromium.executablePath()),browserBinary=await safeRead(executable,undefined,{maxBytes:browserBinaryMaxBytes});
  requireThat(executable.startsWith(join(state.root,'browser-cache')+'/'),'FRESH_PUBLIC_BROWSER_CACHE_REQUIRED');
  const userData=join(state.root,'browser-user-data');await ensureFreshDirectory(userData);
  const report={classification:'FRESH_INSTALLED_DOCUMENTED_VIEWING_GUI_BASELINE',status:'FAIL',
@@ -94,7 +95,8 @@ export async function guiBaseline(state){
   productSourceHead:state.pins.sourceHead,sourceIndexSha256:state.pins.sourceIndexSha256,normalInstalledProfile:true,
   profileEdited:false,sdkEdited:false,modelRequestsEnabled:false,modelsRequested:0,publicReleaseQualified:false,
   fullTaskQualification:false,browserSandbox:state.target==='darwin-arm64'?'ORIGINAL_CHROMIUM_SANDBOX':'LINUX_QA_NO_SANDBOX',
-  chromiumBinarySha256:sha(browserBinary.bytes),checks:[],pageErrorCount:0,serverStarts:0,providerRequests:null,otherExternalRequests:null,
+  chromiumBinarySha256:sha(browserBinary.bytes),chromiumBinaryBytes:browserBinary.bytes.length,browserBinaryMaxBytes,
+  checks:[],pageErrorCount:0,serverStarts:0,providerRequests:null,otherExternalRequests:null,
   browserProviderRequests:0,browserOtherExternalRequests:0,
   originalServerStopsConfirmed:0,serverStopState:'NOT_STARTED'};
  let server,browser,page,origin;
