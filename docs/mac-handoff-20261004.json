@@ -5,7 +5,7 @@
   "productImplementationUnchangedFrom": "b42acc305a005c25dd68aac220eb6122a7a67b5e",
   "sourceHead": "b42acc305a005c25dd68aac220eb6122a7a67b5e",
   "sourceTree": "9f1982a5ece28b5eb24c0ccd67ad0e3d2a8ac4b7",
-  "originalLibraryFileId": "libfile_3d8260b7925081918590573d1646aff6",
+  "originalLibraryFileId": null,
   "originalLibraryVersion": 0,
   "originalArchiveBytes": 215607,
   "originalArchiveSHA256": "e8263aa1661a7dbd34aec174b30f290ace3ef7000d297b5f22ffdd2e1a842374",
@@ -243,5 +243,6 @@
   ],
   "extraCandidateBoundary": "Stored browser operation is not bound to a durable ledger instance when switching databases",
   "cloudOwnership": "Parent confirms the exact backup head/tree and manifest; then a single cloud writer continues. Mac writer is stopped again after upload.",
-  "publicationGate": "First product main/feature upload and PR remain blocked until required cloud candidate practical tests and independent review. This backup ref is a separate user-authorized transfer exception."
+  "publicationGate": "First product main/feature upload and PR remain blocked until required cloud candidate practical tests and independent review. This backup ref is a separate user-authorized transfer exception.",
+  "originalLibraryReferenceStatus": "WITHHELD_FROM_DISTRIBUTION; original archive digest and historical source binding retained"
 }
