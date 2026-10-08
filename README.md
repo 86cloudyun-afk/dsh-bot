@@ -1,136 +1,36 @@
-<p align="center">
-  <img src="docs/assets/dsh-bot-zh-CN.svg" alt="DSH Bot：主对话持续交流，独立工作对话处理任务并回送结果" width="100%" />
-</p>
+# DSH Bot 原生插件
 
-<h1 align="center">DSH Bot · 单 Bot 私有第一版</h1>
+DSH Bot 面向**已经安装并正常使用官方 DSH 的用户**。目标是在 DSH 内创建具名 Bot、延续每个 Bot 的记忆、管理会话和任务，并进行内部群聊、会议和协作。
 
-<p align="center">在主对话交代目标，让 Bot 创建工作对话、处理任务，再把结果带回主对话。</p>
+**当前状态：原生插件第一版设计待审阅，产品调整及整体验收尚未完成。** 现有私有候选的可用链路依赖单独 profile 和修改过的 Host；它属于历史实验，不能作为“安装到官方原版 DSH 即可使用”的证明。
 
-<p align="center">
-  <a href="https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v0.1.0-private.1">下载这一版</a> ·
-  <a href="docs/installation.zh-CN.md">中文安装指南</a> ·
-  <a href="docs/releases/private-v1.zh-CN.md">版本与验收</a> ·
-  <a href="docs/faq.zh-CN.md">常见问题</a>
-</p>
+## 第一版的使用方式
 
-> **当前交付：私有预发布 `v0.1.0-private.1`。** 支持 Linux x64 和 macOS arm64，使用恰好 Node **24.19.0**。产品包元数据保持 `0.1.0-alpha.1`。公开分发状态仍为 **NOT_CLEARED**；此仓库和下载页保留私有权限。
+- 在 DSH 侧栏的 **Bot 工作台**创建、命名和管理多个 Bot。
+- 新建 Bot 会话时，选择**已经创建的 Bot**开始对话。
+- 每个 Bot 有自己的长期记忆，管理自己的会话和任务；新会话自动带入身份、相关记忆和未完成任务，并按需查阅自身历史。
+- Bot 之间默认只读；工作台可限定共享范围，授予只读或会话/任务控制权限，持续有效且可撤销。
+- 长任务在原生工作会话中执行，Bot 同时继续联络、查询、调整、停止并回收结果。
+- 第一版同时包含多 Bot、内部群聊、会议、任务协作，以及统一管理、可恢复归档和每 Bot 独立模型配置。
 
-## 这一版能做什么
+## 宿主与安装边界
 
-| 功能 | 使用方式与本次验证范围 |
-| --- | --- |
-| 主对话与工作对话 | 在主对话提交目标，Bot 自主建立独立工作对话；Linux 真实模型链路已验证 |
-| 长任务期间派发短任务 | 长工作仍在运行时，主对话接受另一个目标，创建短工作，两个结果均回到主对话；Linux 实测 |
-| 查看结果与接续 | 查看原工作结果，确认结束后接续同一工作；Linux 实测 |
-| 归档与恢复 | 恢复同一 Bot、主对话和工作身份；Linux 实测 |
-| 停止与冷启动 | 停止原工作；结算不完整时保留 UNKNOWN 和槽位，同 Home 冷启动不重放；Linux 实测 |
-| 一级子工作与 15 个工作槽 | 父工作、子工作和 UNKNOWN 共用上限；原生 SDK 与 GUI 受控验证，未做 15 个真实模型并发压测 |
+产品通过官方 DSH 的插件机制安装、配置、启用、禁用和卸载。DSH 负责模型、凭据、Agent、Session、工具、审批、沙箱和日志；插件负责上述 Bot 业务。
 
-本版聚焦**单 Bot**。多 Bot、内部群聊和会议协作属于后续范围。
+插件安装不修改 DSH 本体，不分发另一套 Host/SDK，不要求启动独立应用。正式安装命令和下载包会在官方原版 DSH 的完整安装及 GUI 验收通过后发布。
 
-```mermaid
-flowchart LR
-  U[你：目标与完成条件] --> M[Bot 主对话]
-  M --> A[独立工作 A]
-  M --> B[独立工作 B]
-  A --> R[结果回到主对话]
-  B --> R
-  R --> M
-```
+## 设计与进度
 
-## 下载与安装
+规格和后续调整位于[原生插件调整分支](https://github.com/86cloudyun-afk/dsh-bot/tree/goal/native-dsh-plugin-v1-20261008)。默认分支目前保留历史程序代码，本轮更新仅更正产品说明。
 
-### 1. 获取完整交付包
+请先阅读[中文原生插件第一版设计](https://github.com/86cloudyun-afk/dsh-bot/blob/e23a45b0506e0cf9a9aa6dbefd96b045882f82f3/docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)。它包含已确认需求、模块与持久状态、日常流程、共享权限、群与会议、旧源码处理和 **P01–P21 整体验收**。
 
-打开 [这一版的 GitHub 下载页](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v0.1.0-private.1)，在 **Assets** 下载：
+后续按以下顺序推进：官方插件接入及基础合同 → Bot/记忆/会话 → 任务与持续联络 → 群聊/会议/协作 → 两平台安装、GUI、回归与分发审计。阶段完成不代替正式第一版交付。
 
-- **`dsh-bot-v1-private-delivery-20261008-r2.tar.gz`**：15,558,289 字节，含安装薄包、中文指南、交付说明、验收清单和内部校验文件。
-- **`dsh-bot-v1-private-delivery-20261008-r2.tar.gz.sha256`**：完整交付包的 SHA-256 校验文件。
+## 历史资料
 
-需要先阅读时，下载页也提供独立的中文指南、最终审计和验收清单。**GitHub 自动生成的 “Source code” 文件只含仓库源码；安装使用上面的完整交付包。**
+- [v0.2.1 历史需求提取](https://github.com/86cloudyun-afk/dsh-bot/blob/e23a45b0506e0cf9a9aa6dbefd96b045882f82f3/docs/spec-v0.2.1.md)：不等于 Library 后续版本的完整正文；本轮确认的产品边界优先。
+- [历史 Host 能力核对](https://github.com/86cloudyun-afk/dsh-bot/blob/e23a45b0506e0cf9a9aa6dbefd96b045882f82f3/docs/host-capabilities.md)和[历史类型兼容说明](https://github.com/86cloudyun-afk/dsh-bot/blob/e23a45b0506e0cf9a9aa6dbefd96b045882f82f3/docs/types-and-compatibility.md)：需要区分官方原版、私有 SDK、静态依据和实际验证。
+- [历史候选 Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v0.1.0-private.1)：保留资产及限定证据，已由新的原生插件路线取代。
 
-### 2. 核对并解压
-
-在刚下载的两个文件所在目录打开终端，先核对完整交付包：
-
-Linux x64：
-
-```sh
-sha256sum --check dsh-bot-v1-private-delivery-20261008-r2.tar.gz.sha256
-```
-
-macOS arm64：
-
-```sh
-shasum -a 256 --check dsh-bot-v1-private-delivery-20261008-r2.tar.gz.sha256
-```
-
-收到 `OK` 后，在同一终端执行以下命令。解压目录必须尚不存在：
-
-```sh
-(
-  set -eu
-  umask 077
-  test ! -e dsh-bot-v1-private-delivery-20261008-r2
-  test ! -L dsh-bot-v1-private-delivery-20261008-r2
-  tar -xzpf dsh-bot-v1-private-delivery-20261008-r2.tar.gz
-)
-```
-
-打开解压目录中的 **`CURRENT_INSTALLATION_GUIDE.zh-CN.md`**，按实际操作系统核对内部 `SHA256SUMS` 和薄包，再完成安装、启动与正常浏览器认证。仓库中有[同一份中文指南](docs/installation.zh-CN.md)，[下载说明](docs/github-download.zh-CN.md)给出完整包与薄包的对应关系。
-
-### 3. 启动界面并提交目标
-
-安装成功后，使用 `installation-manifest.json` 中的 **`manualStartup`** 启动 `dsh-bot-gui`，打开进程打印的本地浏览器地址，创建 Bot，再在主对话提交目标与完成条件。
-
-默认启动可查看界面和历史，**模型请求默认关闭**。实际执行模型任务时，通过进程环境提供 `DEEPSEEK_API_KEY`，并显式添加 `--enable-model-requests`。具体命令见[安装指南](docs/installation.zh-CN.md)；密钥只保留在自己的运行环境中。
-
-## 运行要求
-
-| 项目 | 当前要求 |
-| --- | --- |
-| 操作系统 | Linux x64 / macOS arm64 |
-| Node | 恰好 `24.19.0` |
-| 安装网络 | 可访问公共 npm registry；严格 TLS，按固定 lock 安装官方 SDK |
-| 安装目录 | 本人可写、规范绝对路径；输出目录必须全新 |
-| 运行身份 | 使用同一安装目录、Home 和 `dsh-bot-gui` profile；每个 Home 由一个 CLI 进程写入 |
-| 工作数量 | 每 Bot 共用 15 槽，包含父工作、一级子工作和 UNKNOWN |
-| 结果回送 | 最多 4096 UTF-8 字节，建议每个任务控制在 3400 字节以内 |
-
-Windows、macOS Intel 及其他 Node 版本尚不在本次支持范围。
-
-## 已验证到哪里
-
-| 验收 | 结果与边界 | 证据入口 |
-| --- | --- | --- |
-| 最终源码 native / JS / runtime-export | Linux、macOS 六组通过，绑定源码 `1f111d7` | [CI 37709629136](https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37709629136) |
-| 同一薄包全新安装与真实 GUI | Linux、macOS 均通过；此轮模型请求为零 | [CI 37712266847](https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37712266847) |
-| Host M3 可复现构建 | 两平台通过；来源与通知保留，修改权利仍待确认 | [CI 37686757086](https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37686757086) |
-| Linux 真实模型闭环 | 11 个请求：10 个完整结束，1 个停止后最终结算 UNKNOWN；旧 UNKNOWN 未重放 | 下载页的 `QUALIFICATION.json` |
-| 私有交付独立审计 | 限定技术范围 C=0 / I=0 / M=0；公开分发尚未放行 | 下载页的最终审计 JSON |
-
-macOS 本轮完成 native 和无模型 GUI 验证，真实模型闭环实测属于 Linux。原始记录中的 `fullTaskQualification: false` 保留；这些证据对应[明确的验收范围](docs/releases/private-v1.zh-CN.md)。
-
-默认 main 保留旧产品代码，其离线 CI 仍有 4 项历史回归。第一版安装使用下载页的固定包，源码使用 `v0.1.0-private.1` 标签；详情见[开发说明](docs/development.zh-CN.md)。
-
-## 使用时记住这三点
-
-1. **UNKNOWN 查询原回执。** 保留原身份与原操作，继续占用工作槽；不自动重试或重放。
-2. **结束与收到结果分别核对。** 原工作结束已知，结果仍可能因过大而没有送回主对话；先查看原工作回复，再拆成较小任务。
-3. **重启保留同一 Home。** 原 CLI 和原进程组停止后，再启动新进程；归档与恢复继续使用同一 Bot 和会话身份。
-
-## 中文文档
-
-| 文档 | 内容 |
-| --- | --- |
-| [安装与使用](docs/installation.zh-CN.md) | 校验、安装、启动、启用模型、提交、接续、停止与恢复 |
-| [GitHub 下载说明](docs/github-download.zh-CN.md) | 登录、选择正确资产、解压完整交付包、交给另一个工具读取 |
-| [第一版发布说明](docs/releases/private-v1.zh-CN.md) | 固定版本、已验证功能、证据边界和分发状态 |
-| [常见问题](docs/faq.zh-CN.md) | 下载权限、平台、密钥、结果大小、UNKNOWN 与安装失败 |
-| [开发与源码说明](docs/development.zh-CN.md) | 冻结源码、文档分支、历史资料和本地检查入口 |
-
-## 许可与分发状态
-
-本次用于本人私有安装和自用。Bot 与私有 Host 修改的公开分发权利，以及 `node-addon-system@0.1.2` 的 BSD 元数据与 MIT 入口 LICENSE 的适用范围，仍需事实确认。完整依赖通知随安装材料保留；技术验收通过不改变这些授权状态。
-
-私有 GitHub 预发布提供固定字节的下载入口。正式公开 v1 仍为 **NOT_CLEARED**。
+历史独立安装脚本、loopback review UI 和私有 native 测试不能作为新版插件的启动教程或通过记录。包元数据目前仍为 `0.1.0-alpha.1 / private`；新设计不是已发布产品。仓库保持当前访问范围，PR #1 保持未合并。
