@@ -9,7 +9,7 @@ export class BotService {
   resolveCaller(exec) {requireCondition(!this.#closed,'disabled');return this.policy.fromAgent(exec.agent);}
   snapshot(actor) {
     requireCondition(!this.#closed,'disabled');this.policy.actorKey(actor);
-    const state=this.store.read(),result={revision:state.revision,status:'enabled',releaseReady:false};
+    const state=this.store.read(),result={storeId:state.storeId,revision:state.revision,status:'enabled',releaseReady:false};
     for(const [kind,table] of Object.entries({bot:'bots',session:'sessions',memory:'memories',task:'tasks',group:'groups',meeting:'meetings'})) {
       result[table]=Object.entries(state[table]).filter(([id,row])=>this.policy.canRead(actor,{kind,id})&&!(kind==='memory'&&row.forgotten)).map(([id,row])=>{this.policy.noteRead(actor,{kind,id});return kind==='group'&&this.collaboration?this.collaboration.viewGroup(actor,row):kind==='meeting'&&this.collaboration?this.collaboration.viewMeeting(actor,row):copy(row);});
     }
@@ -35,7 +35,7 @@ export class BotService {
     command.input??={};const {action,input}=command;
     let result;
     if(action==='snapshot')result=this.snapshot(actor);
-    else if(action==='catalog') {this.policy.actorKey(actor);result={...await this.adapter.models(),presets:await this.adapter.context.get('agentPresets')?.list()??[]};}
+    else if(action==='catalog') {this.policy.actorKey(actor);result={...await this.adapter.models(),presets:await this.adapter.context.get('agentPresets')?.list()??[],defaultCwd:this.adapter.context.get('profileContext')?.cwd??null};}
     else if(action==='session.page')result=await this.sessions.page(actor,input,signal);
     else if(action==='session.list')result=await this.sessions.list(actor,input,signal);
     else if(action==='memory.search')result=this.bots.searchMemory(actor,input);

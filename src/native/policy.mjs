@@ -98,16 +98,29 @@ export class PermissionPolicy {
   }
   require(actor,action,reference,state=this.#store.read()) {
     this.#checkActor(actor,state);
+    this.#requirePrincipal(actor,action,reference,state);
+  }
+  #requirePrincipal(actor,action,reference,state) {
     if(actor.kind==='human')return;
     requireCondition(!humanOnly.has(action),'access_denied');
     const resource=this.resolve(reference,state);
-    requireCondition(this.canRead(actor,reference,undefined,state),'access_denied');
+    requireCondition(this.#readAllowed(actor,reference,state,new Set()),'access_denied');
     if(action.endsWith('.read'))return;
     if(action.startsWith('memory.')) {requireCondition(resource.botId===actor.botId,'access_denied');return;}
     if(['group.post','meeting.start','meeting.opinion'].includes(action)) {requireCondition(this.#visible(actor,resource,state),'access_denied');return;}
     requireCondition(controllable.has(action),'access_denied');
     if(resource.botId===actor.botId)return;
     requireCondition((!resource.botId || this.#shareAllowed(actor,resource,state)) && this.#grant(actor,resource,state,'control'),'access_denied');
+  }
+  /** A saved task result executes its original delivery intent, with current grants. */
+  requireTaskResultDelivery(row,state=this.#store.read()) {
+    const task=state.tasks[row.taskId],attempt=state.attempts[row.attemptId];
+    requireCondition(row.kind==='result'&&task&&attempt?.taskId===task.taskId&&attempt.resultOutboxId===row.outboxId&&attempt.epoch===row.epoch&&task.originSessionId===row.sessionId,'delivery_identity_unknown');
+    const principal=task.createdBy;
+    requireCondition(plain(principal)&&['human','bot'].includes(principal.kind),'delivery_identity_unknown');
+    if(principal.kind==='human')requireCondition(task.source?.kind==='human','delivery_identity_unknown');
+    else requireCondition(validId(principal.botId)&&validId(principal.sessionId)&&task.source?.sessionId===principal.sessionId&&state.sessions[principal.sessionId]?.botId===principal.botId&&state.bots[principal.botId]?.lifecycle==='active','delivery_identity_unknown');
+    this.#requirePrincipal(principal,'session.send',{kind:'session',id:row.sessionId},state);
   }
   async authorizeShare(actor,command) {
     command=copy(command);

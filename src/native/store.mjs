@@ -43,6 +43,11 @@ function validate(state) {
     Number.isSafeInteger(grant.version) && grant.version>=1 && grant.grantedBy==='human','malformed_state');
   for(const bot of Object.values(state.bots))if(Object.hasOwn(bot,'share'))requireCondition(plain(bot.share) && typeof bot.share.enabled==='boolean' &&
     Array.isArray(bot.share.receivers) && bot.share.receivers.every(id=>id==='*'||validId(id)) && scopeValid(bot.share.scope),'malformed_state');
+  for(const task of Object.values(state.tasks))if(Object.hasOwn(task,'createdBy')) {
+    const actor=task.createdBy;
+    requireCondition(plain(actor)&&(['human','bot'].includes(actor.kind))&&Object.keys(actor).every(key=>actor.kind==='human'?key==='kind':['kind','botId','sessionId'].includes(key))&&
+      (actor.kind==='human'?task.source?.kind==='human':validId(actor.botId)&&validId(actor.sessionId)&&task.source?.sessionId===actor.sessionId),'malformed_state');
+  }
   canonical(state); return state;
 }
 export class PluginStore {

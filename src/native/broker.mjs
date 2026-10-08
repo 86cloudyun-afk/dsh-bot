@@ -47,15 +47,28 @@ export class ConversationBroker {
     requireCondition(!this.#closed&&row.runtimeId===this.runtimeId,'recovery_required');
     const state=this.store.read(),binding=state.sessions[row.sessionId],actor=this.#actors.get(row.outboxId);
     if(actor)this.policy.require(actor,'session.send',{kind:'session',id:row.sessionId},state);
-    else requireCondition(row.kind==='result','recovery_required');
+    else {requireCondition(row.kind==='result','recovery_required');this.policy.requireTaskResultDelivery(row,state);}
     if(binding?.botId) {
-      requireCondition(binding.purpose==='contact'&&binding.state==='ready'&&!binding.archived,'session_not_ready');
+      const parentResult=row.kind==='result'&&binding.purpose==='execution'&&state.attempts[row.attemptId]?.parentAttemptId===binding.attemptId;
+      requireCondition((binding.purpose==='contact'||parentResult)&&binding.state==='ready'&&!binding.archived,'session_not_ready');
       const agent=await this.adapter.resumeOwned(binding),recipient=this.policy.fromAgent(agent);
       requireCondition(this.policy.canReadDerived(recipient,row),'access_denied');
       for(const ref of row.origins??[])this.policy.require(recipient,`${ref.kind}.read`,ref);
       return {agent,recipient};
     }
-    requireCondition(actor,'access_denied');return {ordinary:true,actor};
+    return {ordinary:true,actor};
+  }
+  #fenceTarget(row,target) {
+    requireCondition(!this.#closed&&row.runtimeId===this.runtimeId,'recovery_required');
+    const state=this.store.read(),actor=this.#actors.get(row.outboxId);
+    if(actor)this.policy.require(actor,'session.send',{kind:'session',id:row.sessionId},state);
+    else this.policy.requireTaskResultDelivery(row,state);
+    if(target.recipient) {
+      const binding=state.sessions[row.sessionId];
+      requireCondition(this.adapter.context.agents.get(row.sessionId)===target.agent&&binding?.state==='ready'&&!binding.archived,'session_not_ready');
+      requireCondition(this.policy.canReadDerived(target.recipient,row,state),'access_denied');
+      for(const ref of row.origins??[])this.policy.require(target.recipient,`${ref.kind}.read`,ref,state);
+    }
   }
   async #deliver(row) {
     let nativeAdmission=false;
@@ -63,7 +76,7 @@ export class ConversationBroker {
       const target=await this.#authorize(row);
       await this.store.transact({operationId:`${row.outboxId}:admitting`,action:'outbox.admitting',input:{outboxId:row.outboxId}},draft=>{
         const current=draft.outbox[row.outboxId];requireCondition(current.state==='queued','delivery_not_queued');
-        const actor=this.#actors.get(row.outboxId);if(actor)this.policy.require(actor,'session.send',{kind:'session',id:row.sessionId},draft);
+        const actor=this.#actors.get(row.outboxId);if(actor)this.policy.require(actor,'session.send',{kind:'session',id:row.sessionId},draft);else this.policy.requireTaskResultDelivery(current,draft);
         if(target.recipient) {
           requireCondition(this.policy.canReadDerived(target.recipient,current,draft),'access_denied');
           for(const ref of current.origins??[])this.policy.require(target.recipient,`${ref.kind}.read`,ref,draft);
@@ -72,6 +85,7 @@ export class ConversationBroker {
         current.state='admitting';return null;
       });
       await this.#authorize(row);
+      this.#fenceTarget(row,target);
       nativeAdmission=true;
       if(target.ordinary) {
         const controller=this.adapter.context.get('sessionController');requireCondition(controller,'native_controller_unavailable');

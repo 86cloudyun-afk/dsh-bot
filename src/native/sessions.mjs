@@ -13,7 +13,7 @@ export class SessionOwnership {
     const intent=await this.store.transact(stamped,draft=>{
       const bot=draft.bots[input.botId];requireCondition(bot,'not_found');requireCondition(bot.lifecycle==='active','bot_not_active');
       const sessionId=randomUUID(),purpose=input.purpose??'contact';
-      const binding={sessionId,botId:bot.botId,purpose,model:copy(purpose==='execution'?bot.execution:bot.contact),cwd:bot.cwd,presetId:bot.presetId,configRevision:bot.configRevision,epoch:1,state:'creating',archived:false,operationId:command.operationId,statusOperationId:randomUUID()};
+      const binding={sessionId,botId:bot.botId,purpose,model:copy(purpose==='execution'?bot.execution:bot.contact),cwd:bot.cwd,presetId:bot.presetId,configRevision:bot.configRevision,epoch:1,state:'creating',ownerRuntimeId:this.adapter.runtimeId,archived:false,operationId:command.operationId,statusOperationId:randomUUID()};
       draft.sessions[sessionId]=binding;this.policy.require(actor,'session.create',{kind:'session',id:sessionId},draft);return binding;
     });
     const current=this.store.read().sessions[intent.sessionId];
@@ -61,6 +61,9 @@ export class SessionOwnership {
     requireCondition(plain(input)&&Object.keys(input).every(key=>key==='sessionId')&&validId(input.sessionId),'invalid_input');
     this.policy.require(actor,value?'session.archive':'session.restore',reference);
     const previous=this.store.read().sessions[input.sessionId],resources=this.adapter.resources(input.sessionId);
+    requireCondition(previous?.state!=='UNKNOWN','recovery_required');
+    await this.adapter.readNative(input.sessionId);
+    this.policy.require(actor,value?'session.archive':'session.restore',reference);
     if(value)requireCondition(!previous?.attemptId||!this.store.read().attempts[previous.attemptId]?.reservationHeld,'attempt_unsettled');
     if(value&&resources.known)requireCondition(resources.settled,'session_active');
     const intent=await this.store.transact(this.policy.command(actor,command),draft=>{

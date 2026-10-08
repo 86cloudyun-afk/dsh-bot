@@ -7,6 +7,7 @@ import {copy, plain, requireCondition} from './store.mjs';
 
 /** Thin public-service adapter. No host copies, private drivers or global defaults. */
 export class NativeDshAdapter {
+  runtimeId=randomUUID();
   #ctx; #store; #policy; #handles = new Map(); #creating = new Map(); #closed = false; #contextProvider; #service; #records=new Map(); #disposers=[]; #shortPools=new Map();
   constructor(ctx,{store,policy}={}) {
     this.#ctx=ctx;this.#store=store;this.#policy=policy;
@@ -96,7 +97,12 @@ export class NativeDshAdapter {
     own(installModelSelection(agent.ctx,record.selection));
     own(agent.ctx.on('agent/pre-step',async(payload,next)=>{
       const actor=this.#authorize(record,{ignoreModelIntent:payload.turn!==record.turn&&binding.purpose==='contact'}),decision=await next();if(decision.kind==='reject')return decision;
-      if(binding.attemptId)requireCondition(payload.messages.every(message=>message.source?.kind==='dsh-bot-task'&&message.source.attemptId===binding.attemptId),'task_adjust_required');
+      if(binding.attemptId)requireCondition(payload.messages.every(message=>{
+        if(message.source?.kind==='dsh-bot-task')return message.source.attemptId===binding.attemptId;
+        if(message.source?.kind!=='dsh-bot-result')return false;
+        const state=this.#store.read(),row=state.outbox[message.source.outboxId],child=state.attempts[message.source.attemptId];
+        return row?.kind==='result'&&row.sessionId===agent.id&&row.message.id===message.id&&child?.parentAttemptId===binding.attemptId&&child.resultOutboxId===row.outboxId;
+      }),'task_adjust_required');
       if(payload.turn!==record.turn) {
         record.turn=payload.turn;
         if(binding.purpose==='contact')record.model=await this.validateModel(this.#store.read().bots[binding.botId].contact);
@@ -157,7 +163,7 @@ export class NativeDshAdapter {
       const handle=await this.#ctx.agents.create({sessionId:binding.sessionId,meta:{cwd:binding.cwd,...(binding.presetId?{agentPreset:binding.presetId}:{}),...(parent?{parentSession:parent.id,origin:'subagent',delegationDepth:0}:{})},
         agentOptions:{provider:model.provider,model:model.model,...(model.maxTokens===undefined?{}:{maxTokens:model.maxTokens})},
         setup:async(agentCtx,agent)=>{
-          if(presets)await agentCtx.agentPresets.mount(agentCtx,binding.presetId??undefined);
+          if(presets)await presets.mount(agentCtx,binding.presetId??undefined);
           await this.bindAgent(agent,binding);
           await setup?.(agentCtx,agent);
         }});
@@ -171,7 +177,7 @@ export class NativeDshAdapter {
     requireCondition(!this.#closed&&binding.state==='ready'&&!binding.archived,'session_not_ready');
     const live=this.#ctx.agents.get(binding.sessionId);if(live)return live;
     if(this.#creating.has(binding.sessionId))return (await this.#creating.get(binding.sessionId)).agent;
-    const pending=this.#ctx.agents.resume({resumeSessionId:binding.sessionId,agentOptions:{provider:binding.model.provider,model:binding.model.model},setup:async(agentCtx,agent)=>{const presets=this.#ctx.get('agentPresets');if(presets)await agentCtx.agentPresets.mount(agentCtx,binding.presetId??undefined);await this.bindAgent(agent,binding);}});
+    const pending=this.#ctx.agents.resume({resumeSessionId:binding.sessionId,agentOptions:{provider:binding.model.provider,model:binding.model.model},setup:async(agentCtx,agent)=>{const presets=this.#ctx.get('agentPresets');if(presets)await presets.mount(agentCtx,binding.presetId??undefined);await this.bindAgent(agent,binding);}});
     this.#creating.set(binding.sessionId,pending);
     try{const handle=await pending;this.#handles.set(binding.sessionId,handle);return handle.agent;}finally{this.#creating.delete(binding.sessionId);}
   }

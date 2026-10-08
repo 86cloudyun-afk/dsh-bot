@@ -18,7 +18,7 @@ export class TaskController {
     return this.store.transact(this.policy.command(actor,command),draft=>{
       if(input.originSessionId)this.policy.require(actor,'session.send',{kind:'session',id:input.originSessionId},draft);
       const bot=draft.bots[input.botId];requireCondition(bot?.lifecycle==='active','bot_not_active');
-      const taskId=`task_${randomUUID()}`,task={taskId,botId:bot.botId,title:input.title.trim(),goal:input.goal,criteria:input.criteria,version:1,epoch:0,state:'queued',archived:false,acceptance:'unknown',currentAttemptId:null,originSessionId:input.originSessionId??(actor.kind==='bot'?actor.sessionId:null),source:this.#source(actor),origins:this.policy.readDependencies(actor),createdAt:new Date().toISOString()};
+      const taskId=`task_${randomUUID()}`,task={taskId,botId:bot.botId,title:input.title.trim(),goal:input.goal,criteria:input.criteria,version:1,definitionVersion:1,createdBy:actor.kind==='human'?{kind:'human'}:{kind:'bot',botId:actor.botId,sessionId:actor.sessionId},epoch:0,state:'queued',archived:false,acceptance:'unknown',currentAttemptId:null,originSessionId:input.originSessionId??(actor.kind==='bot'?actor.sessionId:null),source:this.#source(actor),origins:this.policy.readDependencies(actor),createdAt:new Date().toISOString()};
       draft.tasks[taskId]=task;this.policy.require(actor,'task.create',{kind:'task',id:taskId},draft);return task;
     });
   }
@@ -36,9 +36,9 @@ export class TaskController {
       requireCondition(Object.values(draft.attempts).filter(row=>row.botId===task.botId&&row.reservationHeld).length<15,'capacity_exhausted');
       const bot=draft.bots[task.botId];requireCondition(bot?.lifecycle==='active','bot_not_active');
       const attemptId=`attempt_${randomUUID()}`,sessionId=randomUUID(),epoch=task.epoch+1;
-      const attempt={attemptId,taskId:task.taskId,botId:bot.botId,sessionId,epoch,taskVersion:task.version+1,parentAttemptId:parent?.attemptId??null,depth,model:copy(bot.execution),configRevision:bot.configRevision,state:'starting',reservationHeld:true,runtimeId:this.runtimeId,operationId:command.operationId,messageId:randomUUID(),readyOperationId:randomUUID(),settleOperationId:randomUUID(),resultOutboxId:`outbox_${randomUUID()}`,resultOperationId:randomUUID(),resultMessageId:randomUUID(),createdAt:new Date().toISOString(),usage:'UNKNOWN',externalEffects:'UNKNOWN'};
+      const attempt={attemptId,taskId:task.taskId,botId:bot.botId,sessionId,epoch,taskVersion:task.version+1,definitionVersion:task.definitionVersion??1,parentAttemptId:parent?.attemptId??null,depth,model:copy(bot.execution),configRevision:bot.configRevision,state:'starting',reservationHeld:true,runtimeId:this.runtimeId,operationId:command.operationId,messageId:randomUUID(),readyOperationId:randomUUID(),settleOperationId:randomUUID(),resultOutboxId:`outbox_${randomUUID()}`,resultOperationId:randomUUID(),resultMessageId:randomUUID(),createdAt:new Date().toISOString(),usage:'UNKNOWN',externalEffects:'UNKNOWN'};
       draft.attempts[attemptId]=attempt;task.epoch=epoch;task.version++;task.currentAttemptId=attemptId;task.state='running';task.acceptance='unknown';
-      draft.sessions[sessionId]={sessionId,botId:bot.botId,purpose:'execution',attemptId,epoch,model:copy(attempt.model),configRevision:bot.configRevision,cwd:bot.cwd,presetId:bot.presetId,state:'creating',archived:false,source:copy(task.source),origins:copy(task.origins??[]),...(task.source.meetingId?{lineage:copy(task.source)}:{}),parentSessionId:parent?.sessionId??null,depth};
+      draft.sessions[sessionId]={sessionId,botId:bot.botId,purpose:'execution',attemptId,epoch,model:copy(attempt.model),configRevision:bot.configRevision,cwd:bot.cwd,presetId:bot.presetId,state:'creating',ownerRuntimeId:this.adapter.runtimeId,archived:false,source:copy(task.source),origins:copy(task.origins??[]),parentSessionId:parent?.sessionId??null,depth};
       return attempt;
     });
     const current=this.store.read().attempts[intent.attemptId];
@@ -60,7 +60,7 @@ export class TaskController {
       agent.followup(createUserMessage({id:attempt.messageId,content:[{type:'text',text:`执行任务 ${task.title}\n目标：${task.goal}\n验收条件：${JSON.stringify(task.criteria)}\n原始身份：${JSON.stringify({taskId:task.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch,version:task.version})}\n可以使用 dsh_bot 查询进展或创建一级子任务。完成后给出实际结果及证据；没有证据的验收保持 unknown。`}],source:{kind:'dsh-bot-task',taskId:task.taskId,attemptId:attempt.attemptId,operationId:attempt.operationId}}));
       this.#watch(attempt.attemptId);return this.store.read().attempts[attempt.attemptId];
     }catch(error){
-      await this.store.transact({operationId:randomUUID(),action:'attempt.unknown',input:{attemptId:attempt.attemptId,reason:error.code??error.name}},draft=>{const row=draft.attempts[attempt.attemptId];row.state='UNKNOWN';row.error=error.code??error.name;draft.tasks[row.taskId].state='UNKNOWN';return null;}).catch(()=>{});throw error;
+      await this.store.transact({operationId:randomUUID(),action:'attempt.unknown',input:{attemptId:attempt.attemptId,reason:error.code??error.name}},draft=>{const row=draft.attempts[attempt.attemptId];if(row?.reservationHeld){row.state='UNKNOWN';row.error=error.code??error.name;if(draft.tasks[row.taskId].currentAttemptId===row.attemptId)draft.tasks[row.taskId].state='UNKNOWN';}return null;}).catch(()=>{});throw error;
     }
   }
   #watch(attemptId) {
@@ -77,8 +77,9 @@ export class TaskController {
           const history=await this.adapter.readNative(attempt.sessionId),end=history.events.filter(event=>event.type==='turn/end').at(-1);
           if(end||attempt.state==='stop_requested') {
             const reply=history.events.filter(event=>event.type==='assistant/message').at(-1);
-            await this.store.transact({operationId:attempt.settleOperationId,action:'attempt.settled',input:{attemptId}},draft=>{
+            try{await this.store.transact({operationId:attempt.settleOperationId,action:'attempt.settled',input:{attemptId}},draft=>{
               const row=draft.attempts[attemptId];if(!row.reservationHeld)return null;
+              requireCondition(!Object.values(draft.attempts).some(child=>child.parentAttemptId===attemptId&&child.reservationHeld)&&this.adapter.resources(row.sessionId).settled,'settlement_pending');
               const task=draft.tasks[row.taskId],stopped=['stop_requested','UNKNOWN'].includes(row.state)||task.version!==row.taskVersion;
               row.state=stopped?'stopped':end?.data.reason.kind==='completed'?'returned':'failed';row.reservationHeld=false;row.settledAt=new Date().toISOString();row.localEvidence=evidence;row.usage=evidence.requests.map(request=>request.usage);
               if(!stopped&&reply)row.result={sessionId:row.sessionId,eventSeq:reply.seq,content:copy(reply.data.content??reply.data.message?.content??[]),source:{sessionId:row.sessionId,eventSeq:reply.seq},origins:copy(draft.sessions[row.sessionId].origins??[])};
@@ -86,7 +87,8 @@ export class TaskController {
               if(task.currentAttemptId===attemptId) {task.state=stopped?'stopped':row.state==='returned'?'awaiting_acceptance':'failed';task.version++;}
               if(!stopped)this.#resultSink?.recordResult(draft,task,row);
               return null;
-            });await this.#resultSink?.deliverResult(attemptId);await this.adapter.disposeOwned(attempt.sessionId);return;
+            });}catch(error){if(error.code==='settlement_pending')continue;throw error;}
+            await this.#resultSink?.deliverResult(attemptId);await this.adapter.disposeOwned(attempt.sessionId);return;
           }
         }
         await new Promise(resolve=>{const timer=setTimeout(()=>{this.#timers.delete(timer);resolve();},20);this.#timers.add(timer);});
@@ -115,7 +117,7 @@ export class TaskController {
       const task=draft.tasks[input.taskId];requireCondition(task,'not_found');this.policy.require(actor,'task.adjust',{kind:'task',id:task.taskId},draft);requireCondition(task.version===input.expectedVersion,'revision_conflict');
       for(const key of ['goal','title','criteria'])if(Object.hasOwn(input,key)) {requireCondition(key==='criteria'?Array.isArray(input[key])&&input[key].every(item=>typeof item==='string'):typeof input[key]==='string'&&input[key].length>0,'invalid_task');task[key]=copy(input[key]);}
       if(input.botId){requireCondition(draft.bots[input.botId]?.lifecycle==='active','bot_not_active');task.botId=input.botId;this.policy.require(actor,'task.create',{kind:'task',id:task.taskId},draft);}
-      task.version++;task.acceptance='unknown';task.state='adjusted';task.adjustStopId=randomUUID();return task;
+      task.version++;task.definitionVersion=(task.definitionVersion??1)+1;task.acceptance='unknown';task.state='adjusted';task.adjustStopId=randomUUID();return task;
     });
     const attempt=this.store.read().attempts[changed.currentAttemptId];
     if(attempt?.reservationHeld)await this.stop(actor,{operationId:changed.adjustStopId,action:'task.stop',input:{taskId:changed.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch}});
@@ -135,6 +137,7 @@ export class TaskController {
     return this.store.transact(this.policy.command(actor,command),draft=>{
       const task=draft.tasks[input.taskId],attempt=draft.attempts[input.attemptId];requireCondition(task&&attempt,'not_found');this.policy.require(actor,'task.accept',{kind:'task',id:task.taskId},draft);
       requireCondition(task.version===input.expectedVersion&&task.currentAttemptId===attempt.attemptId,'revision_conflict');requireCondition(!attempt.reservationHeld,'attempt_unsettled');
+      requireCondition(attempt.definitionVersion===(task.definitionVersion??1),'stale_attempt');
       requireCondition(['passed','failed','unknown'].includes(input.outcome)&&typeof input.evidence==='string'&&input.evidence.length<=16000,'invalid_acceptance');
       task.acceptance=input.outcome;task.acceptanceEvidence={text:input.evidence,attemptId:attempt.attemptId,source:this.#source(actor)};task.state=input.outcome==='passed'?'completed':'awaiting_acceptance';task.version++;return task;
     });
