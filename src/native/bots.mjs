@@ -16,14 +16,16 @@ export class BotDirectory {
     const execution=await this.adapter.validateModel(input.execution??(input.contact?contact:current?.execution)??contact);
     const lifecycle=input.lifecycle??current?.lifecycle??'active';requireCondition(['active','paused','archived'].includes(lifecycle),'invalid_lifecycle');
     const presets=this.adapter.context.get('agentPresets'),presetId=input.presetId??current?.presetId??presets?.defaultId??null;
-    if(presets) {const preset=await presets.resolve(presetId);requireCondition(!preset.problem && !preset.error,'preset_unavailable');}
-    return {name:name.trim(),role,cwd,presetId,contact,execution,lifecycle};
+    if(presets) {const preset=await presets.resolve(presetId);requireCondition(!preset.broken,'preset_unavailable');}
+    const capabilities=input.capabilities??current?.capabilities??[];
+    requireCondition(Array.isArray(capabilities)&&capabilities.length<=64&&capabilities.every(name=>typeof name==='string'&&/^[A-Za-z0-9_.-]+$/.test(name)),'invalid_capabilities');
+    return {name:name.trim(),role,cwd,presetId,contact,execution,lifecycle,capabilities:[...new Set(capabilities)]};
   }
   async create(actor,command) {
     command=copy(command);
     this.policy.require(actor,'bot.create',{kind:'bot',id:'new'});
     const stamped=this.policy.command(actor,command);
-    if(this.store.read().operations[command.operationId])return this.store.transact(stamped,()=>null);
+    if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
     const config=await this.#config(command.input);
     return this.store.transact(stamped,draft=>{
       this.policy.require(actor,'bot.create',{kind:'bot',id:'new'},draft);
@@ -36,7 +38,7 @@ export class BotDirectory {
     const input=command.input;this.policy.require(actor,'bot.update',{kind:'bot',id:input.botId});
     const current=this.store.read().bots[input.botId];requireCondition(current,'not_found');
     const stamped=this.policy.command(actor,command);
-    if(this.store.read().operations[command.operationId])return this.store.transact(stamped,()=>null);
+    if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
     const config=await this.#config(input,current);
     return this.store.transact(stamped,draft=>{
       this.policy.require(actor,'bot.update',{kind:'bot',id:input.botId},draft);
