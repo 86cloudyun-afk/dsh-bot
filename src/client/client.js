@@ -30,7 +30,7 @@ window.__ModuleLoader__.load({
         manage: "Manage this Bot",
       },
     };
-    const styles = `.dsh-bot{font:inherit;color:var(--dsw-alias-label-primary);padding:24px;overflow:auto;height:100%;box-sizing:border-box}.dsh-bot *{box-sizing:border-box}.dsh-bot h1{font-size:24px;margin:0}.dsh-bot h2{font-size:17px;margin:0 0 16px}.dsh-bot h3{font-size:15px;margin:0 0 8px}.dsh-bot p{line-height:1.65}.dsh-bot small,.dsh-bot .muted{color:var(--dsw-alias-label-secondary)}.dsh-bot header,.dsh-bot nav,.dsh-bot .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsh-bot header{justify-content:space-between;margin-bottom:20px}.dsh-bot nav{margin-bottom:20px}.dsh-bot button,.dsh-bot input,.dsh-bot select,.dsh-bot textarea{font:inherit;color:inherit;border:1px solid var(--dsw-alias-border-l2,currentColor);border-radius:8px;background:var(--dsw-alias-bg-layer-2,transparent);padding:9px 12px}.dsh-bot button{cursor:pointer}.dsh-bot button:hover{background:var(--dsw-alias-interactive-bg-hover)}.dsh-bot button:disabled{opacity:.5;cursor:wait}.dsh-bot button[aria-selected=true],.dsh-bot button.primary{background:var(--dsw-alias-state-business-primary);color:white}.dsh-bot form{display:grid;gap:12px}.dsh-bot label{display:grid;gap:6px;font-size:13px}.dsh-bot input,.dsh-bot select,.dsh-bot textarea{width:100%;min-width:0}.dsh-bot textarea{min-height:92px;resize:vertical}.dsh-bot .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;align-items:start}.dsh-bot .card{border:1px solid var(--dsw-alias-border-l2,currentColor);border-radius:12px;padding:18px;margin-bottom:16px;background:var(--dsw-alias-bg-layer-1,transparent)}.dsh-bot .error{color:var(--dsw-alias-state-error-primary);white-space:pre-wrap}.dsh-bot pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 monospace;max-height:360px;overflow:auto}.dsh-bot .status{font-size:12px;padding:4px 8px;border-radius:6px;background:var(--dsw-alias-bg-layer-2,transparent)}.dsh-bot .check{display:flex;align-items:center;gap:8px}.dsh-bot .check input{width:auto}.dsh-bot-dialog{position:fixed;inset:0;display:grid;place-items:center;pointer-events:auto;background:rgba(0,0,0,.35);z-index:90}.dsh-bot-dialog .dsh-bot{height:auto;width:min(480px,calc(100vw - 32px));background:var(--dsw-alias-bg-layer-1,Canvas);border-radius:16px;max-height:90vh;overflow:auto}`;
+    const styles = `.dsh-bot{font:inherit;color:var(--dsw-alias-label-primary);padding:24px;overflow:auto;height:100%;box-sizing:border-box}.dsh-bot *{box-sizing:border-box}.dsh-bot h1{font-size:24px;margin:0}.dsh-bot h2{font-size:17px;margin:0 0 16px}.dsh-bot h3{font-size:15px;margin:0 0 8px}.dsh-bot p{line-height:1.65}.dsh-bot small,.dsh-bot .muted{color:var(--dsw-alias-label-secondary)}.dsh-bot header,.dsh-bot nav,.dsh-bot .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsh-bot header{justify-content:space-between;margin-bottom:20px}.dsh-bot nav{margin-bottom:20px}.dsh-bot button,.dsh-bot input,.dsh-bot select,.dsh-bot textarea{font:inherit;color:inherit;border:1px solid var(--dsw-alias-border-l2,currentColor);border-radius:8px;background:var(--dsw-alias-bg-layer-2,transparent);padding:9px 12px}.dsh-bot button{cursor:pointer}.dsh-bot button:hover{background:var(--dsw-alias-interactive-bg-hover)}.dsh-bot button:disabled{opacity:.5;cursor:wait}.dsh-bot button[aria-selected=true],.dsh-bot button.primary{background:var(--dsw-alias-state-business-primary);color:white}.dsh-bot form{display:grid;gap:12px}.dsh-bot label{display:grid;gap:6px;font-size:13px}.dsh-bot input,.dsh-bot select,.dsh-bot textarea{width:100%;min-width:0}.dsh-bot textarea{min-height:92px;resize:vertical}.dsh-bot .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;align-items:start}.dsh-bot .card{border:1px solid var(--dsw-alias-border-l2,currentColor);border-radius:12px;padding:18px;margin-bottom:16px;background:var(--dsw-alias-bg-layer-1,transparent)}.dsh-bot .error{color:var(--dsw-alias-state-error-primary);white-space:pre-wrap}.dsh-bot pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 monospace;max-height:360px;overflow:auto}.dsh-bot .status{font-size:12px;padding:4px 8px;border-radius:6px;background:var(--dsw-alias-bg-layer-2,transparent)}.dsh-bot details.advanced{margin:8px 0}.dsh-bot summary{cursor:pointer;font-size:13px;color:var(--dsw-alias-label-secondary);padding:6px 0}.dsh-bot .advanced-content{display:grid;gap:12px;padding-top:10px}.dsh-bot .check{display:flex;align-items:center;gap:8px}.dsh-bot .check input{width:auto}.dsh-bot-dialog{position:fixed;inset:0;display:grid;place-items:center;pointer-events:auto;background:rgba(0,0,0,.35);z-index:90}.dsh-bot-dialog .dsh-bot{height:auto;width:min(480px,calc(100vw - 32px));background:var(--dsw-alias-bg-layer-1,Canvas);border-radius:16px;max-height:90vh;overflow:auto}`;
     return {
       inject: [
         "slots",
@@ -264,6 +264,11 @@ window.__ModuleLoader__.load({
             h("input", { type: "checkbox", name, defaultChecked: checked }),
             label,
           );
+        const advanced = (label, ...children) =>
+          h("details", { className: "advanced" },
+            h("summary", null, label),
+            h("div", { className: "advanced-content" }, ...children),
+          );
         const botLabel = (bot) => bot
           ? state.snapshot.bots.filter((row) => row.name === bot.name).length > 1
             ? `${bot.name} · ${bot.botId}`
@@ -335,140 +340,85 @@ window.__ModuleLoader__.load({
         function BotEditor({ bot: latestBot }) {
           const [bot, setDraftBase] = useState(latestBot),
             [formEpoch, setFormEpoch] = useState(0);
-          const models = modelsOptions(),
-            contact = bot
-              ? JSON.stringify({
-                  provider: bot.contact.provider,
-                  model: bot.contact.model,
-                })
-              : models[0]?.value;
+          const models = modelsOptions(), preferred = state.catalog.defaultModel;
+          const selected = models.find(row => {
+            const model = JSON.parse(row.value);
+            return model.provider === preferred?.provider && model.model === preferred?.model;
+          })?.value ?? models[0]?.value ?? "";
+          const contact = bot
+            ? JSON.stringify({provider: bot.contact.provider, model: bot.contact.model})
+            : selected;
+          const separateExecution = bot && (bot.execution.provider !== bot.contact.provider || bot.execution.model !== bot.contact.model);
+          const modelInput = (selection, effort, tokens, previous) => ({
+            ...selection,
+            ...(effort ? {reasoningEffort: effort} : {}),
+            ...(tokens ? {maxTokens: Number(tokens)} : {}),
+            ...(previous?.temperature === undefined ? {} : {temperature: previous.temperature}),
+          });
           return card(
             bot ? "编辑 Bot" : "创建具名 Bot",
             latestBot && bot && latestBot.revision !== bot.revision && h(
               "div", null,
-              h("p", { role: "status" }, "此 Bot 的配置已在其他页面更新。当前草稿已保留，保存将检查原版本。"),
+              h("p", {role: "status"}, "此 Bot 的配置已在其他页面更新。当前草稿已保留，保存将检查原版本。"),
               button("重新载入最新配置", () => {
                 setDraftBase(latestBot);
-                setFormEpoch((epoch) => epoch + 1);
+                setFormEpoch(epoch => epoch + 1);
               }),
             ),
-            h("div", { key: formEpoch }, form(
+            h("div", {key: formEpoch}, form(
               bot ? "保存配置" : "创建 Bot",
-              async (data) => {
+              async data => {
+                const chosen = JSON.parse(data.get("contact"));
                 const configuration = {
-                  name: data.get("name"),
-                  role: data.get("role"),
-                  cwd: data.get("cwd"),
-                  contact: {
-                    ...JSON.parse(data.get("contact")),
-                    reasoningEffort: data.get("contactEffort") || undefined,
-                    maxTokens: Number(data.get("contactMaxTokens")),
-                    ...(bot?.contact.temperature === undefined
-                      ? {}
-                      : { temperature: bot.contact.temperature }),
-                  },
-                  execution: {
-                    ...JSON.parse(data.get("execution")),
-                    reasoningEffort: data.get("executionEffort") || undefined,
-                    maxTokens: Number(data.get("executionMaxTokens")),
-                    ...(bot?.execution.temperature === undefined
-                      ? {}
-                      : { temperature: bot.execution.temperature }),
-                  },
+                  name: data.get("name"), role: data.get("role"),
+                  contact: modelInput(chosen, data.get("contactEffort"), data.get("contactMaxTokens"), bot?.contact),
+                  execution: modelInput(data.get("execution") ? JSON.parse(data.get("execution")) : chosen,
+                    data.get("executionEffort"), data.get("executionMaxTokens"), bot?.execution),
                   presetId: data.get("preset") || null,
-                  capabilities: String(data.get("capabilities") || "")
-                    .split(",")
-                    .map((x) => x.trim())
-                    .filter(Boolean),
+                  ...(data.get("cwd")?.trim() ? {cwd: data.get("cwd").trim()} : {}),
                 };
-                for (const selected of [
-                  configuration.contact,
-                  configuration.execution,
-                ])
-                  if (selected.reasoningEffort === undefined)
-                    delete selected.reasoningEffort;
                 const saved = await command(bot ? "bot.update" : "bot.create", {
                   ...configuration,
-                  ...(bot
-                    ? { botId: bot.botId, expectedVersion: bot.revision }
-                    : {}),
+                  ...(bot ? {botId: bot.botId, expectedVersion: bot.revision} : {}),
                 });
                 if (bot && saved) {
                   setDraftBase(saved);
-                  setFormEpoch((epoch) => epoch + 1);
+                  setFormEpoch(epoch => epoch + 1);
                 }
                 return saved;
               },
-              field("名称", "name", { value: bot?.name, maxLength: 100 }),
-              field("身份与职责", "role", {
-                value: bot?.role,
-                textarea: true,
-                required: false,
-                maxLength: 8192,
-              }),
-              field("工作目录（DSH 所在机器）", "cwd", {
-                value: bot?.cwd ?? state.catalog.defaultCwd ?? "",
-                placeholder: "/absolute/workspace",
-              }),
-              field("联络模型", "contact", { value: contact, options: models }),
-              field("联络思考程度（留空使用当前模型默认）", "contactEffort", {
-                value: bot?.contact.reasoningEffort ?? "",
-                required: false,
-              }),
-              field("联络每轮回复上限（tokens）", "contactMaxTokens", {
-                type: "number",
-                min: 1,
-                max: 262144,
-                step: 1,
-                value: bot?.contact.maxTokens ?? 4096,
-              }),
-              field("执行模型", "execution", {
-                value: bot
-                  ? JSON.stringify({
-                      provider: bot.execution.provider,
-                      model: bot.execution.model,
-                    })
-                  : contact,
-                options: models,
-              }),
-              field("执行思考程度", "executionEffort", {
-                value: bot?.execution.reasoningEffort ?? "",
-                required: false,
-              }),
-              field("执行每轮回复上限（tokens）", "executionMaxTokens", {
-                type: "number",
-                min: 1,
-                max: 262144,
-                step: 1,
-                value: bot?.execution.maxTokens ?? 4096,
-              }),
-              field("原生 Agent preset", "preset", {
-                value: bot?.presetId ?? "",
-                options: [
-                  { value: "", label: "使用原生默认 preset" },
-                  ...state.catalog.presets
-                    .filter((row) => !row.broken)
-                    .map((row) => ({
-                      value: row.id,
-                      label: row.name ?? row.id,
-                    })),
-                ],
-                required: false,
-              }),
-              field("允许使用的原生工具（逗号分隔名称）", "capabilities", {
-                value: (bot?.capabilities ?? []).join(","),
-                required: false,
-              }),
-              h(
-                "small",
-                null,
-                `填写原生注册名，区分大小写，例如 bash。当前可查到：${(state.catalog.nativeTools ?? []).join("、") || "请先选择 preset 并创建会话"}`,
+              field("名称", "name", {value: bot?.name, maxLength: 100}),
+              field("身份与职责", "role", {value: bot?.role, textarea: true, required: false, maxLength: 8192}),
+              field("模型", "contact", {value: contact, options: models}),
+              advanced("更多设置",
+                field("工作目录（DSH 所在机器）", "cwd", {
+                  value: bot?.cwd ?? state.catalog.defaultCwd ?? "",
+                  required: false, placeholder: "默认使用 DSH 当前工作目录",
+                }),
+                field("执行模型", "execution", {
+                  value: separateExecution ? JSON.stringify({provider: bot.execution.provider, model: bot.execution.model}) : "",
+                  options: [{value: "", label: "与聊天模型相同"}, ...models], required: false,
+                }),
+                field("联络思考程度（留空使用当前模型默认）", "contactEffort", {
+                  value: bot?.contact.reasoningEffort ?? preferred?.reasoningEffort ?? "", required: false,
+                }),
+                field("联络每轮回复上限（tokens）", "contactMaxTokens", {
+                  type: "number", min: 1, max: 262144, step: 1,
+                  value: bot?.contact.maxTokens ?? "", required: false, placeholder: "使用模型默认值",
+                }),
+                field("执行思考程度", "executionEffort", {value: bot?.execution.reasoningEffort ?? "", required: false}),
+                field("执行每轮回复上限（tokens）", "executionMaxTokens", {
+                  type: "number", min: 1, max: 262144, step: 1,
+                  value: bot?.execution.maxTokens ?? "", required: false, placeholder: "使用模型默认值",
+                }),
+                field("原生 Agent preset", "preset", {
+                  value: bot?.presetId ?? "",
+                  options: [{value: "", label: "使用 DSH 默认会话配置"},
+                    ...state.catalog.presets.filter(row => !row.broken).map(row => ({value: row.id, label: row.name ?? row.id}))],
+                  required: false,
+                }),
               ),
-              h(
-                "small",
-                null,
-                "模型取自当前 DSH；执行尝试启动后保持当次配置。工具权限由你授予。",
-              ),
+              h("small", null, models.length ? "工作工具默认沿用 DSH，任务在后台运行，可随时继续聊天。" : "请先在 DSH 中配置模型，再创建 Bot。"),
             )),
           );
         }
@@ -486,7 +436,7 @@ window.__ModuleLoader__.load({
               h(
                 "p",
                 null,
-                `联络 ${bot.contact.provider}/${bot.contact.model} · 执行 ${bot.execution.provider}/${bot.execution.model}`,
+                `模型 ${bot.contact.model}${bot.execution.model !== bot.contact.model ? ` · 任务 ${bot.execution.model}` : ""}`,
               ),
               h(
                 "p",
@@ -496,15 +446,17 @@ window.__ModuleLoader__.load({
               h(
                 "div",
                 { className: "actions" },
-                button("新会话", () => publish({ chooser: true })),
+                button("开始聊天", async () => {
+                  const contact = await command("session.create", {botId: bot.botId});
+                  if (contact?.state === "ready") await openSession(contact.sessionId);
+                }, {className: "primary", disabled: view.busy || bot.lifecycle !== "active"}),
                 button("编辑", () => setEditing(bot.botId)),
-                button(bot.lifecycle === "active" ? "暂停" : "启用", () =>
+                advanced("状态管理", button(bot.lifecycle === "active" ? "暂停" : "启用", () =>
                   command("bot.update", {
-                    botId: bot.botId,
-                    expectedVersion: bot.revision,
+                    botId: bot.botId, expectedVersion: bot.revision,
                     lifecycle: bot.lifecycle === "active" ? "paused" : "active",
                   }),
-                ),
+                )),
               ),
             ),
           );
@@ -515,7 +467,7 @@ window.__ModuleLoader__.load({
               "div",
               null,
               ...cards,
-              button("创建另一个 Bot", () => setEditing(null)),
+              editing && button("创建另一个 Bot", () => setEditing(null)),
             ),
             h(BotEditor, {
               key: selected?.botId ?? "new",
@@ -700,7 +652,7 @@ window.__ModuleLoader__.load({
                         row.reservationHeld &&
                         row.taskId !== task.taskId,
                     ) &&
-                    form(
+                    advanced("子工作", form(
                       "作为一级子工作开始",
                       (data) =>
                         command("task.start", {
@@ -722,7 +674,7 @@ window.__ModuleLoader__.load({
                             label: `${view.snapshot.tasks.find((task) => task.taskId === row.taskId)?.title ?? "父工作"} · ${row.attemptId.slice(0, 12)}`,
                           })),
                       }),
-                    ),
+                    )),
                   attempt?.result &&
                     h(
                       "pre",
@@ -731,13 +683,11 @@ window.__ModuleLoader__.load({
                         .map((block) => block.text ?? "")
                         .join("\n"),
                     ),
-                  attempt &&
-                    h(
-                      "small",
-                      null,
-                      `本地资源：${attempt.reservationHeld ? "尚未结算" : "已结算"}；外部副作用：${attempt.externalEffects}；用量：${attempt.usage === "UNKNOWN" ? "未知" : JSON.stringify(attempt.usage)}`,
-                    ),
-                  form(
+                  attempt && advanced("运行详情", h(
+                    "small", null,
+                    `本地资源：${attempt.reservationHeld ? "尚未结算" : "已结算"}；外部副作用：${attempt.externalEffects}；用量：${attempt.usage === "UNKNOWN" ? "未知" : JSON.stringify(attempt.usage)}`,
+                  )),
+                  advanced("调整与接续", form(
                     "调整目标",
                     (data) =>
                       command("task.adjust", {
@@ -749,10 +699,10 @@ window.__ModuleLoader__.load({
                       value: task.goal,
                       textarea: true,
                     }),
-                  ),
+                  )),
                   attempt &&
                     !attempt.reservationHeld &&
-                    form(
+                    advanced("验收结果", form(
                       "记录验收",
                       (data) =>
                         command("task.accept", {
@@ -771,7 +721,7 @@ window.__ModuleLoader__.load({
                         ],
                       }),
                       field("实际证据", "evidence", { textarea: true }),
-                    ),
+                    )),
                 );
               }),
             ),
@@ -794,6 +744,7 @@ window.__ModuleLoader__.load({
                 field("负责人", "botId", { options: botsOptions() }),
                 field("标题", "title", { maxLength: 200 }),
                 field("目标", "goal", { textarea: true, maxLength: 16000 }),
+                advanced("验收与结果接收",
                 field("验收条件（每行一项）", "criteria", {
                   textarea: true,
                   required: false,
@@ -821,6 +772,7 @@ window.__ModuleLoader__.load({
                   ],
                   required: false,
                 }),
+                ),
               ),
             ),
           );
@@ -940,8 +892,8 @@ window.__ModuleLoader__.load({
                     }),
                   field("资源归属", "owner", {
                     options: [
-                      { value: "", label: "普通 DSH 会话（只授权明确 ID）" },
                       ...botsOptions(),
+                      { value: "", label: "普通 DSH 会话（需指定具体会话）" },
                     ],
                     required: false,
                   }),
@@ -953,13 +905,15 @@ window.__ModuleLoader__.load({
                     ],
                   }),
                   check("sessions", "允许会话"),
+                  check("tasks", "允许任务"),
+                  advanced("指定会话和任务（可选）",
                   field(
                     "会话 ID（逗号分隔；Bot 资源留空表示全部）",
                     "sessionsIds",
                     { required: false },
                   ),
-                  check("tasks", "允许任务"),
                   field("任务 ID", "tasksIds", { required: false }),
+                  ),
                   h(
                     "small",
                     null,
@@ -1042,7 +996,7 @@ window.__ModuleLoader__.load({
                       }),
                     field("消息", "text", { textarea: true }),
                   ),
-                  form(
+                  advanced("开会", form(
                     "发起会议",
                     (data) =>
                       command("meeting.start", {
@@ -1056,8 +1010,8 @@ window.__ModuleLoader__.load({
                       required: false,
                       maxLength: 32000,
                     }),
-                  ),
-                  form(
+                  )),
+                  advanced("管理群成员", form(
                     "更新群成员",
                     (data) =>
                       command("group.members", {
@@ -1077,7 +1031,7 @@ window.__ModuleLoader__.load({
                       options: botsOptions(),
                       value: group.coordinatorBotId,
                     }),
-                  ),
+                  )),
                 ),
               ),
             ),
@@ -1101,6 +1055,7 @@ window.__ModuleLoader__.load({
                 field("协调者（必须在成员中）", "coordinator", {
                   options: botsOptions(),
                 }),
+                advanced("群设置",
                 field("每条人类消息的最大成员轮数", "rounds", {
                   type: "number",
                   value: 1,
@@ -1113,6 +1068,7 @@ window.__ModuleLoader__.load({
                   min: 1,
                   max: 60,
                 }),
+                ),
               ),
             ),
           );
@@ -1194,7 +1150,7 @@ window.__ModuleLoader__.load({
                     ),
                 ),
                 meeting.decision &&
-                  form(
+                  advanced("登记行动任务", form(
                     "生成真实行动任务",
                     (data) =>
                       command("meeting.action", {
@@ -1211,9 +1167,9 @@ window.__ModuleLoader__.load({
                     field("任务标题", "title"),
                     field("行动目标", "goal", { textarea: true }),
                     field("验收条件", "criteria", { textarea: true }),
-                  ),
+                  )),
                 !["complete", "cancelled"].includes(meeting.phase) &&
-                  form(
+                  advanced("修改议题", form(
                     "修改议题并重开独立意见",
                     (data) =>
                       command("meeting.topic", {
@@ -1228,7 +1184,7 @@ window.__ModuleLoader__.load({
                       textarea: true,
                       required: false,
                     }),
-                  ),
+                  )),
               ),
             ),
           );
@@ -1344,7 +1300,10 @@ window.__ModuleLoader__.load({
         }
         function Workbench() {
           const view = useView(),
-            [tab, setTab] = useState("bots");
+            [tab, setTab] = useState("bots"),
+            [collaborationTab, setCollaborationTab] = useState("groups"),
+            [manageTab, setManageTab] = useState("sharing");
+          const paneKey = tab === "collaboration" ? collaborationTab : tab === "manage" ? manageTab : tab;
           const panes = {
             bots: BotsPane,
             memory: MemoryPane,
@@ -1401,18 +1360,24 @@ window.__ModuleLoader__.load({
                 bots: "Bots",
                 memory: "记忆",
                 tasks: "任务",
-                sharing: "共享与授权",
-                groups: "内部群",
-                meetings: "会议",
-                sessions: "会话管理",
-                outbox: "结果与投递",
+                collaboration: "协作",
+                manage: "管理",
               }).map(([key, label]) =>
                 button(label, () => setTab(key), {
                   "aria-selected": tab === key,
                 }),
               ),
             ),
-            view.loading ? h("p", null, "连接原生插件…") : h(panes[tab]),
+            (tab === "collaboration" || tab === "manage") && h("nav", {
+              "aria-label": tab === "collaboration" ? "协作功能" : "管理功能",
+            }, ...Object.entries(tab === "collaboration"
+              ? {groups: "内部群", meetings: "会议"}
+              : {sharing: "共享与授权", sessions: "会话管理", outbox: "结果与投递"}
+            ).map(([key, label]) => button(label,
+              () => tab === "collaboration" ? setCollaborationTab(key) : setManageTab(key),
+              {"aria-selected": paneKey === key},
+            ))),
+            view.loading ? h("p", null, "连接原生插件…") : h(panes[paneKey]),
           );
         }
         function Chooser() {

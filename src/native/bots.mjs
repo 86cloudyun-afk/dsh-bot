@@ -11,7 +11,7 @@ export class BotDirectory {
     requireCondition(plain(input) && Object.keys(input).every(key=>['botId','expectedVersion','name','role','cwd','presetId','contact','execution','lifecycle','capabilities'].includes(key)),'invalid_input');
     const name=input.name??current?.name;requireCondition(typeof name==='string' && name.trim().length>0 && name.trim().length<=100,'invalid_name');
     const role=input.role??current?.role??'';requireCondition(typeof role==='string' && role.length<=8192,'invalid_role');
-    const cwd=await this.adapter.validateLocation(input.cwd??current?.cwd??process.cwd());
+    const cwd=await this.adapter.validateLocation(input.cwd??current?.cwd??this.adapter.context.get('profileContext')?.cwd??process.cwd());
     const contact=await this.adapter.validateModel(input.contact??current?.contact);
     const execution=await this.adapter.validateModel(input.execution??(input.contact?contact:current?.execution)??contact);
     const lifecycle=input.lifecycle??current?.lifecycle??'active';requireCondition(['active','paused','archived'].includes(lifecycle),'invalid_lifecycle');
