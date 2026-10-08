@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="380" viewBox="0 0 1200 380" role="img" aria-labelledby="title desc">
+  <title id="title">DSH Bot 单 Bot 私有第一版</title>
+  <desc id="desc">主对话持续交流，独立工作对话处理目标并回送结果。支持 Linux x64 和 macOS arm64。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b1627"/><stop offset="1" stop-color="#142b40"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#35d9c0" stop-opacity=".2"/><stop offset="1" stop-color="#35d9c0" stop-opacity="0"/></radialGradient>
+    <linearGradient id="bot" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#45e3cf"/><stop offset="1" stop-color="#35a7fa"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#4cc9c8"/></marker>
+  </defs>
+  <rect width="1200" height="380" rx="24" fill="url(#bg)"/>
+  <circle cx="928" cy="190" r="276" fill="url(#glow)"/>
+  <g stroke="#285068" stroke-opacity=".24" fill="none">
+    <path d="M680 24V356M740 24V356M800 24V356M860 24V356M920 24V356M980 24V356M1040 24V356M1100 24V356M1160 24V356"/>
+    <path d="M660 70H1180M660 130H1180M660 190H1180M660 250H1180M660 310H1180"/>
+  </g>
+  <g font-family="Noto Sans CJK SC, PingFang SC, Microsoft YaHei, sans-serif">
+    <rect x="54" y="45" width="156" height="31" rx="15.5" fill="#163f48" stroke="#27736f"/>
+    <text x="132" y="66" text-anchor="middle" fill="#70e6d4" font-size="15" font-weight="600">单 Bot · 私有第一版</text>
+    <text x="52" y="144" fill="#f1f7fa" font-size="62" font-weight="700" letter-spacing="-1">DSH Bot</text>
+    <text x="54" y="201" fill="#e0edf4" font-size="28" font-weight="500">一个目标，一段持续的协作。</text>
+    <text x="54" y="245" fill="#9eb7c9" font-size="20">主对话继续交流 · 工作独立处理 · 结果回到你面前</text>
+    <rect x="54" y="292" width="112" height="32" rx="8" fill="#1d3549"/>
+    <rect x="178" y="292" width="160" height="32" rx="8" fill="#1d3549"/>
+    <rect x="350" y="292" width="137" height="32" rx="8" fill="#1d3549"/>
+    <text x="110" y="314" text-anchor="middle" fill="#bdd5e2" font-size="15">Linux x64</text>
+    <text x="258" y="314" text-anchor="middle" fill="#bdd5e2" font-size="15">macOS arm64</text>
+    <text x="418.5" y="314" text-anchor="middle" fill="#bdd5e2" font-size="15">Node 24.19.0</text>
+    <path d="M871 168C910 168 904 109 945 109" stroke="#4cc9c8" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+    <path d="M871 211C910 211 904 268 945 268" stroke="#4cc9c8" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+    <rect x="936" y="169" width="184" height="43" rx="12" fill="#153747" stroke="#286579"/>
+    <path d="M1029 152V168M1029 224V213" stroke="#4cc9c8" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <path d="M935 190H875" stroke="#4cc9c8" stroke-width="2" stroke-dasharray="4 5" fill="none" marker-end="url(#arrow)"/>
+    <rect x="738" y="125" width="132" height="132" rx="28" fill="#122a3c" stroke="#377089" stroke-width="1.5"/>
+    <path d="M804 145V156" stroke="#59ddcf" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="804" cy="141" r="4" fill="#59ddcf"/>
+    <rect x="775" y="157" width="58" height="46" rx="13" fill="url(#bot)"/>
+    <circle cx="791" cy="177" r="4" fill="#113345"/>
+    <circle cx="817" cy="177" r="4" fill="#113345"/>
+    <path d="M795 190H813" stroke="#113345" stroke-width="3" stroke-linecap="round"/>
+    <text x="804" y="236" text-anchor="middle" fill="#d9edf6" font-size="17" font-weight="600">Bot 主对话</text>
+    <rect x="948" y="66" width="162" height="86" rx="17" fill="#142f42" stroke="#36758a"/>
+    <rect x="948" y="224" width="162" height="86" rx="17" fill="#142f42" stroke="#36758a"/>
+    <circle cx="973" cy="91" r="4" fill="#64dcc9"/>
+    <circle cx="973" cy="249" r="4" fill="#70bdfa"/>
+    <text x="992" y="97" fill="#dbeaf3" font-size="17" font-weight="600">独立工作 A</text>
+    <text x="972" y="128" fill="#91b4c8" font-size="14">处理目标 · 回送结果</text>
+    <text x="992" y="255" fill="#dbeaf3" font-size="17" font-weight="600">独立工作 B</text>
+    <text x="972" y="286" fill="#91b4c8" font-size="14">独立派发 · 同时推进</text>
+    <text x="1027" y="193" text-anchor="middle" fill="#72cbbb" font-size="14">结果回到主对话</text>
+  </g>
+</svg>
