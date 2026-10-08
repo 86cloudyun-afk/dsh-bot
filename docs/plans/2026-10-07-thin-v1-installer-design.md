@@ -1,3 +1,5 @@
+> **已作废：旧独立软件版。禁止按此页安装或启动。** 原生 DSH 插件使用已有官方 DSH；本页仅为历史证据。参见 [作废说明](https://github.com/86cloudyun-afk/dsh-bot/blob/goal/native-dsh-plugin-v1-20261008/docs/history/standalone-void.md)。
+
 # Thin v1 installer design
 
 The authorized goal is a first installation using a trusted thin bundle and ordinary Node/npm, without Git, old dependencies, old Homes or credentials. The bundle carries reviewed product bytes, helper code, the selected Host overlay and its exact external registry/source materials, notices and the official SDK lock. It carries no complete official SDK installation. SDK packages are fetched directly from the public registry during first installation; the resulting complete graph is a private local runtime, with public-release qualification still false.

@@ -158,10 +158,10 @@
 
 **Files:** 重写 `src/client/client.js`；新建 `locale/zh.json`、`locale/en.json`、`test/native-plugin/client-lifecycle.test.mjs`；更新 `plugin.mjs`。
 
-**Interfaces:** RPC `catalog/snapshot/command/page` 返回同 BotService DTO；工作台按钮生成 operationId 保留到查回；已创建 Bot 选择器 `create` 成功后 `ctx.uiWorkspace.openSession({sessionId})`；slots 注册归属插件 effect。
+**Interfaces:** RPC `catalog/snapshot/command/page` 返回同 BotService DTO；工作台按钮生成 operationId 保留到查回；已创建 Bot 选择器 `create` 成功后 `ctx.uiWorkspace.openSession(sessionId)`；slots 注册归属插件 effect。
 
 - [ ] 写 `workbench_uses_existing_bots_and_native_navigation`、`two_pages_share_identity_capacity`、`disable_preserves_data_and_unrelated_session`、`reenable_restores_same_bot_ids`。
-- [ ] 先失败；用宿主 shell/sidebar 插槽和 composer dock 接入，React 来自 ModuleLoader，只使用 theme tokens/locale，输入验证及错误可见，工作台含 Bot/记忆/授权/任务/群/会议/管理分页。
+- [ ] 先失败；工作台用 `main` keyed 面板与 `sidebar.panellist`，新建 Bot 会话用 `sidebar.footer.action` 打开 `shell.overlay` 选择器，Bot 信息用 `conversation.session.header.actions/utilities`；不占用原生 single preset 插槽。React 来自 ModuleLoader，只使用 theme tokens/locale，输入验证及错误可见，工作台含 Bot/记忆/授权/任务/群/会议/管理分页。
 - [ ] 实际运行 GUI 点击提交→查看→接续→停止→收集→归档→恢复→禁用→启用→卸载；光暗与 console 验证；默认套件通过提交 `feat: integrate native bot workbench and session selection`。
 
 ### T11：多轮多角度复审与双平台验收（P01–P20）

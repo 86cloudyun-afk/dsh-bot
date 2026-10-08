@@ -1,3 +1,5 @@
+> **已作废：旧独立软件版。禁止按此页安装或启动。** 原生 DSH 插件使用已有官方 DSH；本页仅为历史证据。参见 [作废说明](https://github.com/86cloudyun-afk/dsh-bot/blob/goal/native-dsh-plugin-v1-20261008/docs/history/standalone-void.md)。
+
 # 单 Bot 第一版安装与使用
 
 本说明用于交付清单所绑定的薄安装包。请先核对该清单中的源码、Host、目标平台和验收范围；目录存在、服务启动或历史测试通过，都不单独表示正式版本已通过验收。

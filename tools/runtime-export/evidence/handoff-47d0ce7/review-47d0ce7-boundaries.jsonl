@@ -1,4 +1,0 @@
-{"name":"report-parent-of-output","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"REPORT_OUTPUT_PATH_CONFLICT\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":true,"outputExists":false}
-{"name":"output-parent-of-report","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"REPORT_OUTPUT_PATH_CONFLICT\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":true}
-{"name":"equal","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"REPORT_OUTPUT_PATH_CONFLICT\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":false}
-{"name":"output-symlink-parent","exit":1,"stdout":"","stderr":"{\"errorCategory\":\"CANONICAL_OUTPUT_PARENT_REQUIRED\"}\n{\"offlineIO\":{\"network\":0,\"listener\":0,\"subprocess\":0,\"fetch\":0}}","reportExists":false,"outputExists":false}

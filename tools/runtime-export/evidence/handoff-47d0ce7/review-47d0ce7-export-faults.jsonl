@@ -1,8 +1,0 @@
-{"name":"export-internal-normal-clean","primary":"ENOSPC","cleanup":null,"outputExists":false,"callerPreserved":true,"pass":true}
-{"name":"export-internal-lookup-EACCES","primary":"ENOSPC","cleanup":"EACCES","outputExists":true,"callerPreserved":true,"pass":true}
-{"name":"export-internal-lookup-EIO","primary":"ENOSPC","cleanup":"EIO","outputExists":true,"callerPreserved":true,"pass":true}
-{"name":"export-internal-rm-EPERM","primary":"ENOSPC","cleanup":"EPERM","outputExists":true,"callerPreserved":true,"pass":true}
-{"name":"export-internal-replacement-dir","primary":"ENOSPC","cleanup":null,"outputExists":true,"callerPreserved":true,"pass":true}
-{"name":"export-internal-replacement-file","primary":"ENOSPC","cleanup":null,"outputExists":true,"callerPreserved":true,"pass":true}
-{"name":"export-internal-replacement-symlink","primary":"ENOSPC","cleanup":null,"outputExists":true,"callerPreserved":true,"pass":true}
-{"name":"export-internal-removed","primary":"ENOSPC","cleanup":null,"outputExists":false,"callerPreserved":true,"pass":true}

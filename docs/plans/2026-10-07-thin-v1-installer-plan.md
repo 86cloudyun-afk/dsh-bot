@@ -1,3 +1,5 @@
+> **已作废：旧独立软件版。禁止按此页安装或启动。** 原生 DSH 插件使用已有官方 DSH；本页仅为历史证据。参见 [作废说明](https://github.com/86cloudyun-afk/dsh-bot/blob/goal/native-dsh-plugin-v1-20261008/docs/history/standalone-void.md)。
+
 # Thin v1 installer implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this authorized plan task-by-task. Steps use checkbox syntax for tracking.

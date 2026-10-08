@@ -1,3 +1,5 @@
+> **已作废：旧独立软件版。禁止按此页安装或启动。** 原生 DSH 插件使用已有官方 DSH；本页仅为历史证据。参见 [作废说明](https://github.com/86cloudyun-afk/dsh-bot/blob/goal/native-dsh-plugin-v1-20261008/docs/history/standalone-void.md)。
+
 # First installation from thin v1 files
 
 This installer builds a private local runtime from a caller-pinned thin bundle. The bundle contains the reviewed Bot package, installer/helpers, a Host overlay for the selected target, its 28 exact external registry snapshots, source identity/lock/source packet/recipe, notices and the official SDK lock. The complete official SDK is downloaded during installation; its installed bytes are not part of the thin bundle. Git and a previous SDK installation are not required.

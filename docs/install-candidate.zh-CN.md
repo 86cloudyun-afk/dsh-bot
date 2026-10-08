@@ -1,3 +1,5 @@
+> **已作废：旧独立软件版。禁止按此页安装或启动。** 原生 DSH 插件使用已有官方 DSH；本页仅为历史证据。参见 [作废说明](https://github.com/86cloudyun-afk/dsh-bot/blob/goal/native-dsh-plugin-v1-20261008/docs/history/standalone-void.md)。
+
 # 候选安装与依赖边界
 
 这是一份源码候选说明，不是完整 v1 已发布安装包。package.json 仍为0.1.0-alpha.1、private；没有修改版本、tag、npm发布设置或许可证授予。根目录已有固定 devDependency @deepseek-ai/dsh=0.2.0-rc.2 与 package-lock.json（v3），仅补公共 SDK 的锁定安装；产品 LICENSE 仍缺。完整公开分发需先核权利、私有 Host 接口与可复现构建，不能从上游 MIT 元数据推断所有本地补丁均已完成授权核验。
