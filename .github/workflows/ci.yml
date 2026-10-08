@@ -55,7 +55,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            python: '3.12.14'
+            python: '3.13.5'
           - os: macos-15
             python: '3.12.10'
     runs-on: ${{ matrix.os }}
