@@ -1,0 +1,11 @@
+.local/
+.test-runtime/
+node_modules
+*.sqlite*
+*.db*
+.DS_Store
+coverage/
+.superpowers/
+/qualification/
+.env*
+!.env.example

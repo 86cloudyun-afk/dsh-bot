@@ -1,0 +1,95 @@
+name: Native plugin checks
+permissions:
+  contents: read
+  checks: write
+on:
+  push:
+  pull_request:
+jobs:
+  plugin:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['22', '24']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run check
+  artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: mkdir -p qualification/package && npm pack --pack-destination qualification/package
+      - run: cd qualification/package && sha256sum *.tgz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-plugin-package
+          path: qualification/package
+  stock-gui:
+    needs: artifact
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.19.0'
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/playwright-core/cli.js install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-plugin-package
+          path: qualification/package
+      - name: Fresh official profile and installed native GUI
+        shell: bash
+        env:
+          DSH_BOT_GUI_OUTPUT: qualification/gui
+        run: |
+          mkdir -p qualification/gui
+          export DSH_BOT_GUI_SHA256="$(cut -d ' ' -f1 qualification/package/SHA256SUMS)"
+          node test/native-plugin/stock-gui-run.mjs qualification/package/*.tgz > qualification/stock-boot-private.log 2>&1
+      - name: Sanitized GUI qualification report
+        if: always()
+        run: node -e 'const fs=require("fs");const p="qualification/gui/stock-gui-report.json";if(fs.existsSync(p))console.log(fs.readFileSync(p,"utf8"));else console.log("GUI report unavailable before runner initialization")'
+      - name: Publish readable qualification check
+        if: always() && github.event_name == 'push'
+        uses: actions/github-script@v7
+        env:
+          GUI_PLATFORM: ${{ matrix.os }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'qualification/gui/stock-gui-report.json';
+            const report = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, 'utf8')) : {passed:false,stage:'runner-initialization',error:'No qualification report was produced'};
+            const {requests, ...summary} = report;
+            summary.controlledRequests = requests?.length ?? 0;
+            const text = '```json\n' + JSON.stringify(summary, null, 2) + '\n```';
+            await core.summary.addHeading('官方原版 DSH 插件验收').addRaw(text).write();
+            await github.rest.checks.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              head_sha: context.sha, name: `原生 GUI (${process.env.GUI_PLATFORM})`,
+              status: 'completed', conclusion: report.passed ? 'success' : 'failure',
+              output: { title: report.passed ? '官方原版 GUI 检查通过' : '官方原版 GUI 检查失败', summary: text },
+            });
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stock-gui-${{ matrix.os }}
+          path: |
+            qualification/gui/stock-gui-report.json
+            qualification/gui/*.png
