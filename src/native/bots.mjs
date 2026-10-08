@@ -15,7 +15,8 @@ export class BotDirectory {
     const contact=await this.adapter.validateModel(input.contact??current?.contact);
     const executionMode=input.executionMode??(input.execution?'explicit':current?.executionMode??(current?'explicit':'inherit'));
     requireCondition(['inherit','explicit'].includes(executionMode),'invalid_execution_mode');
-    const execution=await this.adapter.validateModel(input.execution??(executionMode==='inherit'?contact:current?.execution)??contact);
+    const followsChangedContact=executionMode==='inherit'&&(input.contact||input.executionMode==='inherit'&&current?.executionMode!=='inherit');
+    const execution=await this.adapter.validateModel(input.execution??(followsChangedContact?contact:current?.execution)??contact);
     requireCondition(executionMode!=='inherit'||execution.provider===contact.provider&&execution.model===contact.model,'execution_model_conflict');
     const lifecycle=input.lifecycle??current?.lifecycle??'active';requireCondition(['active','paused','archived'].includes(lifecycle),'invalid_lifecycle');
     const presets=this.adapter.context.get('agentPresets'),presetId=input.presetId??current?.presetId??presets?.defaultId??null;
