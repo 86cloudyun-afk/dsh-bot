@@ -1,0 +1,339 @@
+{
+  "format": 1,
+  "classification": "EXACT_R2_SINGLE_BOT_FIRST_PRIVATE_DELIVERY_SCOPED_TECHNICAL_C0_I0_M0_RIGHTS_UNKNOWN_PUBLIC_NOT_CLEARED",
+  "capturedUTC": "2026-10-08T01:47:12.312415+00:00",
+  "assessment": {
+    "C": 0,
+    "I": 0,
+    "M": 0
+  },
+  "findings": [],
+  "privateTechnicalAcceptance": "PASS_SCOPED_NATIVE_INSTALL_GUI_MODEL_AND_CONTROLLED_CHILD_SLOTS",
+  "firstPrivateDeliveryReady": true,
+  "firstV1FullyQualified": false,
+  "formalWholeProductOrPublicTechnicalSignoff": false,
+  "publicReleaseQualified": false,
+  "publicReleaseStatus": "NOT_CLEARED",
+  "deliveryArchive": {
+    "path": "/workspace/dsh-bot-v1-private-delivery-20261008-r2.tar.gz",
+    "sha256": "375c4801c92996c6a5d4c6644abaf8d6965c307501f55be13444b8e8a16cf58f",
+    "bytes": 15558289,
+    "mode": 384,
+    "regular": true,
+    "canonical": true,
+    "nlink": 1
+  },
+  "externalArchiveChecksum": {
+    "path": "/workspace/dsh-bot-v1-private-delivery-20261008-r2.tar.gz.sha256",
+    "sha256": "1d5709dcd90b82c4800db5bcca98926152c116dd54385ed36cde980dcca8ebbc",
+    "bytes": 113,
+    "mode": 384,
+    "regular": true,
+    "canonical": true,
+    "nlink": 1
+  },
+  "deliveryFolder": "/workspace/dsh-bot-v1-private-delivery-20261008-r2",
+  "outerProof": {
+    "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/frozen-r2-fivefile-outer-full18refs-private-C0-I0-M0-rightsUNKNOWN-proof.json",
+    "sha256": "39964e44732553c14c135358ac881b425ec4c8c25485b3a0364c4e5b6d0712a4",
+    "bytes": 15635,
+    "mode": 384,
+    "regular": true,
+    "canonical": true,
+    "nlink": 1
+  },
+  "correctiveClosure": {
+    "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/r1-M1-to-r2-C0-one-literal-sourceFILE-key-correction-full-r1-preservation-closure.json",
+    "sha256": "53c6effddb9b92d8fe741077c550e93661989bdeb6c28e2280b0283478ccaeb8",
+    "bytes": 4747,
+    "mode": 384,
+    "regular": true,
+    "canonical": true,
+    "nlink": 1
+  },
+  "source": {
+    "head": "1f111d7f3f5c54127a7523571c8ebc1a738575b8",
+    "tree": "49ca850d8837da106996e9717fe30dfde5ae3039",
+    "buildId": "0f63cb5c-7951-4cfc-bf95-28b21c7fac33",
+    "npmVersion": "0.1.0-alpha.1",
+    "private": true,
+    "product81ByteSizeModeAnd589843ArchiveExactlyEqual0a": true
+  },
+  "thin": {
+    "name": "final-1f111d7-m3-thin.tar.gz",
+    "sha256": "58e9b321840f557f317b9375a4e4e814665e7c6c60b0c26e8952be3f4b68b78d",
+    "bytes": 15541793,
+    "descriptorSHA256": "5530e8316b6595d9141002eb1283f7b941007770b01238c1904f6a116f556c5c",
+    "descriptorBytes": 635464,
+    "regularFiles": 2369,
+    "fileModes": {
+      "0600": 2363,
+      "0700": 4,
+      "0755": 2
+    },
+    "old0aBaselineUnchangedFiles": 2367,
+    "old0aChangedMetadataFiles": 2,
+    "currentOuterGuideSHA256": "13e76b4be8cc213da22d5a66ed87ac5883ad540ed7ae937b242ab8472f0a3e30",
+    "currentGuideGovernsRetainedHistoricalDocs": true
+  },
+  "freshInstallTargets": [
+    "linux-x64",
+    "darwin-arm64"
+  ],
+  "requiredNodeVersion": "24.19.0",
+  "native": {
+    "originalRun": 37709629136,
+    "attempt": 1,
+    "sixJobs": "PASS",
+    "twoOriginalZip50RegularJsonPreserved": "PRIOR_EXACT1F_PROOFS_AND_FRESH_ORIGINAL_BLOB_PINS",
+    "childrenPerTarget": 3,
+    "originalBudgetsSeconds": [
+      5,
+      20,
+      20
+    ],
+    "builtinModel": "UNKNOWN_NOT_INSTRUMENTED",
+    "coldEachOneOfOneModel0": true,
+    "originalChildStopsBindingsAndStdioComplete": true
+  },
+  "firstInstallCi": {
+    "originalRun": 37712266847,
+    "attempt": 1,
+    "twoTargets": "PASS",
+    "workflowHead": "edead8fc242bd814c50cd6571207d3a4160f26c9",
+    "workflowTree": "dafc8b416e803a7beffe9e2a761321906d99d14b",
+    "productHead": "1f111d7f3f5c54127a7523571c8ebc1a738575b8",
+    "originalElevenOperationalHelpersUnchanged": true,
+    "originalRegular600ZipEntries": 15,
+    "originalOpaquePngChunkCrcChecked": 4,
+    "guiChecksEach": 6,
+    "modelRequests": 0,
+    "runtimeFiles": {
+      "linux": 27970,
+      "macos": 28654
+    },
+    "runtimeHashAuthority": "ORIGINAL_PINNED_HELPERS_GENUINE_RUNNERS_NOT_ABSENT_LOCAL_RUNTIME_REHASH",
+    "ciServerExitCodesZeroIndependentlyClaimed": false,
+    "fullTaskQualification": false
+  },
+  "installation004": {
+    "actualRootOriginalToolSession": 51485,
+    "exit": 0,
+    "measuredSeconds": 71.6912274,
+    "originalNpmPidAndPgid": 1113,
+    "originalNpmStoppedLeaderExitAndGroupEmpty": true,
+    "npmBudgetMs": 120000,
+    "npmStopConfirmBoundMs": 750,
+    "wholeFreshSdkNoOldRuntimeReuse": true,
+    "outerNodePid": "UNKNOWN_NOT_RECORDED_IN_TYPED_RECEIPT",
+    "outerNodeStdioClose": "NOT_SEPARATELY_INSTRUMENTED",
+    "keylessOriginalTwoCliStopsExit0StdioClosedGroupsEmpty": true
+  },
+  "realModel004": {
+    "platform": "LINUX_X64_FRESH_DOCKER_OFFICIAL_PROFILE",
+    "rootExit": 0,
+    "rootElapsedSeconds": 20.498021528001118,
+    "newPhysicalRequests": 11,
+    "completeFinalSseAndNativeUsageRequests": 10,
+    "oneActualHttp200OpenRequestExactStop": "UNKNOWN",
+    "priorRootQaRequests": 14,
+    "aggregateRootQaRequests": 25,
+    "newMaximum": 13,
+    "aggregateMaximum": 27,
+    "allEightNativeUsageCorrelationsFinalSseInputOutputCacheInclusiveTotalExact": true,
+    "completePhysicalUsage": {
+      "uncachedInputTokens": 4148,
+      "cacheReadInputTokens": 8192,
+      "cacheCreationInputTokens": 0,
+      "outputTokens": 1879,
+      "cacheInclusiveTotalTokens": 14219
+    },
+    "unknownRequest11FinalOutputAndNativeUsageNotAdded": true,
+    "longPendingDuringActualShortDelegationMainIdleKnown": true,
+    "bothOriginalWorkResultsAndBothOriginalMainRelaysKnown": true,
+    "archiveEpoch1To2RestoreSameIdsEpoch3": true,
+    "sameLongTaskSessionGeneration2NativeKnownAndMainRelayKnown": true,
+    "generation3ExactStopUnknownHeldSlots": 1,
+    "keylessSameHomeColdProviderRequestsAdded": 0,
+    "keylessColdReadOnlyAndOriginalUnknownProviderFencePreserved": true,
+    "oldUnknownNotReplayed": true,
+    "originalTwoCliExit0StdioClosedGroupsEmpty": true,
+    "browserErrors": 0,
+    "originalLongResult": {
+      "items": 80,
+      "utf8Bytes": 2597,
+      "observedHanRange": [
+        7,
+        11
+      ],
+      "strict8To12HanQualityClaimed": false
+    },
+    "shortAcceptanceMarkerDirectlyObserved": false,
+    "fullTaskQualification": false,
+    "remoteWholeGenerationTerminationClaimed": false
+  },
+  "controlledChildSlots": {
+    "historicalActualSource": "0a04532f05243265170e6c6d457662a422deadf0",
+    "historicalProof": {
+      "path": "/tmp/dsh-v1-final-0a04532/audit-round10/current-d2a04c2-firstinstall84de-model003/fresh-canonical003-baseline0model-keyless-SDK7-controlled-GUI9-typed-PASS-scopes-proof.json",
+      "sha256": "a895a32a903546acba1b0f3892668c36ce181b6f915b4da53f1596d973a0bd73",
+      "bytes": 5799,
+      "mode": 384,
+      "regular": true,
+      "canonical": true,
+      "nlink": 1
+    },
+    "sdkPass": 7,
+    "genuineGuiPass": 9,
+    "models": 0,
+    "sharedSlots": 15,
+    "childDepth": 1,
+    "all81FinalProductBytesModesAndArchiveEquivalent": true,
+    "historicalExecutionNotRelabelledNew": true
+  },
+  "fourOriginalTypedGraphs": {
+    "stages": [
+      "before",
+      "after-baseline",
+      "after-model"
+    ],
+    "runtime27970RowsModesLinksDevInoNlinkMtimesSizesHashesFullEqual": true,
+    "product81FullEqual": true,
+    "materials1340FullEqual": true,
+    "unpackedProduct81FullEqual": true,
+    "profileCompositionPinsFullEqual": true,
+    "rawRuntimeHomesOrConfigValuesReadByAudit": false
+  },
+  "rights": {
+    "Bot": "UNKNOWN_NO_FACTUAL_LICENSE_RESPONSE",
+    "privateHost25Modifications": "UNKNOWN_NO_FACTUAL_AUTHORITY_RESPONSE",
+    "nodeAddonSystem012BsdMetadataMitEntryLicenseScope": "UNKNOWN",
+    "newLicenseOrPublicDistributionGrantAdded": false,
+    "status": "NOT_CLEARED"
+  },
+  "licensing": {
+    "originalPrivateSourceFileDifferences": 25,
+    "scope": "13MODIFIED_PUBLIC_FILES_PLUS12NEW_FILES_NOT25PACKAGES",
+    "originalImplementationChatRecovered": false,
+    "upstreamPublicMITIsNotWholeBotOrPrivatePatchGrant": true,
+    "completeScopedNoticeBodiesRetained": 33,
+    "publicRegistryVersionsRetained": 30,
+    "corePackages": 74,
+    "externalPackagesPerTarget": 28,
+    "hostSourceFiles": 4074,
+    "hostSourceIndex": "a948c323757b4fdae2ec6e98c143336ce3afc71e91e635e4a00e1f0ff2fc3f05",
+    "exactCompilerCrtEmbeddedObjectInventory": "UNKNOWN_CONSERVATIVE_COMPLETE_TERMS_RETAINED",
+    "publicPrivateHistoryExportCleared": false
+  },
+  "preservation": {
+    "allPrior2802FreshFullHashSizeAvailableModeCanonicalRegularNlink1RecheckedInClosure": true,
+    "frozenR1FiveFilesAndOriginalArchiveChecksumPreserved": true,
+    "oldB2And739GuideDraftsRetainedExact": true,
+    "oldCase001SdkWholeGeneration": "UNKNOWN_NOT_REPLAYED",
+    "oldCase002OldSourceWholeCase": "FAIL_PRESERVED",
+    "oldCase003WholeCase": "FAIL_OVERSIZE4331_GT4096_PARTIAL_SHORT_PASS_PRESERVED",
+    "mainAndDraftPr1UnmergedUnchanged": true,
+    "noNewPublicTagRelease": true,
+    "webWorkbenchSynchronized": false
+  },
+  "limits": {
+    "workResultUtf8Max": 4096,
+    "recommendedUtf8Max": 3400,
+    "nodeKernelPhysicalIoHardWallOrAllFutureTaskDurabilityEstablished": false,
+    "noUnqualifiedCounterZeroInferred": true,
+    "rootQaCountersNotUserHistorical9Requests5140Tokens": true,
+    "standaloneMacSystemTarExtractionClaimed": false
+  },
+  "proofs": [
+    {
+      "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/independent-1f111d7-2369-thin-transport-product81-0a2367-plus2metadata-proof.json",
+      "sha256": "25fa19033d69edd2b71081da956aff7be907762b4fd2538c5b14327d51ee151a",
+      "bytes": 556010,
+      "mode": 384,
+      "regular": true,
+      "canonical": true,
+      "nlink": 1
+    },
+    {
+      "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/current-guide-retained33-notices-public30-source-provenance-semantic-scope-review.json",
+      "sha256": "2f9cac3969084330e640f351e29e512772ecf4a57c6dad0c092c6c5b0a26213c",
+      "bytes": 23709,
+      "mode": 384,
+      "regular": true,
+      "canonical": true,
+      "nlink": 1
+    },
+    {
+      "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/installation004-original-completion-precise-limits-and-actual-tar-2369-proof.json",
+      "sha256": "ce70df1e756fcba0ac43db63078386b1fb7f47ba910a5f166e3ba1bbde47c849",
+      "bytes": 1975,
+      "mode": 384,
+      "regular": true,
+      "canonical": true,
+      "nlink": 1
+    },
+    {
+      "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/case004-original11-10complete-cache-inclusive-native-1stopUNKNOWN-cold0-fourgraphs-proof.json",
+      "sha256": "0384589e5b62f0cfb1decc8ccdca48c6bc1e4fdb9771d2f5d01d66c21cf66580",
+      "bytes": 12673,
+      "mode": 384,
+      "regular": true,
+      "canonical": true,
+      "nlink": 1
+    },
+    {
+      "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/firstCI-edead-original-twoOS15-regular600-ZIP-crossbindings-keyless-GUI6-proof.json",
+      "sha256": "f92f193fbf165b0d3156dc7e07337791d861dd03f3ac55a562eefe452af54916",
+      "bytes": 15933,
+      "mode": 384,
+      "regular": true,
+      "canonical": true,
+      "nlink": 1
+    },
+    {
+      "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/sealed-guide-source24-CI11-and-case004-numeric-rootQA25-proof.json",
+      "sha256": "6e2b61432b0b710469256356db79771219f03f01673415785f08c22c165f5109",
+      "bytes": 13870,
+      "mode": 384,
+      "regular": true,
+      "canonical": true,
+      "nlink": 1
+    },
+    {
+      "path": "/tmp/dsh-v1-final-0a04532/audit-round11-final-delivery/exact1f-original-six-source-package-nativeZIP-reference-preservation.json",
+      "sha256": "c8a7d77969c63501a5ba8d7ae1370eaf7c7c96987509a9b9193fc5db0097c492",
+      "bytes": 2635,
+      "mode": 384,
+      "regular": true,
+      "canonical": true,
+      "nlink": 1
+    }
+  ],
+  "independentCurrentFirstInstallSourceControllerC0": {
+    "path": "/tmp/dsh-v1-final-0a04532/evidence/final-source-review-recovery/ci-firstinstall-edead-two-os-original-artifacts-source-c0.json",
+    "sha256": "19f0610c17a8aee97157c924640e6ee32716ebcade7e587874dc2979ce8c0300",
+    "bytes": 23058,
+    "mode": 384,
+    "regular": true,
+    "canonical": true,
+    "nlink": 1
+  },
+  "rootFinalCurrentSourceAndNoLocalActivity": {
+    "path": "/tmp/dsh-v1-final-0a04532/evidence/final-current-source-and-local-zero-activity-readback.json",
+    "sha256": "f46eb6bd3cf3c999706674456e1d9dd86099464910d091a90786ad6a81c617a6",
+    "bytes": 550,
+    "mode": 384,
+    "regular": true,
+    "canonical": true,
+    "nlink": 1
+  },
+  "auditScope": {
+    "SDKNativeBrowserProviderGitNetworkExecutions": 0,
+    "rawHomeConfigDbKeysCredentialsAuthCookiesServerLogsOrModelScreenshotReads": 0,
+    "archivesExtracted": 0,
+    "old32Actions8760InnerAssetsReaudited": false,
+    "frozenSourceBundleArchiveReportsMutations": 0,
+    "publicRegistrySigningKeyFixturesHashedOnlyNoValuesParsed": 2,
+    "outputsOnlyInNewRound11Directory": true
+  }
+}

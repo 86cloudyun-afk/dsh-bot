@@ -1,0 +1,307 @@
+{
+  "format": 1,
+  "classification": "SINGLE_BOT_FIRST_PRIVATE_DELIVERY_SCOPED_QUALIFICATION",
+  "preparedUTC": "2026-10-08T01:34:33.539838+00:00",
+  "privateTechnicalAcceptance": "PASS_SCOPED_NATIVE_INSTALL_GUI_MODEL_AND_CONTROLLED_CHILD_SLOTS",
+  "publicReleaseStatus": "NOT_CLEARED",
+  "formalPublicV1Declared": false,
+  "scope": "Single Bot; multiple Bot, group chat and meetings deferred",
+  "product": {
+    "sourceHead": "1f111d7f3f5c54127a7523571c8ebc1a738575b8",
+    "sourceTree": "49ca850d8837da106996e9717fe30dfde5ae3039",
+    "buildId": "0f63cb5c-7951-4cfc-bf95-28b21c7fac33",
+    "npmPackageVersion": "0.1.0-alpha.1",
+    "manifestSHA256": "099ebd05140bbccfd4454c6c2e3b5d5142c17316a2e603c6a15f2fda448faf37",
+    "archiveSHA256": "5898432a9e6a5dd670bdb1d9249eb904b5d8c1ee8a49c2d4775a0d439feb7473",
+    "fileCount": 81,
+    "fileIndexSHA256": "e163545663ffeb8772311d4422ec0f80f8af632f32d867d85a74e06c8e9925f2",
+    "allPackagedBytesAndModesExactlyEquivalentTo": "0a04532f05243265170e6c6d457662a422deadf0"
+  },
+  "thin": {
+    "name": "final-1f111d7-m3-thin.tar.gz",
+    "sha256": "58e9b321840f557f317b9375a4e4e814665e7c6c60b0c26e8952be3f4b68b78d",
+    "bytes": 15541793,
+    "descriptorSHA256": "5530e8316b6595d9141002eb1283f7b941007770b01238c1904f6a116f556c5c",
+    "descriptorBytes": 635464,
+    "regularFiles": 2369,
+    "fileModes": {
+      "0600": 2363,
+      "0700": 4,
+      "0755": 2
+    },
+    "old0aBaselineUnchangedFiles": 2367,
+    "old0aChangedMetadataFiles": 2,
+    "currentOuterGuideSHA256": "13e76b4be8cc213da22d5a66ed87ac5883ad540ed7ae937b242ab8472f0a3e30",
+    "currentGuideGovernsRetainedHistoricalDocs": true
+  },
+  "requirements": {
+    "nodeVersion": "24.19.0",
+    "targets": [
+      "linux-x64",
+      "darwin-arm64"
+    ],
+    "publicNpmNetworkRequired": true,
+    "defaultModelEnabled": false,
+    "credentialsCreated": false,
+    "modelOptInFlag": "--enable-model-requests",
+    "modelKeyEnvironmentNameOnly": "DEEPSEEK_API_KEY"
+  },
+  "nativeCI": {
+    "runId": 37709629136,
+    "url": "https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37709629136",
+    "attempt": 1,
+    "sourceHead": "1f111d7f3f5c54127a7523571c8ebc1a738575b8",
+    "allSixJobs": "PASS",
+    "originalReceipts": 50,
+    "actualChildProcessesPerTarget": 3,
+    "originalBudgetsSeconds": [
+      5,
+      20,
+      20
+    ],
+    "builtinModelCounter": "UNKNOWN_NOT_INSTRUMENTED",
+    "coldModelRequests": 0,
+    "allOriginalChildStopsAndStdioConfirmed": true
+  },
+  "freshInstallationCI": {
+    "runId": 37712266847,
+    "url": "https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37712266847",
+    "attempt": 1,
+    "workflowHead": "edead8fc242bd814c50cd6571207d3a4160f26c9",
+    "workflowTree": "dafc8b416e803a7beffe9e2a761321906d99d14b",
+    "actualProductSourceHead": "1f111d7f3f5c54127a7523571c8ebc1a738575b8",
+    "bothTargets": "PASS",
+    "originalOperationalHelpersUnchanged": 11,
+    "runtimeFileCounts": {
+      "linux-x64": 27970,
+      "darwin-arm64": 28654
+    },
+    "wholeFreshSDKFromPinnedPublicLock": true,
+    "strictTls": true,
+    "npmTimeoutMs": 120000,
+    "lifecycleScriptsExecuted": false,
+    "guiChecksPerTarget": 6,
+    "cliStartsAndStopsPerTarget": 2,
+    "modelsRequested": 0,
+    "localArtifactReviewDoesNotClaimRehashOfAbsentRunnerRuntimeBytes": true,
+    "fullTaskQualification": false
+  },
+  "hostM3": {
+    "bothOsRunId": 37686757086,
+    "sourceFileIndexSHA256": "a948c323757b4fdae2ec6e98c143336ce3afc71e91e635e4a00e1f0ff2fc3f05",
+    "sourceFiles": 4074,
+    "reproducedGeneratedLibraryFiles": 1963,
+    "linuxPayloadFiles": 1025,
+    "recipes": 9,
+    "originalPrivateHostSourceFileDifferencesFromPublicBase": 25,
+    "publicPackages": 30,
+    "retainedNotices": 33,
+    "rights": "UNKNOWN"
+  },
+  "realModelAcceptance": {
+    "platform": "Linux x64 fresh Docker installation004",
+    "actualOfficialProfileReusedPriorRuntime": false,
+    "helperSHA256": "74a5fc6b79be461fd28ce61eccb4903e3eaec38e5ba9b20ad43bd9b74386ed4f",
+    "actualRootExitCode": 0,
+    "newPhysicalProviderRequests": 11,
+    "completePhysicalRequests": 10,
+    "stoppedUnknownPhysicalRequests": 1,
+    "rootQaAggregatePhysicalRequests": 25,
+    "rootQaAggregateMax": 27,
+    "oldUnknownReplayed": false,
+    "allResponsesHTTP200": true,
+    "longPendingMainIdleKnownDuringShortDelegation": true,
+    "bothOriginalWorkResultsAndBothOriginalMainRelaysKnown": true,
+    "sameIdentityArchiveEpoch1To2Restore3": true,
+    "originalGenerationTwoContinuationAndMainRelayKnown": true,
+    "originalGenerationThreeHttp200StillOpenPendingBeforeExactStop": true,
+    "stopOutcome": "UNKNOWN",
+    "stopUnknownHeldSlots": 1,
+    "currentHomeKeylessColdAddedProviderRequests": 0,
+    "currentHomeKeylessColdReadOnly": true,
+    "originalCliStartsAndStops": 2,
+    "browserPageErrors": 0,
+    "longItems": 80,
+    "longUtf8Bytes": 2597,
+    "observedHanRange": [
+      7,
+      11
+    ],
+    "strict8To12HanContentQualityClaimed": false,
+    "shortAcceptanceMarkerDirectlyObserved": false,
+    "originalFullTaskQualification": false,
+    "tenCompletePhysicalRequestUsage": {
+      "uncachedInputTokens": 4148,
+      "cacheReadInputTokens": 8192,
+      "cacheCreationInputTokens": 0,
+      "outputTokens": 1879,
+      "cacheInclusiveTotalTokens": 14219
+    },
+    "request11FinalOutputAndNativeSettlement": "UNKNOWN",
+    "userReportedHistoricalUsageNotSummedIntoRootQa": true
+  },
+  "controlledChildSlotsAcceptance": {
+    "actualExecutionSource": "0a04532f05243265170e6c6d457662a422deadf0",
+    "productCode81ByteModeAndArchiveEquivalentToFinal": true,
+    "sdkCasesPass": 7,
+    "genuineGuiCasesPass": 9,
+    "externalProviderRequests": 0,
+    "sharedWorkSlots": 15,
+    "childDepth": 1,
+    "evidenceNotRelabeledAsNewExecution": true
+  },
+  "limits": {
+    "workResultRelayMaxUtf8Bytes": 4096,
+    "recommendedUtf8Bytes": 3400,
+    "unknownHoldsSlotAndCannotAutoReplay": true,
+    "outerInstallationNodePidSeparatelyInstrumented": false,
+    "outerInstallationNodeStdioSeparatelyInstrumented": false,
+    "localModelDockerKernelLandlockEnforcementClaimed": false,
+    "kernelPhysicalIoHardWallOrAllFutureTaskDurabilityClaimed": false
+  },
+  "rights": {
+    "Bot": "UNKNOWN_NO_FACTUAL_LICENSE_RESPONSE",
+    "privateHost25Modifications": "UNKNOWN_NO_FACTUAL_AUTHORITY_RESPONSE",
+    "nodeAddonSystem012BsdMetadataMitEntryLicenseScope": "UNKNOWN",
+    "newLicenseOrPublicDistributionGrantAdded": false,
+    "status": "NOT_CLEARED"
+  },
+  "preservation": {
+    "mainSHA": "13d1fb15c0dbb59434ae066fb2b5a56e90d8b683",
+    "pr1DraftHead": "fc72db583150015a2a22750d93aff651d34d5924",
+    "pr1Merged": false,
+    "repositoryPrivate": true,
+    "noPublicReleaseOrTagCreated": true,
+    "failedModelCases001002003Preserved": true,
+    "historicalUnknownNeverReplayed": true,
+    "webWorkbenchSynchronized": false
+  },
+  "evidenceReferences": [
+    {
+      "name": "aggregate-verification.json",
+      "sha256": "0cf7d8aef0da61c1fe52979c30ef0ced3c066f37c810be65a09a6dd9f2cc69e3",
+      "bytes": 3874,
+      "scope": "original-native-50-crossbindings",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "aggregate-original-artifact-readback.json",
+      "sha256": "7befc12de05a7925aab85a164d9bbcd1e6581c0ae2d5a962949be766ac065ec2",
+      "bytes": 6989,
+      "scope": "original-first-install-15-ZIP-entries-and-4-PNG-CRCs",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "original-github-run-and-job-readback.json",
+      "sha256": "f631f8b1d30687bd26d3ff4849aed77096ac343c9fb74cd31d8aa25370378461",
+      "bytes": 9381,
+      "scope": "actual-two-OS-private-first-install-run-attempt1",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "official-install-004-binding-inputs.json",
+      "sha256": "c1016d3ed4cb81034f11149831fa254e5dd251efa45cc8c29ba69fc58f10f563",
+      "bytes": 1931,
+      "scope": "actual-fresh-official-installation004-seven-pins",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "official-installation004-root-completion-readback.json",
+      "sha256": "c863fc8c946652bc9847d1a2037860cfed1b74c3b77e5f2de4fc326a13b1b1ac",
+      "bytes": 1629,
+      "scope": "observed-original-installer-completion-with-explicit-outer-process-limit",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "fresh-independent-gui-baseline-004.json",
+      "sha256": "69ff1aa1fe5b66eded337016bf75807632e71db610857bbd3f05f02cd344500f",
+      "bytes": 4760,
+      "scope": "actual-fresh-keyless-GUI-baseline",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "verification.json",
+      "sha256": "144ba79223caad797e9b5e08be4c0bef0bacd76866ea58c62ad8d1950e305f11",
+      "bytes": 62285,
+      "scope": "actual-scoped-real-model-GUI-acceptance",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "provider-observations.jsonl",
+      "sha256": "f07ccc54a489946a638e5b3c33daf6258e55d30084e08d534d2b9c8301b5718a",
+      "bytes": 20950,
+      "scope": "actual-11-provider-events-10-complete-one-UNKNOWN",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "case004-root-model-numeric-readback.json",
+      "sha256": "e90690376d6431d2a7c7c25d55642926a98a220368b40e5a378e7b44a5ef1996",
+      "bytes": 1593,
+      "scope": "model-numeric-scope-UNKNOWN-preserved",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "case004-original-model-execution-factual-c0.json",
+      "sha256": "fb87640619b4daf6bbbeb26de9ebe5d15eeeb6f011e3ae1335a0856c54216912",
+      "bytes": 19180,
+      "scope": "independent-scoped-model-execution-C0",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "case004-full-graphs-before.json",
+      "sha256": "20dfe66b8e82b2831a703d5a6f7b28401e2ca503885161d59daf69dd956960e4",
+      "bytes": 11489818,
+      "scope": "actual-full-four-graphs-before",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "case004-full-graphs-after-baseline.json",
+      "sha256": "602c7737b9793529740fd5a776c574c37f8f62c183d7ba9631d951c797708d49",
+      "bytes": 11489826,
+      "scope": "actual-full-four-graphs-after-baseline",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "case004-full-graphs-after-model.json",
+      "sha256": "888fd016941a289d6402855567d468b29c4bfdd1186a71e41e5218e8989bbf0e",
+      "bytes": 11489823,
+      "scope": "actual-full-four-graphs-after-model",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "final-system-tar-extraction-1f111d7-readback.json",
+      "sha256": "d6b6903f47d26c46a8ea0eac0aff9e620b5ddf23b51fb787fa0a8b5527d9aac9",
+      "bytes": 563348,
+      "scope": "actual-GNU-tar-p-full2369-modes-readback",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "final-private-repository-refs-pr1-no-merge-readback.json",
+      "sha256": "e3a7c37a9d10c5bc4f638dd0ef2ca75f6863dd3912df6c44ff523fec235af4fd",
+      "bytes": 803,
+      "scope": "actual-private-refs-main-and-PR1-preserved",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "current-guide-retained33-notices-public30-source-provenance-semantic-scope-review.json",
+      "sha256": "2f9cac3969084330e640f351e29e512772ecf4a57c6dad0c092c6c5b0a26213c",
+      "bytes": 23709,
+      "scope": "independent-current-guide-notices-source-semantic-audit",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "case004-original11-10complete-cache-inclusive-native-1stopUNKNOWN-cold0-fourgraphs-proof.json",
+      "sha256": "0384589e5b62f0cfb1decc8ccdca48c6bc1e4fdb9771d2f5d01d66c21cf66580",
+      "bytes": 12673,
+      "scope": "independent-model-and-four-graph-audit",
+      "rawHomeOrCredentialsIncluded": false
+    },
+    {
+      "name": "firstCI-edead-original-twoOS15-regular600-ZIP-crossbindings-keyless-GUI6-proof.json",
+      "sha256": "f92f193fbf165b0d3156dc7e07337791d861dd03f3ac55a562eefe452af54916",
+      "bytes": 15933,
+      "scope": "independent-first-install-audit",
+      "rawHomeOrCredentialsIncluded": false
+    }
+  ]
+}
