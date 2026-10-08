@@ -111,6 +111,8 @@ Windows、macOS Intel 及其他 Node 版本尚不在本次支持范围。
 
 macOS 本轮完成 native 和无模型 GUI 验证，真实模型闭环实测属于 Linux。原始记录中的 `fullTaskQualification: false` 保留；这些证据对应[明确的验收范围](docs/releases/private-v1.zh-CN.md)。
 
+默认 main 保留旧产品代码，其离线 CI 仍有 4 项历史回归。第一版安装使用下载页的固定包，源码使用 `v0.1.0-private.1` 标签；详情见[开发说明](docs/development.zh-CN.md)。
+
 ## 使用时记住这三点
 
 1. **UNKNOWN 查询原回执。** 保留原身份与原操作，继续占用工作槽；不自动重试或重放。
