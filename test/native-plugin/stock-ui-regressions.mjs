@@ -100,6 +100,13 @@ export async function runUiRegressions(gui) {
       };
     });
     try {
+      // A preceding list request may still be completing when the interceptor
+      // is installed. Wait for an intercepted response before creating the
+      // target, so an undelayed older response cannot satisfy the assertion.
+      await waitFor(
+        () => gui.page.evaluate(() => window.__slowListCalls > 0),
+        "intercepted slow recipient response",
+      );
       const delayed = await gui.app.ctx.sessionController.create({ workspaceId: workspace.id }, new AbortController().signal);
       await gui.page.getByRole("button", { name: "刷新", exact: true }).click();
       await form.locator(`select[name="origin"] option[value="${delayed.sessionId}"]`).waitFor({ state: "attached", timeout: 6500 });

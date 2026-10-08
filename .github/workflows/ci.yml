@@ -27,12 +27,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: mkdir -p qualification/package && npm pack --pack-destination qualification/package
-      - run: cd qualification/package && sha256sum *.tgz > SHA256SUMS
+      - run: node scripts/verify-distribution.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: native-plugin-package
-          path: qualification/package
+          path: dist
   stock-gui:
     needs: artifact
     timeout-minutes: 20
