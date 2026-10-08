@@ -1,36 +1,61 @@
-# DSH Bot 原生插件
+# DSH Bot · 原生多 Bot 插件
 
-DSH Bot 面向**已经安装并正常使用官方 DSH 的用户**。目标是在 DSH 内创建具名 Bot、延续每个 Bot 的记忆、管理会话和任务，并进行内部群聊、会议和协作。
+在你现有的 **官方 DSH** 中创建有名字、长期记忆和独立职责的 Bot。后台任务继续运行时，Bot 仍能聊天、接受新任务、查询进度和响应停止指令。
 
-**当前状态：原生插件第一版设计待审阅，产品调整及整体验收尚未完成。** 现有私有候选的可用链路依赖单独 profile 和修改过的 Host；它属于历史实验，不能作为“安装到官方原版 DSH 即可使用”的证明。
+[安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot-plugin/releases) · [产品规格](docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
 
-## 第一版的使用方式
+## 第一版包含什么
 
-- 在 DSH 侧栏的 **Bot 工作台**创建、命名和管理多个 Bot。
-- 新建 Bot 会话时，选择**已经创建的 Bot**开始对话。
-- 每个 Bot 有自己的长期记忆，管理自己的会话和任务；新会话自动带入身份、相关记忆和未完成任务，并按需查阅自身历史。
-- Bot 之间默认只读；工作台可限定共享范围，授予只读或会话/任务控制权限，持续有效且可撤销。
-- 长任务在原生工作会话中执行，Bot 同时继续联络、查询、调整、停止并回收结果。
-- 第一版同时包含多 Bot、内部群聊、会议、任务协作，以及统一管理、可恢复归档和每 Bot 独立模型配置。
+| 能力 | 日常使用 |
+| --- | --- |
+| 具名多 Bot | 在「Bot 工作台」创建、命名、改名和暂停 Bot；新建对话时选择已有 Bot。重名时用稳定 ID 区分。 |
+| 各自的长期记忆 | 同一 Bot 的新会话自动带入身份、记忆与未完成任务；细节按需查阅自有会话。其他 Bot 的记忆分别保存。 |
+| 持续聊天与后台工作 | 联络与执行分开；长任务未结束时，仍能回复新话题并运行另一个短任务。每个 Bot 的父工作、一级子工作和未结算未知任务共用 15 槽。 |
+| 共享与持续授权 | 跨 Bot 默认只读；设置接收 Bot、共享范围及只读／控制权限。授权持续有效，可随时撤销。 |
+| 任务闭环 | 登记、开始、查看原生执行、调整、接续、精确停止、投递结果和三态验收；归档后恢复原身份与日志。 |
+| 内部群与会议 | 多 Bot 群聊；同群可同时开不同议题会议，先独立意见，再讨论、协调者决定和实际行动任务。 |
+| 普通会话管理 | 分页查看普通会话及 Bot 会话；停止当前回复、归档和恢复，任务结果也可以投递到普通会话。 |
+| 每 Bot 模型配置 | 从 DSH 已配置的模型中选择；联络和执行可分别配置，全局默认保持原值。 |
 
-## 宿主与安装边界
+## 安装
 
-产品通过官方 DSH 的插件机制安装、配置、启用、禁用和卸载。DSH 负责模型、凭据、Agent、Session、工具、审批、沙箱和日志；插件负责上述 Bot 业务。
+兼容基线为 **官方 `@deepseek-ai/dsh@0.2.0-rc.2`**、Node **22（≥22.19）或 24 及以上**，验证平台为 Linux 与 macOS。官方插件安装命令需要 `pnpm`。
 
-插件安装不修改 DSH 本体，不分发另一套 Host/SDK，不要求启动独立应用。正式安装命令和下载包会在官方原版 DSH 的完整安装及 GUI 验收通过后发布。
+1. 从 [Releases](https://github.com/86cloudyun-afk/dsh-bot-plugin/releases) 下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。
+2. 将插件安装到你日常使用的 DSH profile。以 `web` 为例：
 
-## 设计与进度
+```bash
+dsh plugin --profile web add ./dsh-bot-1.0.0.tgz --ignore-scripts --strict-peer-dependencies
+dsh web
+```
 
-规格和后续调整位于[原生插件调整分支](https://github.com/86cloudyun-afk/dsh-bot/tree/goal/native-dsh-plugin-v1-20261008)。默认分支目前保留历史程序代码，本轮更新仅更正产品说明。
+3. 在原有 DSH 侧栏打开 **Bot 工作台**，创建 Bot，然后点击 **新建 Bot 会话**，选择已有 Bot 开始对话。
 
-请先阅读[中文原生插件第一版设计](https://github.com/86cloudyun-afk/dsh-bot/blob/e23a45b0506e0cf9a9aa6dbefd96b045882f82f3/docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)。它包含已确认需求、模块与持久状态、日常流程、共享权限、群与会议、旧源码处理和 **P01–P21 整体验收**。
+完整的依赖检查、首次安装、升级和卸载步骤见 [安装说明](docs/install.zh-CN.md)。版本是否正式交付，以对应 Release 的验收报告为准。
 
-后续按以下顺序推进：官方插件接入及基础合同 → Bot/记忆/会话 → 任务与持续联络 → 群聊/会议/协作 → 两平台安装、GUI、回归与分发审计。阶段完成不代替正式第一版交付。
+## 几个使用例子
 
-## 历史资料
+- 「把这项工作放到后台。现在我们继续聊另一个问题。」
+- 「查阅你自己的其他会话，告诉我还有哪些任务没完成。」
+- 「让资料 Bot 只读查看进展；需要控制任务时，我会在工作台授权。」
+- 「开一场会议，各自先提出意见，再讨论并把决定登记成行动任务。」
 
-- [v0.2.1 历史需求提取](https://github.com/86cloudyun-afk/dsh-bot/blob/e23a45b0506e0cf9a9aa6dbefd96b045882f82f3/docs/spec-v0.2.1.md)：不等于 Library 后续版本的完整正文；本轮确认的产品边界优先。
-- [历史 Host 能力核对](https://github.com/86cloudyun-afk/dsh-bot/blob/e23a45b0506e0cf9a9aa6dbefd96b045882f82f3/docs/host-capabilities.md)和[历史类型兼容说明](https://github.com/86cloudyun-afk/dsh-bot/blob/e23a45b0506e0cf9a9aa6dbefd96b045882f82f3/docs/types-and-compatibility.md)：需要区分官方原版、私有 SDK、静态依据和实际验证。
-- [历史候选 Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v0.1.0-private.1)：保留资产及限定证据，已由新的原生插件路线取代。
+工作台提供相同操作的可视入口。停止被接受后，界面会继续等待真实资源结算；结果已返回与验收通过分别记录。无法确认的请求保留为“未知”，使用原始操作查回。
 
-历史独立安装脚本、loopback review UI 和私有 native 测试不能作为新版插件的启动教程或通过记录。包元数据目前仍为 `0.1.0-alpha.1 / private`；新设计不是已发布产品。仓库保持当前访问范围，PR #1 保持未合并。
+## 与 DSH 的关系
+
+插件复用 DSH 的模型、凭据、工具、审批、会话、日志和存储。安装包只包含插件代码和中文说明，不携带 DSH／Host／SDK，也不要求改写 DSH 本体或另建应用。
+
+正式版本以同一不可变包完成两平台安装与 GUI 检查，另外保留真实模型和多轮独立复审证据。受控模型、真实模型和资源停止证据在验收报告中分别注明。
+
+**此前独立软件版已完全作废。** 旧 Host 装配、owner 启动器、专用 Home/profile、独立网页和旧安装器退出运行及分发入口；本仓库只交付原生插件。见 [作废说明](docs/history/standalone-void.md)。
+
+## 开发与许可
+
+```bash
+npm ci --ignore-scripts
+npm test
+npm run check
+```
+
+源代码采用 [MIT License](LICENSE)。DSH 及其依赖由官方安装管理，适用各自的许可；本插件不重新分发这些包。
