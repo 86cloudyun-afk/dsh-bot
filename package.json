@@ -1,10 +1,10 @@
 {
   "name": "dsh-bot",
-  "version": "1.0.0-alpha.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "./src/native/plugin.mjs",
-  "description": "官方 DSH 原生多 Bot、记忆、任务与群会议插件（开发中）",
+  "description": "官方 DSH 原生多 Bot、独立记忆、后台任务与内部群会议插件",
   "engines": {
     "node": "^22.19.0 || >=24"
   },
@@ -76,10 +76,27 @@
     "cordis.patch.yml",
     "README.md",
     "docs/install.zh-CN.md",
+    "docs/guide.zh-CN.md",
     "docs/history/standalone-void.md"
   ],
   "devDependencies": {
     "@deepseek-ai/dsh": "0.2.0-rc.2",
     "playwright-core": "1.63.0"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/86cloudyun-afk/dsh-bot-plugin.git"
+  },
+  "homepage": "https://github.com/86cloudyun-afk/dsh-bot-plugin",
+  "bugs": {
+    "url": "https://github.com/86cloudyun-afk/dsh-bot-plugin/issues"
+  },
+  "keywords": [
+    "dsh",
+    "plugin",
+    "bot",
+    "multi-agent",
+    "memory"
+  ]
 }

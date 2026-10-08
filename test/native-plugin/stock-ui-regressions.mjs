@@ -84,5 +84,30 @@ export async function runUiRegressions(gui) {
     await form.locator(`select[name="origin"] option[value="${ordinary.sessionId}"]`).waitFor({ state: "attached" });
     assert.equal(await form.getByLabel("标题", { exact: true }).inputValue(), "UNSAVED_UI_TASK");
     gui.check("refreshAddsOrdinaryResultRecipientsWithoutClearingTaskDraft", true);
+    await gui.page.evaluate(() => {
+      const original = window.fetch;
+      window.__slowListOriginalFetch = original;
+      window.__slowListCalls = 0;
+      window.fetch = async function(input, init) {
+        let request;
+        try { request = typeof init?.body === "string" ? JSON.parse(init.body) : null; } catch {}
+        const response = await original.call(this, input, init);
+        if (request?.payload?.action === "session.list") {
+          window.__slowListCalls++;
+          await new Promise(resolve => setTimeout(resolve, 1700));
+        }
+        return response;
+      };
+    });
+    try {
+      const delayed = await gui.app.ctx.sessionController.create({ workspaceId: workspace.id }, new AbortController().signal);
+      await gui.page.getByRole("button", { name: "刷新", exact: true }).click();
+      await form.locator(`select[name="origin"] option[value="${delayed.sessionId}"]`).waitFor({ state: "attached", timeout: 6500 });
+      assert.ok(await gui.page.evaluate(() => window.__slowListCalls) > 0);
+      assert.equal(await form.getByLabel("标题", { exact: true }).inputValue(), "UNSAVED_UI_TASK");
+      gui.check("slowRecipientResponsesSurviveAutomaticRefresh", true);
+    } finally {
+      await gui.page.evaluate(() => { window.fetch = window.__slowListOriginalFetch; });
+    }
   } finally { await other.close(); }
 }

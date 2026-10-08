@@ -5,6 +5,7 @@ window.__ModuleLoader__.load({
       createElement: h,
       useState,
       useEffect,
+      useRef,
       useSyncExternalStore,
     } = require("react");
     const translations = {
@@ -588,28 +589,45 @@ window.__ModuleLoader__.load({
         }
         function TasksPane() {
           const view = useView();
-          const [recipients, setRecipients] = useState([]);
+          const [recipients, setRecipients] = useState([]),
+            reloadRecipients = useRef(null);
           useEffect(() => {
-            let active = true;
-            (async () => {
-              const rows = [];
-              let cursor;
-              do {
-                const page = await rpc("command", {
-                  action: "session.list",
-                  input: { limit: 500, ...(cursor ? { cursor } : {}) },
-                });
-                rows.push(...page.items);
-                cursor = page.nextCursor;
-              } while (cursor);
-              if (active) setRecipients(rows);
-            })().catch((error) => {
-              if (active) publish({ error: error.message });
-            });
+            let active = true, running, requested = false;
+            const load = () => {
+              requested = true;
+              if (running) return;
+              running = (async () => {
+                while (active && requested) {
+                  requested = false;
+                  try {
+                    const rows = [];
+                    let cursor;
+                    do {
+                      const page = await rpc("command", {
+                        action: "session.list",
+                        input: { limit: 500, ...(cursor ? { cursor } : {}) },
+                      });
+                      rows.push(...page.items);
+                      cursor = page.nextCursor;
+                    } while (active && cursor);
+                    if (active) setRecipients(rows);
+                  } catch (error) {
+                    if (active) publish({ error: error.message });
+                  }
+                }
+              })().finally(() => {
+                running = undefined;
+                if (active && requested) load();
+              });
+            };
+            reloadRecipients.current = load;
+            load();
             return () => {
               active = false;
+              reloadRecipients.current = null;
             };
-          }, [view.snapshot]);
+          }, []);
+          useEffect(() => { reloadRecipients.current?.(); }, [view.snapshot]);
           return h(
             "div",
             { className: "grid" },
