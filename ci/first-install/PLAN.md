@@ -1,12 +1,15 @@
 # Private first-install CI implementation plan
 
-> Implementation is confined to this isolated worktree. Root reviews the exact
-> source and external input pins before any SDK, Chromium or native GUI run.
+> The implementation steps below record the original af3f246 work. They are
+> retained as historical context. Current concrete input source is `1f111d7f3f5c54127a7523571c8ebc1a738575b8`
+> (tree `49ca850d8837da106996e9717fe30dfde5ae3039`, fresh build `0f63cb5c-7951-4cfc-bf95-28b21c7fac33`).
+> Root reviews this input-only replacement before committing or pushing it;
+> qualification requires the new candidate's own original execution receipts.
 
-**Goal:** Qualify the new af3f246 final thin bundle on genuine Linux x64 and
+**Current goal:** Qualify the 1f111d7 final thin bundle on genuine Linux x64 and
 macOS arm64 using a new installation and the documented viewing GUI.
 
-**Architecture:** A Python extractor first checks externally pinned transport
+**Unchanged architecture:** A Python extractor first checks externally pinned transport
 and descriptor bytes and restores the descriptor's exact file modes. Small
 Node tools install public browser prerequisites, invoke the captured reviewed
 thin installer, independently reread the complete installed graph, and drive
@@ -17,6 +20,12 @@ lock; official npm, ignore-scripts and strict TLS; npm bounded at 120 seconds;
 private push branch only, contents read, no credentials or provider requests;
 fresh private Home/cache/output; failed outputs retained; upload only typed
 redacted receipts and screenshots taken after the auth URL is clean.
+
+The eleven operational first-install helpers/workflow remain byte-identical to
+84de1f31. Only INPUT_PINS.json, the transport archive, README.md and the two
+historical/current provenance documents are prepared for replacement. The
+original implementation steps are retained below; this update does not rerun
+or relabel their earlier test evidence.
 
 1. Add ordinary pure Python transport fixtures. Verify a deterministic sorted
    regular-only tar retains the descriptor's original executable modes, rejects
