@@ -348,7 +348,9 @@ window.__ModuleLoader__.load({
           const contact = bot
             ? JSON.stringify({provider: bot.contact.provider, model: bot.contact.model})
             : selected;
-          const separateExecution = bot && (bot.execution.provider !== bot.contact.provider || bot.execution.model !== bot.contact.model);
+          const separateExecution = bot && bot.executionMode !== "inherit";
+          const sameRoute = (a, b) => a?.provider === b?.provider && a?.model === b?.model;
+          const newDefaults = sameRoute(JSON.parse(contact || "{}"), preferred) ? preferred : undefined;
           const modelInput = (selection, effort, tokens, previous) => ({
             ...selection,
             ...(effort ? {reasoningEffort: effort} : {}),
@@ -369,11 +371,17 @@ window.__ModuleLoader__.load({
               bot ? "保存配置" : "创建 Bot",
               async data => {
                 const chosen = JSON.parse(data.get("contact"));
+                const inheritsExecution = !data.get("execution");
+                const contactConfiguration = modelInput(chosen, data.get("contactEffort"), data.get("contactMaxTokens"),
+                  bot?.contact ?? (sameRoute(chosen, preferred) ? preferred : undefined));
                 const configuration = {
                   name: data.get("name"), role: data.get("role"),
-                  contact: modelInput(chosen, data.get("contactEffort"), data.get("contactMaxTokens"), bot?.contact),
+                  contact: contactConfiguration,
                   execution: modelInput(data.get("execution") ? JSON.parse(data.get("execution")) : chosen,
-                    data.get("executionEffort"), data.get("executionMaxTokens"), bot?.execution),
+                    data.get("executionEffort") || (inheritsExecution ? contactConfiguration.reasoningEffort : ""),
+                    data.get("executionMaxTokens") || (inheritsExecution ? contactConfiguration.maxTokens : ""),
+                    bot?.execution ?? (inheritsExecution ? contactConfiguration : undefined)),
+                  executionMode: inheritsExecution ? "inherit" : "explicit",
                   presetId: data.get("preset") || null,
                   ...(data.get("cwd")?.trim() ? {cwd: data.get("cwd").trim()} : {}),
                 };
@@ -389,7 +397,12 @@ window.__ModuleLoader__.load({
               },
               field("名称", "name", {value: bot?.name, maxLength: 100}),
               field("身份与职责", "role", {value: bot?.role, textarea: true, required: false, maxLength: 8192}),
-              field("模型", "contact", {value: contact, options: models}),
+              field("模型", "contact", {value: contact, options: models, onChange: event => {
+                const controls = event.currentTarget.form.elements;
+                const chosen = JSON.parse(event.currentTarget.value);
+                controls.contactEffort.value = !bot && sameRoute(chosen, preferred) ? preferred?.reasoningEffort ?? "" : "";
+                if (!controls.execution.value) controls.executionEffort.value = "";
+              }}),
               advanced("更多设置",
                 field("工作目录（DSH 所在机器）", "cwd", {
                   value: bot?.cwd ?? state.catalog.defaultCwd ?? "",
@@ -398,13 +411,17 @@ window.__ModuleLoader__.load({
                 field("执行模型", "execution", {
                   value: separateExecution ? JSON.stringify({provider: bot.execution.provider, model: bot.execution.model}) : "",
                   options: [{value: "", label: "与聊天模型相同"}, ...models], required: false,
+                  onChange: event => {
+                    const chosen = event.currentTarget.value ? JSON.parse(event.currentTarget.value) : null;
+                    if (!sameRoute(chosen, bot?.execution)) event.currentTarget.form.elements.executionEffort.value = "";
+                  },
                 }),
                 field("联络思考程度（留空使用当前模型默认）", "contactEffort", {
-                  value: bot?.contact.reasoningEffort ?? preferred?.reasoningEffort ?? "", required: false,
+                  value: (bot ? bot.contact.reasoningEffort : newDefaults?.reasoningEffort) ?? "", required: false,
                 }),
                 field("联络每轮回复上限（tokens）", "contactMaxTokens", {
                   type: "number", min: 1, max: 262144, step: 1,
-                  value: bot?.contact.maxTokens ?? "", required: false, placeholder: "使用模型默认值",
+                  value: (bot ? bot.contact.maxTokens : newDefaults?.maxTokens) ?? "", required: false, placeholder: "使用模型默认值",
                 }),
                 field("执行思考程度", "executionEffort", {value: bot?.execution.reasoningEffort ?? "", required: false}),
                 field("执行每轮回复上限（tokens）", "executionMaxTokens", {
