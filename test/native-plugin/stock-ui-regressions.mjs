@@ -6,7 +6,12 @@ import { waitFor } from "./stock-gui-runtime.mjs";
 export async function runUiRegressions(gui) {
   const other = await gui.context.newPage();
   other.on("pageerror", error => gui.errors.push({ stage: "ui-regressions", message: error.message }));
-  await other.goto(gui.url, { waitUntil: "networkidle" });
+  await other.goto(gui.url, { waitUntil: "domcontentloaded" });
+  await other.getByRole("button", {name:"Bot 工作台", exact:true}).waitFor();
+  if (gui.report.activePollingProbe) {
+    await waitFor(() => other.evaluate(() => window.__dshBotReadinessResponses >= 3), "successful live read-only RPCs");
+    gui.report.liveReadOnlyResponsesAtReadiness = await other.evaluate(() => window.__dshBotReadinessResponses);
+  }
   const command = (action, input) => other.evaluate(async ({ action, input }) => {
     const response = await fetch("/api/dsh.bot/command", {
       method: "POST", headers: { "content-type": "application/json" },
