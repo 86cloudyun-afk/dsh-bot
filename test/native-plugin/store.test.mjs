@@ -4,6 +4,7 @@ import {mkdtemp, rm, readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {JsonStorageBackend} from '@deepseek-ai/dsh-storage-json';
+import {canonical} from '../../src/native/store.mjs';
 
 async function fixture(t) {
   const folder = await mkdtemp(join(tmpdir(), 'bot-state-'));
@@ -37,9 +38,21 @@ test('failed write retains published state and fences further writes', async t =
   const facet = {async open(descriptor) {const unit = await f.backend.kv.open(descriptor); return {...unit, loadAll: unit.loadAll.bind(unit), close: unit.close.bind(unit), putRecord: async () => {throw Error('disk unavailable');}};}};
   const broken = await f.Store.open(facet);
   await assert.rejects(broken.transact(command('disk-fail'), draft => {draft.bots.a = {name: 'A'}; return 'a';}), /disk unavailable/);
-  assert.equal(broken.read().revision, 0); assert.equal(Object.keys(broken.read().bots).length, 0);
+  assert.throws(()=>broken.read(),{code:'recovery_required'});
+  assert.equal(broken.read({diagnostic:true}).revision, 0); assert.equal(Object.keys(broken.read({diagnostic:true}).bots).length, 0);
   await assert.rejects(broken.transact(command('next'), () => null), {code: 'recovery_required'});
   await broken.close();
+});
+
+test('original operation ids may equal Object prototype property names',async t=>{
+  const {store}=await fixture(t);
+  assert.equal(await store.transact(command('toString'),()=> 'first'),'first');
+  assert.equal(await store.transact(command('toString'),()=> assert.fail('replayed')),'first');
+});
+test('non-JSON array holes and extra fields cannot lose data in the operation fingerprint',()=>{
+  const sparse=Object.assign(Array(1),{extra:'lost'}),symbol=[];symbol[Symbol('field')]='lost';
+  const accessor=[];Object.defineProperty(accessor,'0',{get:()=> 'lost',enumerable:true});
+  for(const value of [sparse,symbol,accessor])assert.throws(()=>canonical(value),{code:'invalid_json'});
 });
 test('restart retains identities and committed operation results', async t => {
   const f = await fixture(t);

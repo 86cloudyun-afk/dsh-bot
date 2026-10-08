@@ -1,4 +1,4 @@
-import {copy, plain, requireCondition, validId} from './store.mjs';
+import {canonical, copy, plain, requireCondition, validId} from './store.mjs';
 
 const tables = {bot:'bots',session:'sessions',memory:'memories',task:'tasks',group:'groups',meeting:'meetings'};
 const scopeKeys = {session:'sessions',memory:'memories',task:'tasks'};
@@ -13,7 +13,7 @@ function includes(scope, resource) {const list = scope?.[scopeKeys[resource.kind
 
 /** Caller tokens are process-local; neither labels nor serialized actors count. */
 export class PermissionPolicy {
-  #store; #agents; #operator; #actors = new WeakSet();
+  #store; #agents; #operator; #actors = new WeakSet(); #reads = new WeakMap();
   constructor(store,{agents,operatorPeer} = {}) {this.#store=store;this.#agents=agents;this.#operator=operatorPeer;}
   fromPeer(peer) {
     requireCondition(peer && peer === this.#operator,'access_denied');
@@ -24,8 +24,16 @@ export class PermissionPolicy {
     requireCondition(agent && this.#agents?.get(agent.id) === agent && binding?.botId,'access_denied');
     const actor=Object.freeze({kind:'bot',botId:binding.botId,sessionId:agent.id,agent});this.#actors.add(actor);return actor;
   }
-  actorKey(actor) {this.#checkActor(actor,this.#store.read());return actor.kind==='human'?'human':`bot:${actor.botId}:${actor.sessionId}`;}
+  actorKey(actor) {this.#checkActor(actor,this.#store.read());return actor.kind==='human'?'human':canonical(['bot',actor.botId,actor.sessionId]);}
   command(actor,command) {return {...copy(command),callerKey:this.actorKey(actor)};}
+  noteRead(actor,reference) {
+    this.require(actor,`${reference.kind}.read`,reference);
+    if(actor.kind==='human')return;
+    const state=this.#store.read(),resource=this.resolve(reference,state),refs=this.#reads.get(actor.agent)??new Map();
+    for(const ref of [...(resource.botId!==actor.botId?[reference]:[]),...(resource.record?.origins??[])])refs.set(canonical(ref),copy(ref));
+    this.#reads.set(actor.agent,refs);
+  }
+  readDependencies(actor) {this.#checkActor(actor,this.#store.read());return actor.kind==='bot'?[...(this.#reads.get(actor.agent)?.values()??[])].map(copy):[];}
   #checkActor(actor,state) {
     requireCondition(actor && this.#actors.has(actor),'access_denied');
     if(actor.kind==='bot')requireCondition(this.#agents?.get(actor.sessionId)===actor.agent && state.sessions[actor.sessionId]?.botId===actor.botId,'access_denied');
@@ -35,16 +43,20 @@ export class PermissionPolicy {
     const record=state[tables[resource.kind]][resource.id];
     return {kind:resource.kind,id:resource.id,record,botId:resource.kind==='bot'?record?.botId:record?.botId ?? record?.ownerBotId ?? null};
   }
-  #visible(actor,resource,state) {
+  #visible(actor,resource,state,seen=new Set()) {
     if(actor.kind==='human')return true;
     const record=resource.record, binding=state.sessions[actor.sessionId];
-    const source=record?.lineage ?? record?.source;
-    const sources=Array.isArray(source)?source:[source];
+    for(const origin of record?.origins??[]) {
+      if(!this.#readAllowed(actor,origin,state,seen))return false;
+    }
+    const sources=[record?.lineage,...(Array.isArray(record?.source)?record.source:[record?.source])];
+    for(const source of [...sources].filter(Boolean))if(source.sessionId && state.sessions[source.sessionId]?.lineage)sources.push(state.sessions[source.sessionId].lineage);
     for(const lineage of sources.filter(Boolean)) {
       if(!lineage.meetingId || lineage.phase!=='independent')continue;
       const meeting=state.meetings[lineage.meetingId];
       if(!meeting || meeting.epoch!==lineage.epoch)return false;
-      if(meeting.phase==='independent') {
+      if(!['discussion','decision','complete'].includes(meeting.phase)) {
+        if(meeting.phase!=='independent')return false;
         const ownChannel=binding?.lineage?.meetingId===lineage.meetingId && binding.lineage.epoch===lineage.epoch &&
           binding.lineage.phase==='independent' && resource.botId===actor.botId &&
           (resource.kind==='session'?resource.id===actor.sessionId:lineage.sessionId===actor.sessionId);
@@ -60,20 +72,24 @@ export class PermissionPolicy {
     return share.enabled===true && share.receivers?.some(id=>id==='*'||id===actor.botId) && includes(share.scope,resource);
   }
   #grant(actor,resource,state,level) {
-    return Object.values(state.grants).some(grant=>grant.active && grant.recipientBotId===actor.botId && grant.ownerBotId===resource.botId &&
+    return Object.values(state.grants).some(grant=>grant.active===true && grant.recipientBotId===actor.botId && grant.ownerBotId===resource.botId &&
       (level==='read'||grant.level==='control') && includes(grant.scope,resource));
   }
   canRead(actor,reference,_context,state=this.#store.read()) {
     try {
-      this.#checkActor(actor,state);const resource=this.resolve(reference,state);
-      if(!this.#visible(actor,resource,state))return false;
-      if(actor.kind==='human')return true;
-      if(resource.kind==='group'||resource.kind==='meeting')return !!resource.record;
-      if(resource.kind==='bot')return !!resource.record;
-      if(resource.botId===actor.botId)return true;
-      if(!resource.botId)return this.#grant(actor,resource,state,'read');
-      return this.#shareAllowed(actor,resource,state);
+      this.#checkActor(actor,state);return this.#readAllowed(actor,reference,state,new Set());
     }catch{return false;}
+  }
+  #readAllowed(actor,reference,state,seen) {
+    const key=canonical(reference);if(seen.has(key)||seen.size>=32)return false;
+    const next=new Set(seen);next.add(key);
+    const resource=this.resolve(reference,state);
+    if(!this.#visible(actor,resource,state,next))return false;
+    if(actor.kind==='human')return true;
+    if(resource.kind==='group'||resource.kind==='meeting'||resource.kind==='bot')return !!resource.record;
+    if(resource.botId===actor.botId)return true;
+    if(!resource.botId)return this.#grant(actor,resource,state,'read');
+    return this.#shareAllowed(actor,resource,state);
   }
   require(actor,action,reference,state=this.#store.read()) {
     this.#checkActor(actor,state);
@@ -89,6 +105,7 @@ export class PermissionPolicy {
     requireCondition((!resource.botId || this.#shareAllowed(actor,resource,state)) && this.#grant(actor,resource,state,'control'),'access_denied');
   }
   async authorizeShare(actor,command) {
+    command=copy(command);
     this.require(actor,command.action,{kind:'bot',id:command.input.botId??command.input.ownerBotId??'ordinary'});
     requireCondition(actor.kind==='human','access_denied');
     return this.#store.transact(this.command(actor,command),draft=>{

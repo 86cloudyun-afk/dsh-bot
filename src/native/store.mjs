@@ -13,8 +13,13 @@ export function canonical(value, ancestors = new Set()) {
   requireCondition(!ancestors.has(value), 'invalid_json'); ancestors.add(value);
   let result;
   if (Array.isArray(value)) {
-    requireCondition(Object.keys(value).length === value.length, 'invalid_json');
-    result = `[${value.map(item => canonical(item, ancestors)).join(',')}]`;
+    requireCondition(Reflect.ownKeys(value).length === value.length + 1, 'invalid_json');
+    const values=[];
+    for(let index=0;index<value.length;index++) {
+      const descriptor=Object.getOwnPropertyDescriptor(value,String(index));
+      requireCondition(descriptor && 'value' in descriptor,'invalid_json');values.push(canonical(descriptor.value,ancestors));
+    }
+    result = `[${values.join(',')}]`;
   } else {
     const keys = Reflect.ownKeys(value); requireCondition(keys.every(key => typeof key === 'string'), 'invalid_json');
     result = `{${keys.sort().map(key => {const d = Object.getOwnPropertyDescriptor(value, key); requireCondition(d && 'value' in d, 'invalid_json'); return `${JSON.stringify(key)}:${canonical(d.value, ancestors)}`;}).join(',')}}`;
@@ -31,6 +36,13 @@ function validate(state) {
   requireCondition(validId(state.storeId) && Number.isSafeInteger(state.revision) && state.revision >= 0, 'malformed_state');
   for (const key of maps) requireCondition(plain(state[key]) && Object.keys(state[key]).every(validId), 'malformed_state');
   for (const op of Object.values(state.operations)) requireCondition(plain(op) && typeof op.fingerprint === 'string' && Object.hasOwn(op, 'result'), 'malformed_state');
+  const scopeValid=scope=>plain(scope) && Object.keys(scope).every(key=>['sessions','tasks','memories'].includes(key)) &&
+    Object.values(scope).every(ids=>Array.isArray(ids) && ids.every(id=>id==='*'||validId(id)));
+  for(const grant of Object.values(state.grants))requireCondition(plain(grant) && typeof grant.active==='boolean' && ['read','control'].includes(grant.level) &&
+    validId(grant.recipientBotId) && (grant.ownerBotId===null||validId(grant.ownerBotId)) && scopeValid(grant.scope) &&
+    Number.isSafeInteger(grant.version) && grant.version>=1 && grant.grantedBy==='human','malformed_state');
+  for(const bot of Object.values(state.bots))if(Object.hasOwn(bot,'share'))requireCondition(plain(bot.share) && typeof bot.share.enabled==='boolean' &&
+    Array.isArray(bot.share.receivers) && bot.share.receivers.every(id=>id==='*'||validId(id)) && scopeValid(bot.share.scope),'malformed_state');
   canonical(state); return state;
 }
 export class PluginStore {
@@ -48,14 +60,14 @@ export class PluginStore {
       return new PluginStore(unit, state);
     } catch (error) {await unit.close(); throw error;}
   }
-  read() {return copy(this.#state);}
+  read({diagnostic=false}={}) {requireCondition(!this.#broken||diagnostic,'recovery_required');return copy(this.#state);}
   subscribe(listener) {this.#listeners.add(listener); return () => this.#listeners.delete(listener);}
   transact(command, mutate) {
     if (this.#closed) return Promise.reject(Object.assign(Error('插件已关闭'), {code: 'disposed'}));
     const run = async () => {
       requireCondition(!this.#broken, 'recovery_required');
       requireCondition(plain(command) && validId(command.operationId) && typeof command.action === 'string', 'invalid_command');
-      const fingerprint = digest(command), previous = this.#state.operations[command.operationId];
+      const fingerprint = digest(command), previous = Object.hasOwn(this.#state.operations,command.operationId)?this.#state.operations[command.operationId]:undefined;
       if (previous) {requireCondition(previous.fingerprint === fingerprint, 'operation_conflict'); return copy(previous.result);}
       if (command.expectedRevision !== undefined) requireCondition(command.expectedRevision === this.#state.revision, 'revision_conflict');
       requireCondition(mutate.constructor.name !== 'AsyncFunction', 'async_transaction');
