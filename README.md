@@ -1,31 +1,34 @@
-# DSH Bot 候选源码
+# DSH Bot 原生插件
 
-当前包元数据仍为 **0.1.0-alpha.1 / private**。`v0.1.0`、`v0.1.0-rc.1` 是拟议发布名称，尚不表示已发布版本或完整原生验收。此树包含持久控制账本、实际 DSH Loader 客户端与受限 owner 适配源码；DSH 自身负责 Agent、Session、模型与工具执行。
+DSH Bot 面向**已经安装并正常使用官方 DSH 的用户**。目标是在 DSH 内创建具名 Bot、延续每个 Bot 的记忆、管理会话和任务，并进行内部群聊、会议和协作。
 
-设计来源需区分：仓库保留的 [v0.2.1 历史提取](docs/spec-v0.2.1.md) 不等于当前 Library version 2 的 v0.2.2 正文，也不证明任一完整设计已经实现。当前交付与限制以源码、限定验收和[候选安装说明](docs/install-candidate.zh-CN.md)为准。
+**当前状态：原生插件第一版设计待审阅，产品调整及整体验收尚未完成。** 现有私有候选的可用链路依赖单独 profile 和修改过的 Host；它属于历史实验，不能作为“安装到官方原版 DSH 即可使用”的证明。
 
-## 离线控制检查
+## 第一版的使用方式
 
-Node 要求 `^22.19.0 || >=24`；已执行的本地候选检查使用 Node 24.19.0。独立 SQLite 控制层使用 Node 内置 `node:sqlite`，不需要外部运行时包。这不适用于 DSH plugin/client/native 入口。
+- 在 DSH 侧栏的 **Bot 工作台**创建、命名和管理多个 Bot。
+- 新建 Bot 会话时，选择**已经创建的 Bot**开始对话。
+- 每个 Bot 有自己的长期记忆，管理自己的会话和任务；新会话自动带入身份、相关记忆和未完成任务，并按需查阅自身历史。
+- Bot 之间默认只读；工作台可限定共享范围，授予只读或会话/任务控制权限，持续有效且可撤销。
+- 长任务在原生工作会话中执行，Bot 同时继续联络、查询、调整、停止并回收结果。
+- 第一版同时包含多 Bot、内部群聊、会议、任务协作，以及统一管理、可恢复归档和每 Bot 独立模型配置。
 
-在调用者自己的源码目录中执行已有脚本：
+## 宿主与安装边界
 
-```sh
-cd "$PRODUCT_SOURCE_DIRECTORY"
-node scripts/test.mjs test/adapter.test.mjs test/autonomy.test.mjs test/collaboration.test.mjs test/control.test.mjs test/recovery.test.mjs test/safety.test.mjs test/ui.test.mjs test/legacy-meeting.test.mjs test/ui-ledger-identity.test.mjs
-npm run check
-```
+产品通过官方 DSH 的插件机制安装、配置、启用、禁用和卸载。DSH 负责模型、凭据、Agent、Session、工具、审批、沙箱和日志；插件负责上述 Bot 业务。
 
-文件选择必须与实际源码核对；[安装说明](docs/install-candidate.zh-CN.md)列出检查范围与依赖缺口。默认 `npm test` 会选择全部 `test/*.test.mjs`，当前部分历史原生验收数据未随候选分发，因此不得把限定子集 GREEN 宣称为默认全集 GREEN。
+插件安装不修改 DSH 本体，不分发另一套 Host/SDK，不要求启动独立应用。正式安装命令和下载包会在官方原版 DSH 的完整安装及 GUI 验收通过后发布。
 
-`npm start` 是旧 loopback review UI：会创建本地 SQLite 与 review token，不能作为真实 DSH Loader GUI 启动步骤。本阶段没有运行它。当前受限客户端具备选定 Bot 主目标提交、工作列表/详情/结果、原操作查询续接与 accepted-only stop；受信任 owner 安装、真实浏览器认证、完整功能验收仍须分别完成。
+## 设计与进度
 
-## 权限、恢复与验收边界
+请先阅读[中文原生插件第一版设计](docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)。它包含已确认需求、模块与持久状态、日常流程、共享权限、群与会议、旧源码处理和 **P01–P21 整体验收**。
 
-公开 `/dsh-bot` snapshot 是只读；`/dsh-bot-owner` 由私有可信 owner 绑定窄动作。浏览器不能提供 peer、caller、Host、epoch、provider 或能力。账本实例、operationId、nonce 与原始消息身份必须一致；UNKNOWN 先查询原身份，不换 ID 重发。
+后续按以下顺序推进：官方插件接入及基础合同 → Bot/记忆/会话 → 任务与持续联络 → 群聊/会议/协作 → 两平台安装、GUI、回归与分发审计。阶段完成不代替正式第一版交付。
 
-15 个工作槽与一级子工作约束有离线覆盖，没有15模型并发压力证据。请求停止 accepted 不代表精确原生停止或结算，UNKNOWN 的 reservation 继续保留。归档/恢复不能恢复旧 epoch 的提交权限。旧 schema1 会议任一参与者缺少可信正整数 botEpoch 时，在 submit/reveal 写入前返回 migration_required；无自动回填或真实账本迁移。
+## 历史资料
 
-历史 [UI fixture 独立复审脱敏副本](docs/reviews/ui-fixture-alignment-20261006.md)仅绑定9a8915的190文件来源，不是当前全产品 PASS。[能力矩阵](docs/host-capabilities.md)、[工作会话](docs/work-sessions.md)、[公开类型兼容](docs/types-and-compatibility.md)与[owner入口](docs/owner-entry.md)继续区分静态、离线合成、实际宿主和真实 provider 证据。
+- [v0.2.1 历史需求提取](docs/spec-v0.2.1.md)：不等于 Library 后续版本的完整正文；本轮确认的产品边界优先。
+- [历史 Host 能力核对](docs/host-capabilities.md)和[历史类型兼容说明](docs/types-and-compatibility.md)：需要区分官方原版、私有 SDK、静态依据和实际验证。
+- [历史候选 Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v0.1.0-private.1)：保留资产及限定证据，已由新的原生插件路线取代。
 
-完整发布仍需要可公开复现的固定 Host 依赖/构建、许可证闭包，以及独立新环境的真实 GUI→Bot→自主工作→结果、在工作执行中有意义主回复/续接、精确停止结算、非取消归档恢复、重启身份与历史一致验收。现有真实请求中 raw_usage UNKNOWN 未重放，也没有因此证明 A/B 并发或完整 producer 闭环。
+历史独立安装脚本、loopback review UI 和私有 native 测试不能作为新版插件的启动教程或通过记录。包元数据目前仍为 `0.1.0-alpha.1 / private`；新设计不是已发布产品。仓库保持当前访问范围，PR #1 保持未合并。
