@@ -19,6 +19,7 @@ const humanOnly = new Set([
 const controllable = new Set([
   "session.create",
   "session.send",
+  "session.stop",
   "session.archive",
   "session.restore",
   "task.create",

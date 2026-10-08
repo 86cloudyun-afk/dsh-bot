@@ -17,3 +17,50 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run check
+  artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: mkdir -p qualification/package && npm pack --pack-destination qualification/package
+      - run: cd qualification/package && sha256sum *.tgz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-plugin-package
+          path: qualification/package
+  stock-gui:
+    needs: artifact
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/playwright-core/cli.js install chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-plugin-package
+          path: qualification/package
+      - name: Fresh official profile and installed native GUI
+        shell: bash
+        env:
+          DSH_BOT_GUI_OUTPUT: qualification/gui
+        run: |
+          mkdir -p qualification/gui
+          export DSH_BOT_GUI_SHA256="$(cut -d ' ' -f1 qualification/package/SHA256SUMS)"
+          node test/native-plugin/stock-gui-run.mjs qualification/package/*.tgz > qualification/stock-boot-private.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stock-gui-${{ matrix.os }}
+          path: |
+            qualification/gui/stock-gui-report.json
+            qualification/gui/*.png

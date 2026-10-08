@@ -31,7 +31,14 @@ window.__ModuleLoader__.load({
     };
     const styles = `.dsh-bot{font:inherit;color:var(--dsw-alias-label-primary);padding:24px;overflow:auto;height:100%;box-sizing:border-box}.dsh-bot *{box-sizing:border-box}.dsh-bot h1{font-size:24px;margin:0}.dsh-bot h2{font-size:17px;margin:0 0 16px}.dsh-bot h3{font-size:15px;margin:0 0 8px}.dsh-bot p{line-height:1.65}.dsh-bot small,.dsh-bot .muted{color:var(--dsw-alias-label-secondary)}.dsh-bot header,.dsh-bot nav,.dsh-bot .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsh-bot header{justify-content:space-between;margin-bottom:20px}.dsh-bot nav{margin-bottom:20px}.dsh-bot button,.dsh-bot input,.dsh-bot select,.dsh-bot textarea{font:inherit;color:inherit;border:1px solid var(--dsw-alias-border-l2,currentColor);border-radius:8px;background:var(--dsw-alias-bg-layer-2,transparent);padding:9px 12px}.dsh-bot button{cursor:pointer}.dsh-bot button:hover{background:var(--dsw-alias-interactive-bg-hover)}.dsh-bot button:disabled{opacity:.5;cursor:wait}.dsh-bot button[aria-selected=true],.dsh-bot button.primary{background:var(--dsw-alias-state-business-primary);color:white}.dsh-bot form{display:grid;gap:12px}.dsh-bot label{display:grid;gap:6px;font-size:13px}.dsh-bot input,.dsh-bot select,.dsh-bot textarea{width:100%;min-width:0}.dsh-bot textarea{min-height:92px;resize:vertical}.dsh-bot .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;align-items:start}.dsh-bot .card{border:1px solid var(--dsw-alias-border-l2,currentColor);border-radius:12px;padding:18px;margin-bottom:16px;background:var(--dsw-alias-bg-layer-1,transparent)}.dsh-bot .error{color:var(--dsw-alias-state-error-primary);white-space:pre-wrap}.dsh-bot pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 monospace;max-height:360px;overflow:auto}.dsh-bot .status{font-size:12px;padding:4px 8px;border-radius:6px;background:var(--dsw-alias-bg-layer-2,transparent)}.dsh-bot .check{display:flex;align-items:center;gap:8px}.dsh-bot .check input{width:auto}.dsh-bot-dialog{position:fixed;inset:0;display:grid;place-items:center;pointer-events:auto;background:rgba(0,0,0,.35);z-index:90}.dsh-bot-dialog .dsh-bot{height:auto;width:min(480px,calc(100vw - 32px));background:var(--dsw-alias-bg-layer-1,Canvas);border-radius:16px;max-height:90vh;overflow:auto}`;
     return {
-      inject: ["slots", "locale", "connection", "layout", "uiWorkspace"],
+      inject: [
+        "slots",
+        "locale",
+        "connection",
+        "layout",
+        "uiWorkspace",
+        "sessions",
+      ],
       apply(ctx) {
         ctx.effect(() => ctx.locale.register("dsh.bot", translations));
         const t = ctx.locale.bind("dsh.bot"),
@@ -197,35 +204,46 @@ window.__ModuleLoader__.load({
             options
               ? h(
                   "select",
-                  { name, defaultValue: value, required, ...extra },
+                  {
+                    name,
+                    "aria-label": label,
+                    defaultValue: value,
+                    required,
+                    ...extra,
+                  },
                   options.map((row) => option(row.value, row.label)),
                 )
               : textarea
                 ? h("textarea", {
                     name,
+                    "aria-label": label,
                     defaultValue: value,
                     required,
                     ...extra,
                   })
                 : h("input", {
                     name,
+                    "aria-label": label,
                     type,
                     defaultValue: value,
                     required,
                     ...extra,
                   }),
           );
-        const card = (title, ...children) =>
+        const resourceCard = (key, title, ...children) =>
           h(
             "section",
-            { className: "card" },
+            { className: "card", key },
             h("h2", null, title),
             ...children,
           );
+        const card = (title, ...children) =>
+          resourceCard(undefined, title, ...children);
         const form = (label, submit, ...children) =>
           h(
             "form",
             {
+              key: label,
               onSubmit: (event) => {
                 event.preventDefault();
                 submit(new FormData(event.currentTarget));
@@ -287,8 +305,27 @@ window.__ModuleLoader__.load({
             available: "结果已保存",
             blocked: "投递受限",
           })[value] ?? value;
-        const openSession = (sessionId) =>
-          ctx.uiWorkspace.openSession(sessionId);
+        const openSession = async (sessionId, nativeRow) => {
+          const row =
+            nativeRow ??
+            state.snapshot.sessions.find((row) => row.sessionId === sessionId);
+          try {
+            await ctx.sessions.refresh();
+            const parentSessionId =
+              row?.parentSessionId ?? row?.header?.parentSession;
+            ctx.uiWorkspace.openSession(
+              parentSessionId
+                ? {
+                    parentSessionId,
+                    childSessionId: sessionId,
+                    mode: row?.parentSessionId ? "one-shot" : "unknown",
+                  }
+                : sessionId,
+            );
+          } catch (error) {
+            publish({ error: `无法打开原生会话：${error.message}` });
+          }
+        };
         function BotEditor({ bot }) {
           const models = modelsOptions(),
             contact = bot
@@ -421,7 +458,8 @@ window.__ModuleLoader__.load({
             (bot) => bot.botId === editing,
           );
           const cards = view.snapshot.bots.map((bot) =>
-            card(
+            resourceCard(
+              bot.botId,
               bot.name,
               h("p", { className: "muted" }, bot.role || "未设置职责"),
               h(
@@ -530,6 +568,28 @@ window.__ModuleLoader__.load({
         }
         function TasksPane() {
           const view = useView();
+          const [recipients, setRecipients] = useState([]);
+          useEffect(() => {
+            let active = true;
+            (async () => {
+              const rows = [];
+              let cursor;
+              do {
+                const page = await rpc("command", {
+                  action: "session.list",
+                  input: { limit: 500, ...(cursor ? { cursor } : {}) },
+                });
+                rows.push(...page.items);
+                cursor = page.nextCursor;
+              } while (cursor);
+              if (active) setRecipients(rows);
+            })().catch((error) => {
+              if (active) publish({ error: error.message });
+            });
+            return () => {
+              active = false;
+            };
+          }, []);
           return h(
             "div",
             { className: "grid" },
@@ -543,7 +603,8 @@ window.__ModuleLoader__.load({
                   owner = view.snapshot.bots.find(
                     (row) => row.botId === task.botId,
                   );
-                return card(
+                return resourceCard(
+                  task.taskId,
                   task.title,
                   h(
                     "p",
@@ -592,6 +653,38 @@ window.__ModuleLoader__.load({
                       { disabled: view.busy || !!attempt?.reservationHeld },
                     ),
                   ),
+                  !task.archived &&
+                    !attempt?.reservationHeld &&
+                    view.snapshot.attempts.some(
+                      (row) =>
+                        row.botId === task.botId &&
+                        row.depth === 0 &&
+                        row.reservationHeld &&
+                        row.taskId !== task.taskId,
+                    ) &&
+                    form(
+                      "作为一级子工作开始",
+                      (data) =>
+                        command("task.start", {
+                          taskId: task.taskId,
+                          expectedVersion: task.version,
+                          parentAttemptId: data.get("parentAttemptId"),
+                        }),
+                      field("所属父工作", "parentAttemptId", {
+                        options: view.snapshot.attempts
+                          .filter(
+                            (row) =>
+                              row.botId === task.botId &&
+                              row.depth === 0 &&
+                              row.reservationHeld &&
+                              row.taskId !== task.taskId,
+                          )
+                          .map((row) => ({
+                            value: row.attemptId,
+                            label: `${view.snapshot.tasks.find((task) => task.taskId === row.taskId)?.title ?? "父工作"} · ${row.attemptId.slice(0, 12)}`,
+                          })),
+                      }),
+                    ),
                   attempt?.result &&
                     h(
                       "pre",
@@ -681,6 +774,12 @@ window.__ModuleLoader__.load({
                         value: row.sessionId,
                         label: `${view.snapshot.bots.find((bot) => bot.botId === row.botId)?.name} · ${row.sessionId.slice(0, 8)}`,
                       })),
+                    ...recipients
+                      .filter((row) => row.type === "ordinary" && !row.archived)
+                      .map((row) => ({
+                        value: row.sessionId,
+                        label: `普通会话 · ${row.header?.title ?? "未命名"} · ${row.sessionId.slice(0, 8)}`,
+                      })),
                   ],
                   required: false,
                 }),
@@ -697,7 +796,8 @@ window.__ModuleLoader__.load({
               "div",
               null,
               ...view.snapshot.bots.map((bot) =>
-                card(
+                resourceCard(
+                  bot.botId,
                   `${bot.name} 的共享范围`,
                   form(
                     "保存共享上限",
@@ -829,7 +929,8 @@ window.__ModuleLoader__.load({
                 ),
               ),
               ...view.snapshot.grants.map((grant) =>
-                card(
+                resourceCard(
+                  grant.grantId,
                   "已保存的授权",
                   h(
                     "p",
@@ -861,7 +962,8 @@ window.__ModuleLoader__.load({
               "div",
               null,
               ...view.snapshot.groups.map((group) =>
-                card(
+                resourceCard(
+                  group.groupId,
                   group.name,
                   h(
                     "p",
@@ -982,7 +1084,8 @@ window.__ModuleLoader__.load({
             "div",
             null,
             ...view.snapshot.meetings.map((meeting) =>
-              card(
+              resourceCard(
+                meeting.meetingId,
                 meeting.topic,
                 h(
                   "p",
@@ -1104,7 +1207,7 @@ window.__ModuleLoader__.load({
                   items: cursor
                     ? [...previous.items, ...next.items]
                     : next.items,
-                  cursor: next.cursor,
+                  cursor: next.nextCursor,
                 })),
               )
               .catch((e) => setError(e.message));
@@ -1144,7 +1247,19 @@ window.__ModuleLoader__.load({
                 h(
                   "div",
                   { className: "actions" },
-                  button("查看原生会话", () => openSession(row.sessionId)),
+                  button("查看原生会话", () => openSession(row.sessionId, row)),
+                  row.activity &&
+                    !row.attemptId &&
+                    !row.parentSessionId &&
+                    !row.header?.parentSession &&
+                    !row.lineage &&
+                    button("停止当前回复", async () => {
+                      await command("session.stop", {
+                        sessionId: row.sessionId,
+                        expectedTurn: row.activity.token,
+                      });
+                      load();
+                    }),
                   button(row.archived ? "恢复" : "归档", async () => {
                     await command(
                       row.archived ? "session.restore" : "session.archive",
@@ -1164,7 +1279,8 @@ window.__ModuleLoader__.load({
             "div",
             null,
             ...view.snapshot.outbox.map((row) =>
-              card(
+              resourceCard(
+                row.outboxId,
                 row.kind === "result" ? "任务结果" : "消息投递",
                 h("p", null, stateName(row.state)),
                 h(

@@ -62,7 +62,12 @@ export class TaskController {
   }
   async create(actor, command) {
     command = copy(command);
-    const input = command.input;
+    return this.store.transact(this.policy.command(actor, command), (draft) =>
+      this.createInDraft(actor, command.input, draft),
+    );
+  }
+  createInDraft(actor, input, draft) {
+    input = copy(input);
     requireCondition(
       plain(input) &&
         Object.keys(input).every((key) =>
@@ -84,50 +89,48 @@ export class TaskController {
         ),
       "invalid_task",
     );
-    return this.store.transact(this.policy.command(actor, command), (draft) => {
-      if (input.originSessionId)
-        this.policy.require(
-          actor,
-          "session.send",
-          { kind: "session", id: input.originSessionId },
-          draft,
-        );
-      const bot = draft.bots[input.botId];
-      requireCondition(bot?.lifecycle === "active", "bot_not_active");
-      const taskId = `task_${randomUUID()}`,
-        task = {
-          taskId,
-          botId: bot.botId,
-          title: input.title.trim(),
-          goal: input.goal,
-          criteria: input.criteria,
-          version: 1,
-          definitionVersion: 1,
-          createdBy:
-            actor.kind === "human"
-              ? { kind: "human" }
-              : { kind: "bot", botId: actor.botId, sessionId: actor.sessionId },
-          epoch: 0,
-          state: "queued",
-          archived: false,
-          acceptance: "unknown",
-          currentAttemptId: null,
-          originSessionId:
-            input.originSessionId ??
-            (actor.kind === "bot" ? actor.sessionId : null),
-          source: this.#source(actor),
-          origins: this.policy.readDependencies(actor),
-          createdAt: new Date().toISOString(),
-        };
-      draft.tasks[taskId] = task;
+    if (input.originSessionId)
       this.policy.require(
         actor,
-        "task.create",
-        { kind: "task", id: taskId },
+        "session.send",
+        { kind: "session", id: input.originSessionId },
         draft,
       );
-      return task;
-    });
+    const bot = draft.bots[input.botId];
+    requireCondition(bot?.lifecycle === "active", "bot_not_active");
+    const taskId = `task_${randomUUID()}`,
+      task = {
+        taskId,
+        botId: bot.botId,
+        title: input.title.trim(),
+        goal: input.goal,
+        criteria: input.criteria,
+        version: 1,
+        definitionVersion: 1,
+        createdBy:
+          actor.kind === "human"
+            ? { kind: "human" }
+            : { kind: "bot", botId: actor.botId, sessionId: actor.sessionId },
+        epoch: 0,
+        state: "queued",
+        archived: false,
+        acceptance: "unknown",
+        currentAttemptId: null,
+        originSessionId:
+          input.originSessionId ??
+          (actor.kind === "bot" ? actor.sessionId : null),
+        source: this.#source(actor),
+        origins: this.policy.readDependencies(actor),
+        createdAt: new Date().toISOString(),
+      };
+    draft.tasks[taskId] = task;
+    this.policy.require(
+      actor,
+      "task.create",
+      { kind: "task", id: taskId },
+      draft,
+    );
+    return task;
   }
   async start(actor, command) {
     requireCondition(!this.#closed && !this.#closing, "disabled");

@@ -1,5 +1,12 @@
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import {
+  childSessionMeta,
+  resolveChildDepth,
+  captureDelegatedPolicyOverrides,
+  appendDelegatedPolicyOverrides,
+} from "@deepseek-ai/dsh-subagent";
+import { NativeWorkChildren } from "./child.mjs";
+import {
   createUserMessage,
   callConfigEquals,
   isAgentLoopRequest,
@@ -24,6 +31,8 @@ export class NativeDshAdapter {
   #records = new Map();
   #disposers = [];
   #shortPools = new Map();
+  #children;
+  #activity = new Map();
   constructor(ctx, { store, policy } = {}) {
     this.#ctx = ctx;
     this.#store = store;
@@ -31,7 +40,7 @@ export class NativeDshAdapter {
     this.#disposers.push(
       ctx.on(
         "agent/created",
-        async ({ agent }) => {
+        async ({ agent, source }) => {
           const state = this.#store?.read(),
             binding = state?.sessions[agent.id],
             initiator = ctx.agents.currentInitiator(),
@@ -47,8 +56,11 @@ export class NativeDshAdapter {
                     state.attempts[binding.attemptId]?.reservationHeld)),
               "work_admission_required",
             );
-          if (binding?.botId && this.#records.get(agent.id)?.agent !== agent)
+          if (binding?.botId && this.#records.get(agent.id)?.agent !== agent) {
             await this.bindAgent(agent, binding);
+            if (source === "resume" && ctx.get("sessionController"))
+              this.#records.get(agent.id).nativeControllerRestore = true;
+          }
         },
         { global: true },
       ),
@@ -57,6 +69,21 @@ export class NativeDshAdapter {
       ctx.on(
         "session/event",
         (session, event) => {
+          if (["turn/start", "turn/end"].includes(event.type)) {
+            const agent = ctx.agents.get(session.id),
+              prior = this.#activity.get(session.id);
+            if (agent?.session === session) {
+              if (event.type === "turn/start")
+                this.#activity.set(session.id, {
+                  agent,
+                  turn: event.data.turn,
+                  token: randomUUID(),
+                  active: true,
+                });
+              else if (prior?.agent === agent && prior.turn === event.data.turn)
+                prior.active = false;
+            }
+          }
           if (event.type !== "model/selection") return;
           const binding = this.#store?.read().sessions[session.id];
           if (!binding?.botId) return;
@@ -441,9 +468,20 @@ export class NativeDshAdapter {
             "request_identity_mismatch",
           );
           const config = await next();
+          const nativeRoutes = record.nativeControllerRestore
+            ? [
+                agent.session.requestHeader()?.config,
+                this.#ctx.get("agentDefaultModel")?.currentSelection(),
+              ].filter(Boolean)
+            : [];
           requireCondition(
-            config.provider === record.model.provider &&
-              config.model === record.model.model,
+            (config.provider === record.model.provider &&
+              config.model === record.model.model) ||
+              nativeRoutes.some(
+                (route) =>
+                  route.provider === config.provider &&
+                  route.model === config.model,
+              ),
             "model_drift",
           );
           const effective = await this.#ctx.llm.resolveCallConfig(
@@ -636,38 +674,22 @@ export class NativeDshAdapter {
     if (this.#creating.has(binding.sessionId))
       return this.#creating.get(binding.sessionId);
     const operation = (async () => {
-      const model = copy(binding.model),
-        presets = this.#ctx.get("agentPresets");
       const parent = binding.parentSessionId
         ? this.#ctx.agents.get(binding.parentSessionId)
         : null;
-      const handle = await this.#ctx.agents.create({
-        sessionId: binding.sessionId,
-        meta: {
-          cwd: binding.cwd,
-          ...(binding.presetId ? { agentPreset: binding.presetId } : {}),
-          ...(parent
-            ? {
-                parentSession: parent.id,
-                origin: "subagent",
-                delegationDepth: 0,
-              }
-            : {}),
-        },
-        agentOptions: {
-          provider: model.provider,
-          model: model.model,
-          ...(model.maxTokens === undefined
-            ? {}
-            : { maxTokens: model.maxTokens }),
-        },
-        setup: async (agentCtx, agent) => {
-          if (presets)
-            await presets.mount(agentCtx, binding.presetId ?? undefined);
-          await this.bindAgent(agent, binding);
-          await setup?.(agentCtx, agent);
-        },
-      });
+      requireCondition(!binding.parentSessionId || parent, "parent_not_active");
+      let handle;
+      if (parent) {
+        requireCondition(
+          this.#ctx.get("subagents"),
+          "native_subagent_unavailable",
+        );
+        this.#children ??= new NativeWorkChildren(this.#ctx, {
+          create: (...args) => this.#createHandle(...args),
+          stop: (id) => this.stopResources(id),
+        });
+        handle = await this.#children.create(binding, parent, setup);
+      } else handle = await this.#createHandle(binding, setup);
       try {
         requireCondition(!this.#closed, "disposed");
         await this.#ctx.sessions.flush(handle.agent.session);
@@ -689,6 +711,51 @@ export class NativeDshAdapter {
     } finally {
       this.#creating.delete(binding.sessionId);
     }
+  }
+  async #createHandle(binding, setup, { parent, descriptor, signal } = {}) {
+    const model = copy(binding.model),
+      presets = this.#ctx.get("agentPresets");
+    return this.#ctx.agents.create({
+      sessionId: binding.sessionId,
+      ...(parent ? { parentAgent: parent } : {}),
+      ...(signal ? { signal } : {}),
+      meta: {
+        cwd: binding.cwd,
+        ...(binding.presetId ? { agentPreset: binding.presetId } : {}),
+        ...(parent
+          ? childSessionMeta(parent, resolveChildDepth(parent, 1), false)
+          : {}),
+      },
+      agentOptions: {
+        provider: model.provider,
+        model: model.model,
+        ...(model.maxTokens === undefined
+          ? {}
+          : { maxTokens: model.maxTokens }),
+      },
+      setup: async (agentCtx, agent) => {
+        if (parent)
+          appendDelegatedPolicyOverrides(
+            agent.session,
+            captureDelegatedPolicyOverrides(parent),
+          );
+        if (descriptor) {
+          let appended = false;
+          agentCtx.on("agent/pre-step", async (_payload, next) => {
+            const decision = await next();
+            if (!appended && decision.kind === "enter") {
+              appended = true;
+              agent.session.append("subagent/descriptor", descriptor);
+            }
+            return decision;
+          });
+        }
+        if (presets)
+          await presets.mount(agentCtx, binding.presetId ?? undefined);
+        await this.bindAgent(agent, binding);
+        await setup?.(agentCtx, agent);
+      },
+    });
   }
   async resumeOwned(binding) {
     requireCondition(
@@ -735,6 +802,51 @@ export class NativeDshAdapter {
     } finally {
       await handle.close();
     }
+  }
+  async replyActivity(sessionId) {
+    const agent = this.#ctx.agents.get(sessionId);
+    if (!agent || agent.status !== "running") return null;
+    let activity = this.#activity.get(sessionId);
+    if (activity?.agent !== agent) {
+      await this.#ctx.sessions.flush(agent.session);
+      const history = await this.readNative(sessionId);
+      activity = this.#activity.get(sessionId);
+      if (
+        activity?.agent !== agent &&
+        this.#ctx.agents.get(sessionId) === agent
+      ) {
+        let turn = null;
+        for (const event of history.events) {
+          if (event.type === "turn/start") turn = event.data.turn;
+          if (event.type === "turn/end" && event.data.turn === turn)
+            turn = null;
+        }
+        if (turn !== null) {
+          activity = { agent, turn, token: randomUUID(), active: true };
+          this.#activity.set(sessionId, activity);
+        }
+      }
+    }
+    return activity?.agent === agent &&
+      activity.active &&
+      agent.status === "running"
+      ? { turn: activity.turn, token: activity.token }
+      : null;
+  }
+  stopReply(sessionId, token) {
+    const activity = this.#activity.get(sessionId),
+      agent = this.#ctx.agents.get(sessionId);
+    requireCondition(
+      activity?.agent === agent &&
+        activity?.active &&
+        activity.token === token &&
+        agent?.status === "running",
+      "stale_turn",
+    );
+    requireCondition(!agent.session.header.parentSession, "task_stop_required");
+    // Keep the native queue. Execution attempts use their separate resource stop.
+    agent.cancel({ kind: "user" }, { keepInbox: true });
+    return { sessionId, accepted: true, turn: activity.turn };
   }
   async listNative(_request = {}, signal) {
     signal?.throwIfAborted();
@@ -786,6 +898,7 @@ export class NativeDshAdapter {
           )) {
           try {
             jobs.kill(job.id, sessionId, "dsh-bot stop");
+            pending.push(jobs.wait(job.id, 10000, sessionId));
           } catch (error) {
             record.resourceFaults ??= [];
             record.resourceFaults.push({
@@ -863,9 +976,31 @@ export class NativeDshAdapter {
     await Promise.allSettled(
       [...this.#handles.keys()].map((id) => this.disposeOwned(id)),
     );
+    if (this.#store)
+      for (const record of this.#records.values()) {
+        const evidence = this.resources(record.agent.id);
+        if (!evidence.settled)
+          await this.#store.transact(
+            {
+              operationId: randomUUID(),
+              action: "session.shutdown-unknown",
+              input: { sessionId: record.agent.id, runtimeId: this.runtimeId },
+            },
+            (draft) => {
+              const binding = draft.sessions[record.agent.id];
+              if (binding) {
+                binding.state = "UNKNOWN";
+                binding.error = "shutdown_resources_unsettled";
+                binding.resourceEvidence = copy(evidence);
+              }
+              return null;
+            },
+          );
+      }
     await Promise.allSettled(
       [...this.#records.values()].map((record) => record.agent.whenIdle()),
     );
+    await this.#children?.close();
     this.#closed = true;
     for (const record of this.#records.values()) {
       record.closed = true;

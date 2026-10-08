@@ -1035,50 +1035,34 @@ export class GroupMeetingController {
       "goal",
       "criteria",
     ]);
-    const input = command.input,
-      meeting = this.store.read().meetings[input.meetingId];
-    this.policy.require(actor, "meeting.read", {
-      kind: "meeting",
-      id: input.meetingId,
-    });
-    requireCondition(
-      meeting?.epoch === input.epoch &&
-        ["decision", "complete"].includes(meeting.phase) &&
-        meeting.decision,
-      "decision_missing",
-    );
-    const task = await this.tasks.create(actor, {
-      operationId: command.operationId,
-      action: "task.create",
-      input: {
-        botId: input.botId,
-        title: input.title,
-        goal: input.goal,
-        criteria: input.criteria,
-      },
-    });
-    await this.store.transact(
-      {
-        operationId: `${command.operationId}:meeting-link`,
-        action: "meeting.task-linked",
-        input: {
-          meetingId: input.meetingId,
-          epoch: input.epoch,
-          taskId: task.taskId,
+    const input = command.input;
+    return this.store.transact(this.policy.command(actor, command), (draft) => {
+      const meeting = draft.meetings[input.meetingId];
+      this.policy.require(
+        actor,
+        "meeting.read",
+        { kind: "meeting", id: input.meetingId },
+        draft,
+      );
+      requireCondition(
+        meeting?.epoch === input.epoch &&
+          ["decision", "complete"].includes(meeting.phase) &&
+          meeting.decision,
+        "decision_missing",
+      );
+      const task = this.tasks.createInDraft(
+        actor,
+        {
+          botId: input.botId,
+          title: input.title,
+          goal: input.goal,
+          criteria: input.criteria,
         },
-      },
-      (draft) => {
-        const row = draft.meetings[input.meetingId];
-        requireCondition(
-          row.epoch === input.epoch &&
-            ["decision", "complete"].includes(row.phase),
-          "stale_meeting",
-        );
-        if (!row.actions.includes(task.taskId)) row.actions.push(task.taskId);
-        return null;
-      },
-    );
-    return task;
+        draft,
+      );
+      meeting.actions.push(task.taskId);
+      return task;
+    });
   }
   async close() {
     this.#closed = true;

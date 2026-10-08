@@ -197,6 +197,7 @@ export class BotService {
         "bot.create": [this.bots, "create"],
         "bot.update": [this.bots, "update"],
         "session.create": [this.sessions, "create"],
+        "session.stop": [this.sessions, "stop"],
         "session.archive": [this.sessions, "archive"],
         "session.restore": [this.sessions, "restore"],
         "memory.write": [this.bots, "memoryWrite"],

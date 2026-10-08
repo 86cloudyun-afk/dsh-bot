@@ -184,8 +184,8 @@ test("review: parent remains held while a child admitted during native read is a
       readEntered.resolve();
       await releaseRead.promise;
     }
-    const result=await read(sessionId, signal);
-    if(sessionId===parentSession)readCompleted.resolve();
+    const result = await read(sessionId, signal);
+    if (sessionId === parentSession) readCompleted.resolve();
     return result;
   };
   const parentAttempt = await f.tasks.start(f.human, {
@@ -208,7 +208,7 @@ test("review: parent remains held while a child admitted during native read is a
   await eventually(() => f.requests.length === 2);
   releaseRead.resolve();
   await readCompleted.promise;
-  await new Promise(resolve=>setTimeout(resolve,60));
+  await new Promise((resolve) => setTimeout(resolve, 60));
   await f.store.drain();
   assert.equal(
     f.store.read().attempts[parentAttempt.attemptId].reservationHeld,

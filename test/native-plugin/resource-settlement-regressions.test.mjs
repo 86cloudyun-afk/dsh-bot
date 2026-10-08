@@ -120,3 +120,49 @@ test("disable drains a controller-owned restored Bot background job and leaves o
   assert.equal(f.ctx.jobs.get(jobId, contact.sessionId).status, "killed");
   assert.equal(f.ctx.agents.get(ordinary.agent.id), ordinary.agent);
 });
+
+test("disable waits for a restored Bot job producer to actually settle", async (t) => {
+  const f = await taskFixture(t),
+    bot = await f.bot(),
+    contact = await f.sessions.create(f.human, {
+      operationId: "contact",
+      action: "session.create",
+      input: { botId: bot.botId },
+    });
+  await f.adapter.disposeOwned(contact.sessionId);
+  const restored = await f.ctx.agents.resume({
+    resumeSessionId: contact.sessionId,
+    agentOptions: { provider: "controlled", model: "model-a" },
+  });
+  t.after(() => restored.dispose());
+  const jobs = f.ctx.plugin(Jobs);
+  await jobs.await();
+  const detach = f.ctx.jobs.attachController("test");
+  t.after(detach);
+  const gate = deferred();
+  t.after(() => gate.resolve({ status: "killed" }));
+  let cancelled = false,
+    closed = false;
+  f.ctx.jobs.start({
+    kind: "test",
+    owner: contact.sessionId,
+    label: "Controlled slow producer",
+    run() {
+      return {
+        cancel() {
+          cancelled = true;
+        },
+        done: gate.promise,
+      };
+    },
+  });
+  const closing = f.adapter.close().then(() => {
+    closed = true;
+  });
+  await eventually(() => cancelled);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(closed, false);
+  gate.resolve({ status: "killed" });
+  await closing;
+  assert.equal(closed, true);
+});

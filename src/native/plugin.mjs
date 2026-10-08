@@ -14,7 +14,7 @@ import {randomUUID} from 'node:crypto';
 import {mountBotRoutes} from './api.mjs';
 
 export const name='dsh-bot';
-export const inject=['connection','webServer','profileContext','storage',storageBackendServiceKey('json'),'agents','sessions','sessionPersistence','llm','tools'];
+export const inject=['connection','webServer','profileContext','storage',storageBackendServiceKey('json'),'agents','sessions','sessionPersistence','llm','tools','subagents'];
 export async function apply(ctx) {
   await ctx.effect(async()=>{
     const scope=await openProfileScope(ctx);let store;
