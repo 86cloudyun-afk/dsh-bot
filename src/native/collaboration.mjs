@@ -722,7 +722,12 @@ export class GroupMeetingController {
       ...Object.values(output.discussion),
       ...(output.decision ? [output.decision] : []),
     ])
-      this.policy.noteDependencies(actor, row.origins);
+      this.policy.noteDependencies(actor, [
+        ...(row.origins ?? []),
+        ...(row.source?.sessionId
+          ? [{ kind: "session", id: row.source.sessionId }]
+          : []),
+      ]);
     return output;
   }
   async advance(actor, command) {
@@ -854,6 +859,20 @@ export class GroupMeetingController {
           const decisionChanged =
             meeting.phase === "decision" &&
             (coordinatorChanged || changed.length > 0);
+          const discussionChanged =
+            meeting.phase === "discussion" && changed.length > 0;
+          if (discussionChanged) {
+            meeting.discussion = {};
+            for (const [botId, absence] of Object.entries(meeting.absences)) {
+              if (absence.phase === "discussion") {
+                (meeting.absenceHistory ??= []).push({
+                  botId,
+                  ...copy(absence),
+                });
+                delete meeting.absences[botId];
+              }
+            }
+          }
           if (decisionChanged) {
             const oldCoordinator = meeting.participants.find(
               (row) => row.botId === meeting.coordinatorBotId,
@@ -881,7 +900,8 @@ export class GroupMeetingController {
               newCoordinator =
                 decisionChanged &&
                 participant.botId === meeting.coordinatorBotId;
-            if (!membershipChanged && !newCoordinator) continue;
+            if (!membershipChanged && !newCoordinator && !discussionChanged)
+              continue;
             if (participant.sessionId) stopped.push(participant.sessionId);
             participant.active = member.active;
             participant.memberEpoch = member.epoch;

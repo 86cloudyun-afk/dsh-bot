@@ -5,6 +5,37 @@ import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { brokerFixture } from "./broker-fixture.mjs";
 import { deferred, eventually, textChunks } from "./official-fixture.mjs";
 
+test("review: task launch and result retain their durably reserved message IDs", async (t) => {
+  const f = await brokerFixture(t),
+    bot = await f.bot(),
+    contact = await f.contact(bot);
+  const task = await f.tasks.create(f.human, {
+    operationId: "identity-task",
+    action: "task.create",
+    input: {
+      botId: bot.botId,
+      title: "Reserved identities",
+      goal: "One harmless reply",
+      criteria: [],
+      originSessionId: contact.sessionId,
+    },
+  });
+  const attempt = await f.tasks.start(f.human, {
+    operationId: "identity-start",
+    action: "task.start",
+    input: { taskId: task.taskId, expectedVersion: 1 },
+  });
+  await eventually(
+    () => f.store.read().outbox[attempt.resultOutboxId]?.state === "accepted",
+  );
+  const launch = (await f.adapter.readNative(attempt.sessionId)).events.find(
+    (row) => row.type === "user/message",
+  );
+  const result = f.store.read().outbox[attempt.resultOutboxId];
+  assert.equal(launch.data.id, attempt.messageId);
+  assert.equal(result.message.id, attempt.resultMessageId);
+});
+
 test("review: the genuine parent request consumes its exact child result", async (t) => {
   const parentGate = deferred();
   t.after(() => parentGate.resolve());

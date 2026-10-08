@@ -54,7 +54,7 @@ export class SessionOwnership {
     const token=digest(rows.map(row=>row.sessionId));
     const offset=input.cursor?.offset??0;
     requireCondition(Number.isSafeInteger(offset)&&offset>=0 && (!input.cursor||input.cursor.token===token),'cursor_changed');
-    return {items:rows.slice(offset,offset+limit).map(row=>({...row,...copy(state.sessions[row.sessionId]??{}),type:state.sessions[row.sessionId]?.purpose??'ordinary'})),nextCursor:offset+limit<rows.length?{token,offset:offset+limit}:null,total:rows.length};
+    return {items:rows.slice(offset,offset+limit).map(row=>({...row,...copy(state.sessions[row.sessionId]??{}),archived:this.adapter.isArchived(row.sessionId),type:state.sessions[row.sessionId]?.purpose??'ordinary'})),nextCursor:offset+limit<rows.length?{token,offset:offset+limit}:null,total:rows.length};
   }
   async #archive(actor,command,value) {
     command=copy(command);const input=command.input,reference={kind:'session',id:input.sessionId};

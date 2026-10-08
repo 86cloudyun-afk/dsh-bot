@@ -65,7 +65,7 @@ export class TaskController {
       });
       const task=this.store.read().tasks[attempt.taskId],agent=this.adapter.context.agents.get(attempt.sessionId);
       requireCondition(agent&&task.currentAttemptId===attempt.attemptId,'stale_attempt');
-      agent.followup(createUserMessage({id:attempt.messageId,content:[{type:'text',text:`执行任务 ${task.title}\n目标：${task.goal}\n验收条件：${JSON.stringify(task.criteria)}\n原始身份：${JSON.stringify({taskId:task.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch,version:task.version})}\n可以使用 dsh_bot 查询进展或创建一级子任务。完成后给出实际结果及证据；没有证据的验收保持 unknown。`}],source:{kind:'dsh-bot-task',taskId:task.taskId,attemptId:attempt.attemptId,operationId:attempt.operationId}}));
+      agent.followup({...createUserMessage({content:[{type:'text',text:`执行任务 ${task.title}\n目标：${task.goal}\n验收条件：${JSON.stringify(task.criteria)}\n原始身份：${JSON.stringify({taskId:task.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch,version:task.version})}\n可以使用 dsh_bot 查询进展或创建一级子任务。完成后给出实际结果及证据；没有证据的验收保持 unknown。`}],source:{kind:'dsh-bot-task',taskId:task.taskId,attemptId:attempt.attemptId,operationId:attempt.operationId}}),id:attempt.messageId});
       this.#watch(attempt.attemptId);return this.store.read().attempts[attempt.attemptId];
     }catch(error){
       await this.store.transact({operationId:randomUUID(),action:'attempt.unknown',input:{attemptId:attempt.attemptId,reason:error.code??error.name}},draft=>{const row=draft.attempts[attempt.attemptId];if(row?.reservationHeld){row.state='UNKNOWN';row.error=error.code??error.name;if(draft.tasks[row.taskId].currentAttemptId===row.attemptId)draft.tasks[row.taskId].state='UNKNOWN';}return null;}).catch(()=>{});throw error;

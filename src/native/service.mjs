@@ -11,7 +11,7 @@ export class BotService {
     requireCondition(!this.#closed,'disabled');this.policy.actorKey(actor);
     const state=this.store.read(),result={storeId:state.storeId,revision:state.revision,status:'enabled',releaseReady:false};
     for(const [kind,table] of Object.entries({bot:'bots',session:'sessions',memory:'memories',task:'tasks',group:'groups',meeting:'meetings'})) {
-      result[table]=Object.entries(state[table]).filter(([id,row])=>this.policy.canRead(actor,{kind,id})&&!(kind==='memory'&&row.forgotten)).map(([id,row])=>{this.policy.noteRead(actor,{kind,id});return kind==='group'&&this.collaboration?this.collaboration.viewGroup(actor,row):kind==='meeting'&&this.collaboration?this.collaboration.viewMeeting(actor,row):copy(row);});
+      result[table]=Object.entries(state[table]).filter(([id,row])=>this.policy.canRead(actor,{kind,id})&&!(kind==='memory'&&row.forgotten)).map(([id,row])=>{this.policy.noteRead(actor,{kind,id});return kind==='group'&&this.collaboration?this.collaboration.viewGroup(actor,row):kind==='meeting'&&this.collaboration?this.collaboration.viewMeeting(actor,row):kind==='session'?{...copy(row),archived:this.adapter.isArchived(id)}:copy(row);});
     }
     result.grants=Object.values(state.grants).filter(row=>actor.kind==='human'||row.recipientBotId===actor.botId).map(copy);
     result.attempts=Object.values(state.attempts).filter(row=>this.policy.canRead(actor,{kind:'task',id:row.taskId})&&this.policy.canReadDerived(actor,{botId:row.botId,...(row.result??{}),...(row.report??{})},state)).map(row=>{this.policy.noteRead(actor,{kind:'task',id:row.taskId});this.policy.noteDependencies(actor,[...(row.result?.origins??[]),...(row.report?.origins??[])]);return copy(row);});

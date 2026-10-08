@@ -70,7 +70,8 @@ test("review: results reach the original ordinary session", async (t) => {
   // Controller facade exercises original native inbox delivery; stock GUI tests use the real controller.
   let delivered = 0;
   f.ctx.provide("sessionController", {
-    async prompt(request) {
+    async prompt(request, signal) {
+      signal.throwIfAborted();
       delivered++;
       ordinary.agent.followup(
         createUserMessage({

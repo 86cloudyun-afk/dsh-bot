@@ -70,12 +70,16 @@ export class NativeDshAdapter {
     }
   }
   get context() {return this.#ctx;}
+  isArchived(sessionId) {
+    const registry=this.#ctx.get('workspaceRegistry');
+    return registry?registry.archivedSessionIds.includes(sessionId):this.#store.read().sessions[sessionId]?.archived===true;
+  }
   setContextProvider(provider) {this.#contextProvider=provider;}
   setService(service) {this.#service=service;}
   #authorize(record,{ignoreModelIntent=false,state=this.#store.read()}={}) {
     requireCondition(!this.#closed&&record&&!record.closed,'disabled');
     const binding=state.sessions[record.agent.id],bot=state.bots[binding?.botId];
-    requireCondition(this.#ctx.agents.get(record.agent.id)===record.agent&&binding?.epoch===record.binding.epoch&&binding.state==='ready'&&!binding.archived&&bot?.lifecycle==='active','stale_agent');
+    requireCondition(this.#ctx.agents.get(record.agent.id)===record.agent&&binding?.epoch===record.binding.epoch&&binding.state==='ready'&&!this.isArchived(record.agent.id)&&bot?.lifecycle==='active','stale_agent');
     const intent=record.uiIntent??binding.uiModelIntent;
     if(!ignoreModelIntent&&intent)requireCondition(intent.provider===record.model.provider&&intent.model===record.model.model&&intent.reasoningEffort===record.model.reasoningEffort,'model_drift');
     requireCondition(!record.uiIntentUnknown,'recovery_required');
@@ -91,7 +95,7 @@ export class NativeDshAdapter {
   }
   async bindAgent(agent,binding) {
     if(this.#records.get(agent.id)?.agent===agent)return;
-    requireCondition(!this.#closed&&!binding.archived&&['creating','ready'].includes(binding.state),'session_not_ready');
+    requireCondition(!this.#closed&&!this.isArchived(binding.sessionId)&&['creating','ready'].includes(binding.state),'session_not_ready');
     const record={agent,binding:copy(binding),model:copy(binding.model),selection:{current:Object.freeze(copy(binding.model))},requestSignals:new WeakSet(),models:new Set(),tools:new Set(),requests:[],outputs:new Map(),disposers:[],closed:false,turn:null,previousContext:null};
     this.#records.set(agent.id,record);
     const own=disposer=>{let active=true;const release=()=>{if(active){active=false;return disposer();}};record.disposers.push(release);return release;};
@@ -180,7 +184,7 @@ export class NativeDshAdapter {
     try{return await operation;}finally{this.#creating.delete(binding.sessionId);}
   }
   async resumeOwned(binding) {
-    requireCondition(!this.#closed&&binding.state==='ready'&&!binding.archived,'session_not_ready');
+    requireCondition(!this.#closed&&binding.state==='ready'&&!this.isArchived(binding.sessionId),'session_not_ready');
     const live=this.#ctx.agents.get(binding.sessionId);if(live)return live;
     if(this.#creating.has(binding.sessionId))return (await this.#creating.get(binding.sessionId)).agent;
     const pending=this.#ctx.agents.resume({resumeSessionId:binding.sessionId,agentOptions:{provider:binding.model.provider,model:binding.model.model},setup:async(agentCtx,agent)=>{const presets=this.#ctx.get('agentPresets');if(presets)await presets.mount(agentCtx,binding.presetId??undefined);await this.bindAgent(agent,binding);}});

@@ -1140,9 +1140,9 @@ window.__ModuleLoader__.load({
                   "div",
                   { className: "actions" },
                   button("查看原生会话", () => openSession(row.sessionId)),
-                  button(binding?.archived ? "恢复" : "归档", async () => {
+                  button(row.archived ? "恢复" : "归档", async () => {
                     await command(
-                      binding?.archived ? "session.restore" : "session.archive",
+                      row.archived ? "session.restore" : "session.archive",
                       { sessionId: row.sessionId },
                     );
                     load();
@@ -1171,9 +1171,12 @@ window.__ModuleLoader__.load({
                 ),
                 row.sessionId &&
                   button("查看接收会话", () => openSession(row.sessionId)),
-                ["UNKNOWN", "admitting"].includes(row.state) &&
-                  button("查回原始投递", () =>
-                    command("outbox.reconcile", { outboxId: row.outboxId }),
+                (["UNKNOWN", "admitting"].includes(row.state) ||
+                  (row.state === "blocked" && row.nativeAdmission === false)) &&
+                  button(
+                    row.state === "blocked" ? "重新检查并投递" : "查回原始投递",
+                    () =>
+                      command("outbox.reconcile", { outboxId: row.outboxId }),
                   ),
               ),
             ),

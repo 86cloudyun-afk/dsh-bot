@@ -4,7 +4,7 @@ import {copy,plain,requireCondition,validId} from './store.mjs';
 
 /** Native delivery has its own durable identity; uncertain inputs are never replayed. */
 export class ConversationBroker {
-  #actors=new Map();#deliveries=new Map();#targets=new Map();#closed=false;
+  #actors=new Map();#deliveries=new Map();#targets=new Map();#closed=false;#lifetime=new AbortController();
   runtimeId=randomUUID();
   constructor({store,policy,adapter}){Object.assign(this,{store,policy,adapter});}
   async enqueue(actor,command) {
@@ -27,7 +27,7 @@ export class ConversationBroker {
   recordResult(draft,task,attempt) {
     if(!attempt.result&&!attempt.report)return;
     const outboxId=attempt.resultOutboxId,content=attempt.report?.text??attempt.result?.content??[];
-    draft.outbox[outboxId]={outboxId,botId:task.botId,sessionId:task.originSessionId,attemptId:attempt.attemptId,taskId:task.taskId,epoch:attempt.epoch,kind:'result',state:task.originSessionId?'queued':'available',runtimeId:this.runtimeId,operationId:attempt.resultOperationId,mode:'queue',source:copy(attempt.result?.source??task.source),origins:[{kind:'task',id:task.taskId},...(attempt.result?.origins??[]),...(attempt.report?.origins??[])],createdAt:new Date().toISOString(),message:copy(createUserMessage({id:attempt.resultMessageId,content:[{type:'text',text:JSON.stringify({taskId:task.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch,result:content,execution:attempt.state,acceptance:task.acceptance,usage:attempt.usage,externalEffects:attempt.externalEffects})}],source:{kind:'dsh-bot-result',outboxId,operationId:attempt.resultOperationId,taskId:task.taskId,attemptId:attempt.attemptId}}))};
+    draft.outbox[outboxId]={outboxId,botId:task.botId,sessionId:task.originSessionId,attemptId:attempt.attemptId,taskId:task.taskId,epoch:attempt.epoch,kind:'result',state:task.originSessionId?'queued':'available',runtimeId:this.runtimeId,operationId:attempt.resultOperationId,mode:'queue',source:copy(attempt.result?.source??task.source),origins:[{kind:'task',id:task.taskId},...(attempt.result?.origins??[]),...(attempt.report?.origins??[])],createdAt:new Date().toISOString(),message:copy({...createUserMessage({content:[{type:'text',text:JSON.stringify({taskId:task.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch,result:content,execution:attempt.state,acceptance:task.acceptance,usage:attempt.usage,externalEffects:attempt.externalEffects})}],source:{kind:'dsh-bot-result',outboxId,operationId:attempt.resultOperationId,taskId:task.taskId,attemptId:attempt.attemptId}}),id:attempt.resultMessageId})};
   }
   async deliverResult(attemptId) {
     const attempt=this.store.read().attempts[attemptId],row=this.store.read().outbox[attempt?.resultOutboxId];
@@ -46,11 +46,12 @@ export class ConversationBroker {
   async #authorize(row) {
     requireCondition(!this.#closed&&row.runtimeId===this.runtimeId,'recovery_required');
     const state=this.store.read(),binding=state.sessions[row.sessionId],actor=this.#actors.get(row.outboxId);
+    requireCondition(!this.adapter.isArchived(row.sessionId),'session_not_ready');
     if(actor)this.policy.require(actor,'session.send',{kind:'session',id:row.sessionId},state);
     else {requireCondition(row.kind==='result','recovery_required');this.policy.requireTaskResultDelivery(row,state);}
     if(binding?.botId) {
       const parentResult=row.kind==='result'&&binding.purpose==='execution'&&state.attempts[row.attemptId]?.parentAttemptId===binding.attemptId;
-      requireCondition((binding.purpose==='contact'||parentResult)&&binding.state==='ready'&&!binding.archived,'session_not_ready');
+      requireCondition((binding.purpose==='contact'||parentResult)&&binding.state==='ready','session_not_ready');
       const agent=await this.adapter.resumeOwned(binding),recipient=this.policy.fromAgent(agent);
       requireCondition(this.policy.canReadDerived(recipient,row),'access_denied');
       for(const ref of row.origins??[])this.policy.require(recipient,`${ref.kind}.read`,ref);
@@ -61,11 +62,12 @@ export class ConversationBroker {
   #fenceTarget(row,target) {
     requireCondition(!this.#closed&&row.runtimeId===this.runtimeId,'recovery_required');
     const state=this.store.read(),actor=this.#actors.get(row.outboxId);
+    requireCondition(!this.adapter.isArchived(row.sessionId),'session_not_ready');
     if(actor)this.policy.require(actor,'session.send',{kind:'session',id:row.sessionId},state);
     else this.policy.requireTaskResultDelivery(row,state);
     if(target.recipient) {
       const binding=state.sessions[row.sessionId];
-      requireCondition(this.adapter.context.agents.get(row.sessionId)===target.agent&&binding?.state==='ready'&&!binding.archived,'session_not_ready');
+      requireCondition(this.adapter.context.agents.get(row.sessionId)===target.agent&&binding?.state==='ready','session_not_ready');
       requireCondition(this.policy.canReadDerived(target.recipient,row,state),'access_denied');
       for(const ref of row.origins??[])this.policy.require(target.recipient,`${ref.kind}.read`,ref,state);
     }
@@ -73,6 +75,10 @@ export class ConversationBroker {
   async #deliver(row) {
     let nativeAdmission=false;
     try {
+      if(row.runtimeId!==this.runtimeId)row=await this.store.transact({operationId:randomUUID(),action:'outbox.reclaim-unadmitted',input:{outboxId:row.outboxId}},draft=>{
+        const current=draft.outbox[row.outboxId];requireCondition(current.kind==='result'&&current.state==='blocked'&&current.nativeAdmission===false,'recovery_required');
+        this.policy.requireTaskResultDelivery(current,draft);current.runtimeId=this.runtimeId;return current;
+      });
       const target=await this.#authorize(row);
       await this.store.transact({operationId:randomUUID(),action:'outbox.admitting',input:{outboxId:row.outboxId}},draft=>{
         const current=draft.outbox[row.outboxId];requireCondition(current.state==='queued'||current.state==='blocked'&&current.nativeAdmission===false,'delivery_not_queued');
@@ -89,7 +95,7 @@ export class ConversationBroker {
       nativeAdmission=true;
       if(target.ordinary) {
         const controller=this.adapter.context.get('sessionController');requireCondition(controller,'native_controller_unavailable');
-        await controller.prompt({requestId:row.message.id,sessionId:row.sessionId,mode:row.mode,content:row.message.content});
+        await controller.prompt({requestId:row.message.id,sessionId:row.sessionId,mode:row.mode,content:row.message.content},this.#lifetime.signal);
       }else {
         target.agent[row.mode==='steer'?'steer':'followup'](row.message);
         await this.adapter.context.sessions.flush(target.agent.session);
@@ -116,5 +122,5 @@ export class ConversationBroker {
     const result=row.state==='blocked'&&row.nativeAdmission===false?await this.deliver(row.outboxId):await this.reconcileDelivery(row.outboxId);
     requireCondition(actor.kind==='human'||this.policy.canReadDerived(actor,result),'access_denied');return result;
   }
-  async close(){this.#closed=true;await Promise.allSettled([...this.#deliveries.values()]);this.#actors.clear();}
+  async close(){this.#closed=true;this.#lifetime.abort();await Promise.allSettled([...this.#deliveries.values()]);this.#actors.clear();}
 }
