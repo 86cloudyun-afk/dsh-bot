@@ -23,7 +23,12 @@ dsh web
 
 ## 2. 获取并验证插件包
 
-从 [GitHub Releases](https://github.com/86cloudyun-afk/dsh-bot-plugin/releases) 下载同一版本的 `dsh-bot-1.0.0.tgz` 和 `SHA256SUMS`。进入下载目录：
+在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.0) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/dsh-bot-1.0.0.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
+
+```bash
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/dsh-bot-1.0.0.tgz
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/SHA256SUMS
+```
 
 Linux：
 
@@ -60,7 +65,7 @@ dsh web
 
 原生工作工具默认使用 DSH 当前提供的工具，原生审批沿用 DSH。无需逐个填写工具名；已有 Bot 也不再受旧工具清单限制。
 
-需要定制时展开 **更多设置**：工作目录、单独的执行模型、思考程度、回复长度与原生会话配置都在这里。工作目录默认沿用 DSH，执行模型默认与聊天模型相同。远程 DSH 的自定义工作目录应填写远程机器上存在的绝对目录。
+需要定制时展开 **更多设置**：工作目录、执行模型、思考程度、回复长度与原生会话配置都在这里。工作目录默认沿用 DSH。执行模型选择“与聊天模型相同”时自动跟随聊天模型；明确选择某个模型时保持该选择，即使两者暂时相同。新建 Bot 默认沿用当前 DSH 的模型与思考设置；两种会话的回复长度仍可分别设置。远程 DSH 的自定义工作目录应填写远程机器上存在的绝对目录。
 
 工作台常用导航只有 **Bots、任务、记忆、协作、管理**。内部群与会议在“协作”；共享与授权、会话管理、结果与投递在“管理”。
 

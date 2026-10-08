@@ -8,18 +8,21 @@ export class BotDirectory {
     adapter.setContextProvider((agent,binding)=>this.context(policy.fromAgent(agent),binding,{maxChars:12000}));
   }
   async #config(input,current) {
-    requireCondition(plain(input) && Object.keys(input).every(key=>['botId','expectedVersion','name','role','cwd','presetId','contact','execution','lifecycle','capabilities'].includes(key)),'invalid_input');
+    requireCondition(plain(input) && Object.keys(input).every(key=>['botId','expectedVersion','name','role','cwd','presetId','contact','execution','executionMode','lifecycle','capabilities'].includes(key)),'invalid_input');
     const name=input.name??current?.name;requireCondition(typeof name==='string' && name.trim().length>0 && name.trim().length<=100,'invalid_name');
     const role=input.role??current?.role??'';requireCondition(typeof role==='string' && role.length<=8192,'invalid_role');
     const cwd=await this.adapter.validateLocation(input.cwd??current?.cwd??this.adapter.context.get('profileContext')?.cwd??process.cwd());
     const contact=await this.adapter.validateModel(input.contact??current?.contact);
-    const execution=await this.adapter.validateModel(input.execution??(input.contact?contact:current?.execution)??contact);
+    const executionMode=input.executionMode??(input.execution?'explicit':current?.executionMode??(current?'explicit':'inherit'));
+    requireCondition(['inherit','explicit'].includes(executionMode),'invalid_execution_mode');
+    const execution=await this.adapter.validateModel(input.execution??(executionMode==='inherit'?contact:current?.execution)??contact);
+    requireCondition(executionMode!=='inherit'||execution.provider===contact.provider&&execution.model===contact.model,'execution_model_conflict');
     const lifecycle=input.lifecycle??current?.lifecycle??'active';requireCondition(['active','paused','archived'].includes(lifecycle),'invalid_lifecycle');
     const presets=this.adapter.context.get('agentPresets'),presetId=input.presetId??current?.presetId??presets?.defaultId??null;
     if(presets) {const preset=await presets.resolve(presetId);requireCondition(!preset.broken,'preset_unavailable');}
     const capabilities=input.capabilities??current?.capabilities??[];
     requireCondition(Array.isArray(capabilities)&&capabilities.length<=64&&capabilities.every(name=>typeof name==='string'&&/^[A-Za-z0-9_.-]+$/.test(name)),'invalid_capabilities');
-    return {name:name.trim(),role,cwd,presetId,contact,execution,lifecycle,capabilities:[...new Set(capabilities)]};
+    return {name:name.trim(),role,cwd,presetId,contact,execution,executionMode,lifecycle,capabilities:[...new Set(capabilities)]};
   }
   async create(actor,command) {
     command=copy(command);
@@ -43,7 +46,7 @@ export class BotDirectory {
     return this.store.transact(stamped,draft=>{
       this.policy.require(actor,'bot.update',{kind:'bot',id:input.botId},draft);
       const bot=draft.bots[input.botId];requireCondition(input.expectedVersion===bot.revision,'revision_conflict');
-      Object.assign(bot,config,{revision:bot.revision+1,configRevision:bot.configRevision+(input.contact||input.execution||input.presetId||input.cwd?1:0)});return bot;
+      Object.assign(bot,config,{revision:bot.revision+1,configRevision:bot.configRevision+(input.contact||input.execution||Object.hasOwn(input,'executionMode')||input.presetId||input.cwd?1:0)});return bot;
     });
   }
   async memoryWrite(actor,command) {

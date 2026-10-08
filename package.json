@@ -86,11 +86,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/86cloudyun-afk/dsh-bot-plugin.git"
+    "url": "git+https://github.com/86cloudyun-afk/dsh-bot.git"
   },
-  "homepage": "https://github.com/86cloudyun-afk/dsh-bot-plugin",
+  "homepage": "https://github.com/86cloudyun-afk/dsh-bot",
   "bugs": {
-    "url": "https://github.com/86cloudyun-afk/dsh-bot-plugin/issues"
+    "url": "https://github.com/86cloudyun-afk/dsh-bot/issues"
   },
   "keywords": [
     "dsh",
