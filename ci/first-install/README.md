@@ -1,8 +1,8 @@
 # Private fresh first installation
 
 This draft starts from exact product commit
-`af3f246c4157f2489215fc1de034704d86109a17` and tree
-`501c2b0a3beda8b91eec33b9be6050e66ac45582`. It has not run an SDK
+`0a04532f05243265170e6c6d457662a422deadf0` and tree
+`5d43b7d4625333b51c4e1adf2f3d25dd2d38823a`. It has not run an SDK
 installation, Chromium, a native GUI or a provider. Root must review the
 exact draft and external inputs before its private branch is pushed.
 
@@ -15,10 +15,10 @@ probe; this tooling invokes no sysctl, quarantine override or hardware
 probe command.
 
 `INPUT_PINS.json` binds Root's new final thin transport, descriptor and
-af3 source provenance. The 15,541,555-byte gzip archive has externally
-supplied SHA-256 `f5d80350c18d13a1145ca1291f4c01add8558ae77ede5bae3916d6b3e4051818`.
+0a04532 source provenance. The 15,541,798-byte gzip archive has externally
+supplied SHA-256 `df548c893fa503d052167f8ccb30e7d768031f8bf8cc450d93298d8990898184`.
 Its descriptor has externally supplied SHA-256
-`406e8bda96ff04d07cce613fd6209f3626ef8caeaae75845e9aba74acdf0d675`.
+`2136ff4290fa57a47beb3622eeb2ae3cda57261612877e151c95e3a9bc0bd145`.
 Neither pin is inferred from the archive's self-manifest. The extractor
 accepts exactly 2,369 sorted regular members, raw bundle-relative names,
 zero timestamps/owner metadata and no links, special files, PAX headers

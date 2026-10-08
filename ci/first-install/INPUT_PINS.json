@@ -2,20 +2,20 @@
   "format": 1,
   "classification": "PRIVATE_FIRST_INSTALL_EXTERNAL_INPUT_PINS",
   "frozen": true,
-  "sourceHead": "af3f246c4157f2489215fc1de034704d86109a17",
-  "sourceTree": "501c2b0a3beda8b91eec33b9be6050e66ac45582",
+  "sourceHead": "0a04532f05243265170e6c6d457662a422deadf0",
+  "sourceTree": "5d43b7d4625333b51c4e1adf2f3d25dd2d38823a",
   "archive": {
     "path": "inputs/final-thin.tar.gz",
-    "bytes": 15541555,
-    "sha256": "f5d80350c18d13a1145ca1291f4c01add8558ae77ede5bae3916d6b3e4051818"
+    "bytes": 15541798,
+    "sha256": "df548c893fa503d052167f8ccb30e7d768031f8bf8cc450d93298d8990898184"
   },
   "descriptor": {
     "path": "thin-install-descriptor.json",
     "bytes": 635464,
-    "sha256": "406e8bda96ff04d07cce613fd6209f3626ef8caeaae75845e9aba74acdf0d675",
+    "sha256": "2136ff4290fa57a47beb3622eeb2ae3cda57261612877e151c95e3a9bc0bd145",
     "mode": 384
   },
-  "productBuildId": "0cef9bff-9dcb-4685-b096-f4cdfe733f21",
+  "productBuildId": "9fe50e10-7ad8-4d20-b3b0-694511549c37",
   "sourceIndexSha256": "a948c323757b4fdae2ec6e98c143336ce3afc71e91e635e4a00e1f0ff2fc3f05",
   "node": {
     "linux-x64": {
@@ -28,6 +28,6 @@
     }
   },
   "browserLockSha256": "13af1c77584c39ab559f7df92227633400e93026a2ec2a87020fdc587dcdde72",
-  "transportReceiptSha256": "5178d99db23be763991769dc8e882f1ad06efd33ef4894014dc1e27e1fc24ea3",
-  "assemblyHandoffSha256": "d0f96adbffa735d7cc05bd0bea9d3956615abb0621d82a862a261dcbdbb2fad4"
+  "transportReceiptSha256": "edf65cab50682dacf3717923df442eda688237041a758b4dead106940c1e9972",
+  "assemblyHandoffSha256": "f0629fddd46567756e99ac9245b6cede0b56d223ef211bc9f1cfca96a23f161b"
 }
