@@ -14,8 +14,8 @@ export class BotService {
       result[table]=Object.entries(state[table]).filter(([id,row])=>this.policy.canRead(actor,{kind,id})&&!(kind==='memory'&&row.forgotten)).map(([id,row])=>{this.policy.noteRead(actor,{kind,id});return copy(row);});
     }
     result.grants=Object.values(state.grants).filter(row=>actor.kind==='human'||row.recipientBotId===actor.botId).map(copy);
-    result.attempts=Object.values(state.attempts).filter(row=>this.policy.canRead(actor,{kind:'task',id:row.taskId})).map(copy);
-    result.outbox=Object.values(state.outbox).filter(row=>actor.kind==='human'||row.botId===actor.botId).map(copy);
+    result.attempts=Object.values(state.attempts).filter(row=>this.policy.canRead(actor,{kind:'task',id:row.taskId})&&this.policy.canReadDerived(actor,{botId:row.botId,...(row.result??{}),...(row.report??{})},state)).map(row=>{this.policy.noteRead(actor,{kind:'task',id:row.taskId});this.policy.noteDependencies(actor,[...(row.result?.origins??[]),...(row.report?.origins??[])]);return copy(row);});
+    result.outbox=Object.values(state.outbox).filter(row=>(actor.kind==='human'||row.botId===actor.botId)&&this.policy.canReadDerived(actor,row,state)).map(row=>{this.policy.noteDependencies(actor,row.origins);return copy(row);});
     return result;
   }
   async #rememberReads(actor) {
@@ -58,6 +58,7 @@ export class BotService {
     if(actor.kind==='bot') {
       if(action==='snapshot')result=this.snapshot(actor);
       else if(action==='session.page')this.policy.noteRead(actor,{kind:'session',id:input.sessionId});
+      else if(action==='session.list')for(const row of result.items)this.policy.noteRead(actor,{kind:'session',id:row.sessionId});
       else if(action==='memory.search')for(const row of result)this.policy.noteRead(actor,{kind:'memory',id:row.memoryId});
       await this.#rememberReads(actor);
       for(const ref of this.policy.readDependencies(actor))this.policy.require(actor,`${ref.kind}.read`,ref);

@@ -15,6 +15,8 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop';
 import Storage from '@deepseek-ai/dsh-storage';
 import * as StorageJson from '@deepseek-ai/dsh-storage-json';
 import SessionQuery from '@deepseek-ai/dsh-session-query';
+import * as Domain from '@deepseek-ai/dsh-storage-domain';
+import Workspaces from '@deepseek-ai/dsh-workspace';
 
 export function deferred() {let resolve; const promise = new Promise(r => {resolve = r;}); return {promise, resolve};}
 export async function eventually(check, label = 'native event', timeout = 3000) {
@@ -47,10 +49,10 @@ export async function createOfficialFixture({stream, directory} = {}) {
   }
   const provider = {name: 'test-provider', inject: ['llm'], apply(owner) {owner.llm.registerAdapter(['controlled'], new ControlledAdapter());}};
   const plugins = {llm: LlmRuntime, sessions: SessionStore, projections: Projections, persistence: Persistence,
-    prompt: SystemPrompt, tools: Tools, agents: Agents, loop: AgentLoop, storage: Storage, json: StorageJson, query: SessionQuery, provider};
+    prompt: SystemPrompt, tools: Tools, agents: Agents, loop: AgentLoop, storage: Storage, json: StorageJson, query: SessionQuery, domain:Domain,workspaces:Workspaces,provider};
   Object.assign(ctx.loader.builtins, plugins);
   const rows = Object.keys(plugins).map(id => ({id, name: `cordis:${id}`, config: id === 'persistence' ? {root: join(dir, 'sessions'), compression: 'none'} :
-    id === 'json' ? {root: join(dir, 'storage')} : id === 'loop' ? {agents: []} : id === 'prompt' ? {personaPrefix: '', includeHarnessIdentity: false} : {}}));
+    id === 'json' ? {root: join(dir, 'storage')} : id==='domain'?{backend:'json'}:id === 'loop' ? {agents: []} : id === 'prompt' ? {personaPrefix: '', includeHarnessIdentity: false} : {}}));
   await writeFile(join(dir, 'cordis.yml'), JSON.stringify(rows));
   await ctx.loader.root.update(rows); await ctx.loader.await();
   for (const entry of ctx.loader.entries()) await entry.fiber?.await();

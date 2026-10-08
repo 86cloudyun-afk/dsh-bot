@@ -56,4 +56,36 @@ export class SessionOwnership {
     requireCondition(Number.isSafeInteger(offset)&&offset>=0 && (!input.cursor||input.cursor.token===token),'cursor_changed');
     return {items:rows.slice(offset,offset+limit).map(row=>({...row,...copy(state.sessions[row.sessionId]??{}),type:state.sessions[row.sessionId]?.purpose??'ordinary'})),nextCursor:offset+limit<rows.length?{token,offset:offset+limit}:null,total:rows.length};
   }
+  async #archive(actor,command,value) {
+    command=copy(command);const input=command.input,reference={kind:'session',id:input.sessionId};
+    requireCondition(plain(input)&&Object.keys(input).every(key=>key==='sessionId')&&validId(input.sessionId),'invalid_input');
+    this.policy.require(actor,value?'session.archive':'session.restore',reference);
+    const previous=this.store.read().sessions[input.sessionId],resources=this.adapter.resources(input.sessionId);
+    if(value)requireCondition(!previous?.attemptId||!this.store.read().attempts[previous.attemptId]?.reservationHeld,'attempt_unsettled');
+    if(value&&resources.known)requireCondition(resources.settled,'session_active');
+    const intent=await this.store.transact(this.policy.command(actor,command),draft=>{
+      this.policy.require(actor,value?'session.archive':'session.restore',reference,draft);
+      const row=draft.sessions[input.sessionId]??{sessionId:input.sessionId,botId:null,purpose:'ordinary',epoch:0,state:'ready',archived:false};
+      requireCondition(!['archiving','restoring'].includes(row.state),'operation_pending');
+      row.archiveOperationId=command.operationId;row.archiveStatusId=randomUUID();row.previousState=row.state==='UNKNOWN'?row.previousState??'ready':row.state;row.state=value?'archiving':'restoring';draft.sessions[input.sessionId]=row;
+      return {sessionId:row.sessionId,statusOperationId:row.archiveStatusId,archived:value};
+    });
+    if(Object.hasOwn(this.store.read().operations,intent.statusOperationId))return this.store.read().operations[intent.statusOperationId].result;
+    this.policy.require(actor,value?'session.archive':'session.restore',reference);
+    const workspaces=this.adapter.context.get('workspaceRegistry');requireCondition(workspaces,'workspace_unavailable');
+    try {
+      if(value)await workspaces.archiveSession(input.sessionId);else await workspaces.unarchiveSession(input.sessionId);
+      return await this.store.transact({operationId:intent.statusOperationId,action:'session.archive-settled',input:intent},draft=>{
+        this.policy.require(actor,value?'session.archive':'session.restore',reference,draft);
+        const row=draft.sessions[input.sessionId];requireCondition(row.archiveOperationId===command.operationId,'stale_operation');
+        row.archived=value;row.state=row.previousState;delete row.previousState;return row;
+      });
+    }catch(error) {
+      await this.store.transact({operationId:randomUUID(),action:'session.archive-unknown',input:{sessionId:input.sessionId,error:error.code??error.name}},draft=>{
+        const row=draft.sessions[input.sessionId];if(row.archiveOperationId===command.operationId){row.state=['WorkspaceActiveSessionError','WorkspaceUnknownSessionError'].includes(error.name)?row.previousState:'UNKNOWN';row.error=error.code??error.name;}return null;
+      }).catch(()=>{});throw error;
+    }
+  }
+  archive(actor,command){return this.#archive(actor,command,true);}
+  restore(actor,command){return this.#archive(actor,command,false);}
 }

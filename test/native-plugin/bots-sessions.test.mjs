@@ -79,3 +79,15 @@ test('public session creation cannot bypass task or meeting admission',async t=>
   }
   assert.equal(Object.keys(f.store.read().sessions).length,0);
 });
+
+test('archive and restore use the native registry and retain the original cold log',async t=>{
+  const f=await businessFixture(t),a=await f.bot(),channel=await f.sessions.create(f.human,{operationId:'channel',action:'session.create',input:{botId:a.botId}});
+  const agent=f.ctx.agents.get(channel.sessionId);agent.followup(createUserMessage({content:[{type:'text',text:'Original history.'}],source:{kind:'native-plugin-test'}}));
+  await eventually(()=>f.events.get(channel.sessionId)?.some(event=>event.type==='turn/end'));await f.ctx.sessions.flush(agent.session);
+  const before=await f.adapter.readNative(channel.sessionId);
+  await f.sessions.archive(f.human,{operationId:'archive',action:'session.archive',input:{sessionId:channel.sessionId}});
+  assert.ok(f.ctx.workspaceRegistry.archivedSessionIds.includes(channel.sessionId));assert.equal(f.store.read().sessions[channel.sessionId].archived,true);
+  await f.sessions.restore(f.human,{operationId:'restore',action:'session.restore',input:{sessionId:channel.sessionId}});
+  assert.equal(f.ctx.workspaceRegistry.archivedSessionIds.includes(channel.sessionId),false);assert.equal(f.store.read().sessions[channel.sessionId].archived,false);
+  assert.deepEqual((await f.adapter.readNative(channel.sessionId)).events,before.events);
+});

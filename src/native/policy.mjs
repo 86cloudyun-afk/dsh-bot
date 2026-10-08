@@ -34,6 +34,10 @@ export class PermissionPolicy {
     this.#reads.set(actor.agent,refs);
   }
   readDependencies(actor) {this.#checkActor(actor,this.#store.read());return actor.kind==='bot'?[...(this.#reads.get(actor.agent)?.values()??[])].map(copy):[];}
+  canReadDerived(actor,record,state=this.#store.read()) {
+    try{this.#checkActor(actor,state);return this.#visible(actor,{kind:'memory',id:'derived',record,botId:record.botId??record.ownerBotId??null},state);}catch{return false;}
+  }
+  noteDependencies(actor,references=[]) {for(const reference of references)this.noteRead(actor,reference);}
   #checkActor(actor,state) {
     requireCondition(actor && this.#actors.has(actor),'access_denied');
     if(actor.kind==='bot')requireCondition(this.#agents?.get(actor.sessionId)===actor.agent && state.sessions[actor.sessionId]?.botId===actor.botId,'access_denied');

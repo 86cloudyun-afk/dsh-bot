@@ -13,7 +13,7 @@ test('native scoped tools derive the caller from the actual execution Agent',asy
   const f=await serviceFixture(t),a=await f.bot(),channel=await f.sessions.create(f.human,{operationId:'channel',action:'session.create',input:{botId:a.botId}}),agent=f.ctx.agents.get(channel.sessionId);
   assert.ok(f.ctx.tools.get('dsh_bot',agent));assert.equal(f.ctx.tools.get('dsh_bot'),undefined);
   const result=await f.ctx.tools.execute({callId:'real',name:'dsh_bot',agent,signal:new AbortController().signal,arguments:{action:'snapshot',input:{}}});
-  assert.equal(result.isError,false);assert.equal(result.value.bots[0].botId,a.botId);
+  assert.equal(result.isError,false);assert.equal(JSON.parse(result.content[0].text).bots[0].botId,a.botId);assert.ok(result.value.receiptId);
   const denied=await f.ctx.tools.execute({callId:'spoof',name:'dsh_bot',agent,signal:new AbortController().signal,arguments:{operationId:'spoof',action:'bot.create',input:{name:'Forged',actor:'human'}}});
   assert.equal(denied.isError,true);assert.equal(Object.keys(f.store.read().bots).length,1);
 });
