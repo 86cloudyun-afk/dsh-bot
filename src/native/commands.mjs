@@ -16,7 +16,7 @@ const contracts = {
   "session.restore": [["sessionId"], [], "恢复原生会话的原身份及日志。"],
   "memory.write": [["botId", "text"], ["memoryId", "expectedVersion", "category", "source", "automatic"], "只管理自己的长期记忆；更新已有 memoryId 时传其 version。source 可为 {sessionId,eventSeq}。"],
   "memory.forget": [["memoryId", "expectedVersion"], [], "遗忘自己的记忆；expectedVersion 使用记忆 version。"],
-  "task.create": [["botId", "title", "goal", "criteria"], ["originSessionId"], "登记任务，返回真实 taskId 和 version；criteria 是字符串数组。省略 originSessionId 时 Bot 使用当前联络会话。"],
+  "task.create": [["botId", "title", "goal", "criteria"], ["originSessionId"], "登记任务，返回真实 taskId 和 version；criteria 是字符串数组。省略 originSessionId 时 Bot 使用当前调用会话（联络或执行会话）。"],
   "task.start": [["taskId", "expectedVersion"], ["parentAttemptId"], "立即派发到独立原生工作会话，返回 attemptId；expectedVersion 使用最新任务 version。不会等待任务完成。执行会话创建的子任务最多一级。"],
   "task.adjust": [["taskId", "expectedVersion"], ["title", "goal", "criteria", "botId"], "调整任务；会停止旧尝试。结算后再用最新 version 接续。"],
   "task.stop": [["taskId", "attemptId", "epoch"], [], "停止确切尝试及其一级子工作；这些值使用 snapshot 的当前 attempt。接受停止后仍等待真实资源结算。"],

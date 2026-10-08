@@ -509,6 +509,7 @@ export class NativeDshAdapter {
           if (binding.purpose === "independent" && exec.name === "dsh_bot")
             requireCondition(
               [
+                "help",
                 "snapshot",
                 "session.page",
                 "session.list",
