@@ -323,7 +323,13 @@ export async function stockGui({
       .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
   state.workbench = async (tab) => {
     await page.getByRole("button", { name: "Bot 工作台", exact: true }).click();
+    if (["内部群", "会议"].includes(tab)) await page.getByRole("button", {name: "协作", exact: true}).click();
+    if (["共享与授权", "会话管理", "结果与投递"].includes(tab)) await page.getByRole("button", {name: "管理", exact: true}).click();
     if (tab) await page.getByRole("button", { name: tab, exact: true }).click();
+  };
+  state.expand = async (card, label) => {
+    const summary = card.locator("summary").filter({hasText: label});
+    if (await summary.evaluate(el => !el.parentElement.open)) await summary.click();
   };
   state.save = async (name) => {
     await writeFile(

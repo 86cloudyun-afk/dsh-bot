@@ -505,7 +505,6 @@ export class NativeDshAdapter {
         try {
           requireCondition(exec.agent === agent, "execution_identity_mismatch");
           this.#authorize(record);
-          const bot = this.#store.read().bots[binding.botId];
           if (binding.purpose === "independent" && exec.name === "dsh_bot")
             requireCondition(
               [
@@ -522,7 +521,6 @@ export class NativeDshAdapter {
           if (exec.name !== "dsh_bot")
             requireCondition(
               binding.purpose !== "independent" &&
-                (bot.capabilities ?? []).includes(exec.name) &&
                 ![
                   "subagent",
                   "plugin_manager",

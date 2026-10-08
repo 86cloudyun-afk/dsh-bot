@@ -1,3 +1,4 @@
+import {runSimpleUiChecks} from './stock-simple-ui-checks.mjs';
 import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
@@ -71,6 +72,7 @@ async function newTask(title, goal, origin = gui.contactId) {
   await card.getByLabel("负责人").selectOption(gui.botIds[0]);
   await card.getByLabel("标题", { exact: true }).fill(title);
   await card.getByLabel("目标", { exact: true }).fill(goal);
+  await gui.expand(card, "验收与结果接收");
   await card.getByLabel("验收条件（每行一项）").fill("原生结果和资源证据存在");
   if (origin) await card.getByLabel("结果接收会话").selectOption(origin);
   await card.getByRole("button", { name: "登记任务", exact: true }).click();
@@ -162,10 +164,11 @@ try {
     await gui.page
       .getByLabel("身份与职责")
       .fill("A harmless qualification Bot");
+    await gui.expand(gui.card("创建具名 Bot"), "更多设置");
     await gui.page
       .getByLabel("工作目录（DSH 所在机器）")
       .fill(join(gui.root, "work"));
-    await gui.page.getByLabel("联络模型", { exact: true }).selectOption(
+    await gui.page.getByLabel("模型", { exact: true }).selectOption(
       JSON.stringify({
         provider: controlledProvider,
         model: `model-${String.fromCharCode(97 + index)}`,
@@ -177,9 +180,6 @@ try {
         model: `model-${String.fromCharCode(97 + index)}`,
       }),
     );
-    await gui.page
-      .getByLabel("允许使用的原生工具（逗号分隔名称）")
-      .fill("bash");
     await gui.page
       .getByRole("button", { name: "创建 Bot", exact: true })
       .click();
@@ -311,6 +311,7 @@ try {
     "一级子工作",
     "GUI_SHORT：由父工作管理的一级子工作",
   );
+  await gui.expand(gui.card(child.title), "子工作");
   await gui
     .card(child.title)
     .getByLabel("所属父工作")
@@ -368,6 +369,7 @@ try {
     .waitFor({ state: "hidden" });
   gui.check("actualExecutionView", true);
   await gui.workbench("任务");
+  await gui.expand(gui.card(short.title), "调整与接续");
   await gui.card(short.title).getByLabel("新目标").fill("GUI_SHORT 接续");
   await gui
     .card(short.title)
@@ -396,6 +398,7 @@ try {
     (row) => row.taskId === short.taskId && row.epoch === 2,
   );
   gui.check("sameTaskNewAttempt", second.attemptId !== first.attemptId);
+  await gui.expand(gui.card(short.title), "验收结果");
   await gui.card(short.title).getByLabel("结论").selectOption("passed");
   await gui
     .card(short.title)
@@ -504,6 +507,7 @@ try {
   }
   for (const index of [0, 1]) {
     const group = gui.card("内部群一");
+    await gui.expand(group, "开会");
     await group.getByLabel("议题", { exact: true }).fill(`会议${index + 1}`);
     await group.getByLabel("共同材料").fill(`会议${index + 1}的共同材料`);
     await group.getByRole("button", { name: "发起会议", exact: true }).click();
@@ -546,6 +550,7 @@ try {
   }
   gui.check("nativeOpinionsDiscussionAndDecisions", true);
   const action = gui.card("会议1");
+  await gui.expand(action, "登记行动任务");
   await action.getByLabel("负责人").selectOption(gui.botIds[1]);
   await action.getByLabel("任务标题").fill("会议行动");
   await action.getByLabel("行动目标").fill("实际任务行动");
@@ -787,6 +792,7 @@ try {
     (await gui.snapshot()).bots.some((row) => row.botId === gui.botIds[0]),
   );
   mark("ui-sharing-and-concurrent-draft-regressions");
+  await runSimpleUiChecks(gui);
   await runUiRegressions(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");

@@ -68,12 +68,12 @@ test('revocation fences the next model call even when old shared tool results re
   agent.followup(createUserMessage({content:[{type:'text',text:'Reveal the old shared fact.'}],source:{kind:'native-plugin-test'}}));
   await eventually(()=>f.events.get(channel.sessionId)?.some(e=>e.type==='turn/end'));assert.equal(f.requests.length,0);
 });
-test('Bot capability limits do not remove native tools from ordinary sessions',async t=>{
+test('Bot default native tools do not change ordinary session tool access',async t=>{
   const f=await serviceFixture(t),a=await f.bot();let bodies=0;
   const unregister=f.ctx.tools.register({name:'probe_tool',description:'Harmless test probe',parameters:{type:'object',properties:{},additionalProperties:false},output:{schema:{type:'boolean'},render:()=>[{type:'text',text:'ok'}]},async execute(){bodies++;return true;}});t.after(unregister);
   const channel=await f.sessions.create(f.human,{operationId:'channel',action:'session.create',input:{botId:a.botId}}),agent=f.ctx.agents.get(channel.sessionId);
   const input={callId:'limited',name:'probe_tool',agent,signal:new AbortController().signal,arguments:{}};
-  assert.equal((await f.ctx.tools.execute(input)).isError,true);assert.equal(bodies,0);
+  assert.equal((await f.ctx.tools.execute(input)).isError,false);assert.equal(bodies,1);
   const ordinary=await f.ctx.agents.create({sessionId:'ordinary'});t.after(()=>ordinary.dispose());
-  assert.equal((await f.ctx.tools.execute({...input,callId:'ordinary',agent:ordinary.agent})).isError,false);assert.equal(bodies,1);
+  assert.equal((await f.ctx.tools.execute({...input,callId:'ordinary',agent:ordinary.agent})).isError,false);assert.equal(bodies,2);
 });
