@@ -5,6 +5,15 @@ import {createUserMessage} from '@deepseek-ai/dsh-llm';
 import {businessFixture} from './business-fixture.mjs';
 import {eventually} from './official-fixture.mjs';
 
+test('a blank Bot contact is attached to its native cwd workspace before opening',async t=>{
+  const f=await businessFixture(t),bot=await f.bot('A');
+  const contact=await f.sessions.create(f.human,{operationId:'native-open',action:'session.create',input:{botId:bot.botId}});
+  const workspace=f.ctx.workspaceRegistry.list().find(row=>row.path===bot.cwd);
+  assert.ok(workspace,'the stock blank conversation requires a registered workspace');
+  assert.ok(workspace.sessionIds.includes(contact.sessionId));
+  assert.equal(f.requests.length,0);
+});
+
 test('three named bots keep distinct identities and independent model configurations',async t=>{
   const f=await businessFixture(t),a=await f.bot('A'),b=await f.bot('B','model-b'),c=await f.bot('C','model-c');
   assert.equal(new Set([a.botId,b.botId,c.botId]).size,3);

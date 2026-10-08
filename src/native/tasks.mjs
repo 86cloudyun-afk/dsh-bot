@@ -7,6 +7,14 @@ export class TaskController {
   runtimeId=randomUUID();#launching=new Map();#watching=new Map();#closed=false;#closing=false;#timers=new Set();#resultSink;
   constructor({store,policy,adapter}) {Object.assign(this,{store,policy,adapter});}
   setResultSink(broker){this.#resultSink=broker;}
+  #hasPendingChildren(state,parent) {
+    return Object.values(state.attempts).some(child=>{
+      if(child.parentAttemptId!==parent.attemptId)return false;
+      if(child.reservationHeld)return true;
+      const result=state.outbox[child.resultOutboxId];
+      return parent.state!=='stop_requested'&&result?.sessionId===parent.sessionId&&['queued','admitting','UNKNOWN'].includes(result.state);
+    });
+  }
   #source(actor) {
     if(actor.kind==='human')return {kind:'human'};
     const binding=this.store.read().sessions[actor.sessionId];
@@ -68,18 +76,18 @@ export class TaskController {
     const run=(async()=>{
       while(!this.#closed) {
         const state=this.store.read(),attempt=state.attempts[attemptId];if(!attempt?.reservationHeld)return;
-        const evidence=this.adapter.resources(attempt.sessionId),children=Object.values(state.attempts).filter(row=>row.parentAttemptId===attemptId&&row.reservationHeld);
+        const evidence=this.adapter.resources(attempt.sessionId),childrenPending=this.#hasPendingChildren(state,attempt);
         if(evidence.resourceFaults?.length) {
           await this.store.transact({operationId:randomUUID(),action:'attempt.resource-unknown',input:{attemptId}},draft=>{const row=draft.attempts[attemptId];row.state='UNKNOWN';row.error='resource_termination_unknown';row.localEvidence=evidence;draft.tasks[row.taskId].state='UNKNOWN';return null;});return;
         }
-        if(evidence.known&&evidence.settled&&!children.length&&attempt.state!=='starting') {
+        if(evidence.known&&evidence.settled&&!childrenPending&&attempt.state!=='starting') {
           const live=this.adapter.context.sessions.get(attempt.sessionId);if(live)await this.adapter.context.sessions.flush(live);
           const history=await this.adapter.readNative(attempt.sessionId),end=history.events.filter(event=>event.type==='turn/end').at(-1);
           if(end||attempt.state==='stop_requested') {
             const reply=history.events.filter(event=>event.type==='assistant/message').at(-1);
             try{await this.store.transact({operationId:attempt.settleOperationId,action:'attempt.settled',input:{attemptId}},draft=>{
               const row=draft.attempts[attemptId];if(!row.reservationHeld)return null;
-              requireCondition(!Object.values(draft.attempts).some(child=>child.parentAttemptId===attemptId&&child.reservationHeld)&&this.adapter.resources(row.sessionId).settled,'settlement_pending');
+              requireCondition(!this.#hasPendingChildren(draft,row)&&this.adapter.resources(row.sessionId).settled,'settlement_pending');
               const task=draft.tasks[row.taskId],stopped=['stop_requested','UNKNOWN'].includes(row.state)||task.version!==row.taskVersion;
               row.state=stopped?'stopped':end?.data.reason.kind==='completed'?'returned':'failed';row.reservationHeld=false;row.settledAt=new Date().toISOString();row.localEvidence=evidence;row.usage=evidence.requests.map(request=>request.usage);
               if(!stopped&&reply)row.result={sessionId:row.sessionId,eventSeq:reply.seq,content:copy(reply.data.content??reply.data.message?.content??[]),source:{sessionId:row.sessionId,eventSeq:reply.seq},origins:copy(draft.sessions[row.sessionId].origins??[])};

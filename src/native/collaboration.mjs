@@ -851,7 +851,10 @@ export class GroupMeetingController {
         )) {
           const coordinatorChanged =
             meeting.coordinatorBotId !== group.coordinatorBotId;
-          if (coordinatorChanged && meeting.phase === "decision") {
+          const decisionChanged =
+            meeting.phase === "decision" &&
+            (coordinatorChanged || changed.length > 0);
+          if (decisionChanged) {
             const oldCoordinator = meeting.participants.find(
               (row) => row.botId === meeting.coordinatorBotId,
             );
@@ -876,13 +879,13 @@ export class GroupMeetingController {
             );
             const membershipChanged = changed.includes(participant.botId),
               newCoordinator =
-                coordinatorChanged &&
-                meeting.phase === "decision" &&
+                decisionChanged &&
                 participant.botId === meeting.coordinatorBotId;
             if (!membershipChanged && !newCoordinator) continue;
             if (participant.sessionId) stopped.push(participant.sessionId);
             participant.active = member.active;
             participant.memberEpoch = member.epoch;
+            if (newCoordinator) delete meeting.absences[participant.botId];
             if (membershipChanged) {
               delete meeting.opinions[participant.botId];
               delete meeting.discussion[participant.botId];
@@ -916,7 +919,7 @@ export class GroupMeetingController {
         return { group: copy(group), stopped, relaunch };
       },
     );
-    for (const id of result.stopped)
+    for (const id of new Set(result.stopped))
       if (this.adapter.context.agents.get(id))
         void this.adapter.stopResources(id).catch(() => {});
     for (const row of result.relaunch)

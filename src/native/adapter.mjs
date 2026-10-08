@@ -48,6 +48,7 @@ export class NativeDshAdapter {
   async #admitBoundedRequest(binding) {
     const lineage=binding.lineage;if(!lineage?.meetingId&&!lineage?.roundId)return;
     await this.#store.transact({operationId:randomUUID(),action:'collaboration.request-admitted',input:{sessionId:binding.sessionId}},draft=>{
+      this.#authorize(this.#records.get(binding.sessionId),{state:draft});
       const record=lineage.meetingId?draft.meetings[lineage.meetingId]:draft.groups[lineage.groupId]?.rounds[lineage.roundId];
       requireCondition(record&&record.requests<record.maxRequests,'round_budget_exhausted');record.requests++;return null;
     });
@@ -71,9 +72,9 @@ export class NativeDshAdapter {
   get context() {return this.#ctx;}
   setContextProvider(provider) {this.#contextProvider=provider;}
   setService(service) {this.#service=service;}
-  #authorize(record,{ignoreModelIntent=false}={}) {
+  #authorize(record,{ignoreModelIntent=false,state=this.#store.read()}={}) {
     requireCondition(!this.#closed&&record&&!record.closed,'disabled');
-    const state=this.#store.read(),binding=state.sessions[record.agent.id],bot=state.bots[binding?.botId];
+    const binding=state.sessions[record.agent.id],bot=state.bots[binding?.botId];
     requireCondition(this.#ctx.agents.get(record.agent.id)===record.agent&&binding?.epoch===record.binding.epoch&&binding.state==='ready'&&!binding.archived&&bot?.lifecycle==='active','stale_agent');
     const intent=record.uiIntent??binding.uiModelIntent;
     if(!ignoreModelIntent&&intent)requireCondition(intent.provider===record.model.provider&&intent.model===record.model.model&&intent.reasoningEffort===record.model.reasoningEffort,'model_drift');
@@ -167,7 +168,12 @@ export class NativeDshAdapter {
           await this.bindAgent(agent,binding);
           await setup?.(agentCtx,agent);
         }});
-      try {requireCondition(!this.#closed,'disposed');await this.#ctx.sessions.flush(handle.agent.session);this.#handles.set(binding.sessionId,handle);return handle;}
+      try {
+        requireCondition(!this.#closed,'disposed');await this.#ctx.sessions.flush(handle.agent.session);
+        const registry=this.#ctx.get('workspaceRegistry');
+        if(registry&&binding.purpose==='contact')await (await registry.create(binding.cwd)).attachSession(binding.sessionId);
+        this.#handles.set(binding.sessionId,handle);return handle;
+      }
       catch(error){await handle.dispose();throw error;}
     })();
     this.#creating.set(binding.sessionId,operation);

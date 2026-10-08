@@ -121,6 +121,8 @@ export class PermissionPolicy {
     if(principal.kind==='human')requireCondition(task.source?.kind==='human','delivery_identity_unknown');
     else requireCondition(validId(principal.botId)&&validId(principal.sessionId)&&task.source?.sessionId===principal.sessionId&&state.sessions[principal.sessionId]?.botId===principal.botId&&state.bots[principal.botId]?.lifecycle==='active','delivery_identity_unknown');
     this.#requirePrincipal(principal,'session.send',{kind:'session',id:row.sessionId},state);
+    requireCondition(this.#visible(principal,{kind:'memory',id:'derived',record:row,botId:row.botId},state),'access_denied');
+    for(const reference of row.origins??[])this.#requirePrincipal(principal,`${reference.kind}.read`,reference,state);
   }
   async authorizeShare(actor,command) {
     command=copy(command);

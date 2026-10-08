@@ -475,6 +475,7 @@ window.__ModuleLoader__.load({
                 h(
                   "select",
                   {
+                    "aria-label": "Bot",
                     value: botId ?? "",
                     onChange: (event) => setId(event.target.value),
                   },
