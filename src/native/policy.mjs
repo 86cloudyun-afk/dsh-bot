@@ -59,6 +59,7 @@ export class PermissionPolicy {
       if(!lineage.meetingId || lineage.phase!=='independent')continue;
       const meeting=state.meetings[lineage.meetingId];
       if(!meeting || meeting.epoch!==lineage.epoch)return false;
+      if(lineage.memberEpoch!==undefined){const participant=meeting.participants?.find(row=>row.botId===lineage.botId);if(!participant?.active||participant.memberEpoch!==lineage.memberEpoch)return false;}
       if(!['discussion','decision','complete'].includes(meeting.phase)) {
         if(meeting.phase!=='independent')return false;
         const ownChannel=binding?.lineage?.meetingId===lineage.meetingId && binding.lineage.epoch===lineage.epoch &&

@@ -34,13 +34,22 @@ export class NativeDshAdapter {
         requireCondition(record.requestSignals.has(options.signal),'request_identity_mismatch');
         requireCondition(callConfigEquals(record.model,options),'model_drift');
       }
+      if(binding.requestLimit!==undefined)requireCondition(record.requests.length<binding.requestLimit,'round_budget_exhausted');
       const request={usage:'UNKNOWN',purpose:options.purpose??'conversation',submitted:false};record.models.add(request);let release;
       try {
         if(binding.purpose!=='execution')release=await adapter.#shortRound(binding.botId,options.sessionId,options.signal);
-        adapter.#authorize(record);options.signal.throwIfAborted();request.submitted=true;request.startedAt=Date.now();
+        adapter.#authorize(record);options.signal.throwIfAborted();
+        await adapter.#admitBoundedRequest(binding);adapter.#authorize(record);options.signal.throwIfAborted();request.submitted=true;request.startedAt=Date.now();
         for await(const chunk of next()){adapter.#authorize(record);if(chunk.type==='usage')request.usage=copy(chunk.usage);yield chunk;}}
       finally {release?.();record.models.delete(request);if(request.submitted)record.requests.push(request);}
     },{global:true}));
+  }
+  async #admitBoundedRequest(binding) {
+    const lineage=binding.lineage;if(!lineage?.meetingId&&!lineage?.roundId)return;
+    await this.#store.transact({operationId:randomUUID(),action:'collaboration.request-admitted',input:{sessionId:binding.sessionId}},draft=>{
+      const record=lineage.meetingId?draft.meetings[lineage.meetingId]:draft.groups[lineage.groupId]?.rounds[lineage.roundId];
+      requireCondition(record&&record.requests<record.maxRequests,'round_budget_exhausted');record.requests++;return null;
+    });
   }
   #shortRound(botId,sessionId,signal) {
     const pool=this.#shortPools.get(botId)??{active:0,queue:[],last:null};this.#shortPools.set(botId,pool);
@@ -68,6 +77,9 @@ export class NativeDshAdapter {
     const intent=record.uiIntent??binding.uiModelIntent;
     if(!ignoreModelIntent&&intent)requireCondition(intent.provider===record.model.provider&&intent.model===record.model.model&&intent.reasoningEffort===record.model.reasoningEffort,'model_drift');
     requireCondition(!record.uiIntentUnknown,'recovery_required');
+    const lineage=binding.lineage;
+    if(lineage?.meetingId){const meeting=state.meetings[lineage.meetingId],participant=meeting?.participants?.find(row=>row.botId===binding.botId),member=state.groups[meeting?.groupId]?.members?.find(row=>row.botId===binding.botId);requireCondition(meeting?.epoch===lineage.epoch&&meeting.phase===lineage.phase&&participant?.active&&participant.sessionId===binding.sessionId&&participant.memberEpoch===lineage.memberEpoch&&member?.active&&member.epoch===lineage.memberEpoch,'stale_meeting');}
+    else if(lineage?.groupId){const group=state.groups[lineage.groupId],member=group?.members?.find(row=>row.botId===binding.botId);requireCondition(member?.active&&member.epoch===lineage.memberEpoch&&group.rounds[lineage.roundId]?.state==='running','stale_group');}
     const actor=this.#policy.fromAgent(record.agent);
     for(const reference of [...(binding.origins??[]),...this.#policy.readDependencies(actor)])this.#policy.require(actor,`${reference.kind}.read`,reference,state);
     if(binding.attemptId) {
