@@ -1,0 +1,5 @@
+# Native plugin for an existing official DSH profile. No host overrides.
+- insert:
+    - id: dsh-bot
+      name: dsh-bot
+      config: {}

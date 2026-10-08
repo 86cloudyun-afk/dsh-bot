@@ -1,0 +1,17 @@
+# Keep runtime sources, declarations, UI assets, plugin config and public docs.
+# Historical verification payloads and local private state are not package data.
+docs/evidence/
+.git/
+.local/
+.test-runtime/
+.aws/
+.codex/
+.agents/
+node_modules/
+coverage/
+.env*
+.DS_Store
+*.sqlite*
+*.db*
+*.jsonl
+*.log
