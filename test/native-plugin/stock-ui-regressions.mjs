@@ -40,7 +40,10 @@ export async function runUiRegressions(gui) {
     assert.deepEqual(await checked(), [selected.botId]);
     gui.check("shareDraftRemainsBoundToSelectedBotIds", true);
     await sharing.getByRole("button", { name: "保存共享上限", exact: true }).click();
-    await gui.until(snapshot => snapshot.bots.find(bot => bot.botId === owner.botId).share.receivers.length === 1, "shared recipient save");
+    await gui.until(snapshot => {
+      const receivers = snapshot.bots.find(bot => bot.botId === owner.botId).share.receivers;
+      return receivers.length === 1 && receivers[0] === selected.botId;
+    }, "shared recipient save");
     assert.deepEqual((await gui.snapshot()).bots.find(bot => bot.botId === owner.botId).share.receivers, [selected.botId]);
     gui.check("savingShareDoesNotAddAnUnselectedBot", true);
 
