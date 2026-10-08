@@ -6,6 +6,7 @@ import {
   appendDelegatedPolicyOverrides,
 } from "@deepseek-ai/dsh-subagent";
 import { NativeWorkChildren } from "./child.mjs";
+import {commandNames, botToolDescription} from "./commands.mjs";
 import {
   createUserMessage,
   callConfigEquals,
@@ -550,14 +551,13 @@ export class NativeDshAdapter {
       own(
         agent.ctx.tools.register({
           name: "dsh_bot",
-          description:
-            "管理自己的任务、会话、长期记忆、内部群和会议；跨 Bot 默认只读。写动作必须保存原始 operationId，未知操作只能查回。",
+          description: botToolDescription,
           parameters: {
             type: "object",
             properties: {
-              action: { type: "string" },
-              input: { type: "object" },
-              operationId: { type: "string" },
+              action: { type: "string", enum: commandNames },
+              input: { type: "object", description: "动作输入；先用 help 查询所需字段及示例。" },
+              operationId: { type: "string", description: "写动作必需；每个新动作使用不同唯一 ID，未知动作保留原请求。只读查询可省略。" },
               expectedRevision: { type: "integer" },
             },
             required: ["action"],

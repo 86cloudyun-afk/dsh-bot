@@ -40,7 +40,10 @@ export async function runUiRegressions(gui) {
     assert.deepEqual(await checked(), [selected.botId]);
     gui.check("shareDraftRemainsBoundToSelectedBotIds", true);
     await sharing.getByRole("button", { name: "保存共享上限", exact: true }).click();
-    await gui.until(snapshot => snapshot.bots.find(bot => bot.botId === owner.botId).share.receivers.length === 1, "shared recipient save");
+    await gui.until(snapshot => {
+      const receivers = snapshot.bots.find(bot => bot.botId === owner.botId).share.receivers;
+      return receivers.length === 1 && receivers[0] === selected.botId;
+    }, "shared recipient save");
     assert.deepEqual((await gui.snapshot()).bots.find(bot => bot.botId === owner.botId).share.receivers, [selected.botId]);
     gui.check("savingShareDoesNotAddAnUnselectedBot", true);
 
@@ -100,6 +103,13 @@ export async function runUiRegressions(gui) {
       };
     });
     try {
+      // A preceding list request may still be completing when the interceptor
+      // is installed. Wait for an intercepted response before creating the
+      // target, so an undelayed older response cannot satisfy the assertion.
+      await waitFor(
+        () => gui.page.evaluate(() => window.__slowListCalls > 0),
+        "intercepted slow recipient response",
+      );
       const delayed = await gui.app.ctx.sessionController.create({ workspaceId: workspace.id }, new AbortController().signal);
       await gui.page.getByRole("button", { name: "刷新", exact: true }).click();
       await form.locator(`select[name="origin"] option[value="${delayed.sessionId}"]`).waitFor({ state: "attached", timeout: 6500 });

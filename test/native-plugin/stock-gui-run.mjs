@@ -567,11 +567,12 @@ try {
   );
   await gui.save("group-meeting-workbench");
   mark("ordinary-session-management-and-result");
+  const ordinaryWorkspace = await gui.app.ctx.workspaceRegistry.create(
+    join(gui.root, "work"),
+  );
   const ordinary = await gui.app.ctx.sessionController.create(
     {
-      workspaceId: gui.app.ctx.workspaceRegistry
-        .list()
-        .find((row) => row.path === join(gui.root, "work")).id,
+      workspaceId: ordinaryWorkspace.id,
     },
     new AbortController().signal,
   );

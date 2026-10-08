@@ -1,4 +1,5 @@
 import { copy, plain, requireCondition, validId } from "./store.mjs";
+import {commandHelp} from "./commands.mjs";
 
 /** One business surface shared by authenticated GUI RPC and Agent-scoped tools. */
 export class BotService {
@@ -177,7 +178,10 @@ export class BotService {
     command.input ??= {};
     const { action, input } = command;
     let result;
-    if (action === "snapshot") result = this.snapshot(actor);
+    if (action === "help") {
+      this.policy.actorKey(actor);
+      result = commandHelp(actor, input);
+    } else if (action === "snapshot") result = this.snapshot(actor);
     else if (action === "catalog") {
       this.policy.actorKey(actor);
       result = {
