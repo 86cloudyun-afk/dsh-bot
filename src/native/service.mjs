@@ -47,7 +47,7 @@ export class BotService {
         'share.set':[this.policy,'authorizeShare'],'grant.set':[this.policy,'authorizeShare'],
         'task.create':[this.tasks,'create'],'task.start':[this.tasks,'start'],'task.adjust':[this.tasks,'adjust'],'task.stop':[this.tasks,'stop'],
         'task.submit':[this.tasks,'submit'],'task.accept':[this.tasks,'accept'],'task.archive':[this.tasks,'archive'],'task.restore':[this.tasks,'restore'],
-        'session.send':[this.broker,'enqueue'],'group.create':[this.collaboration,'createGroup'],'group.post':[this.collaboration,'post'],
+        'outbox.reconcile':[this.broker,'reconcile'],'session.send':[this.broker,'enqueue'],'group.create':[this.collaboration,'createGroup'],'group.post':[this.collaboration,'post'],
         'group.members':[this.collaboration,'changeMembers'],'meeting.start':[this.collaboration,'startMeeting'],'meeting.opinion':[this.collaboration,'submitOpinion'],
         'meeting.advance':[this.collaboration,'advance'],'meeting.topic':[this.collaboration,'changeTopic'],'meeting.cancel':[this.collaboration,'cancel'],
         'meeting.action':[this.collaboration,'actionTask'],'recovery.reconcile':[this.recovery,'reconcile']};

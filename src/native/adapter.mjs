@@ -7,7 +7,7 @@ import {copy, plain, requireCondition} from './store.mjs';
 
 /** Thin public-service adapter. No host copies, private drivers or global defaults. */
 export class NativeDshAdapter {
-  #ctx; #store; #policy; #handles = new Map(); #creating = new Map(); #closed = false; #contextProvider; #service; #records=new Map(); #disposers=[];
+  #ctx; #store; #policy; #handles = new Map(); #creating = new Map(); #closed = false; #contextProvider; #service; #records=new Map(); #disposers=[]; #shortPools=new Map();
   constructor(ctx,{store,policy}={}) {
     this.#ctx=ctx;this.#store=store;this.#policy=policy;
     this.#disposers.push(ctx.on('agent/created',async({agent})=>{
@@ -34,10 +34,29 @@ export class NativeDshAdapter {
         requireCondition(record.requestSignals.has(options.signal),'request_identity_mismatch');
         requireCondition(callConfigEquals(record.model,options),'model_drift');
       }
-      const request={usage:'UNKNOWN',purpose:options.purpose??'conversation',startedAt:Date.now()};record.models.add(request);
-      try {for await(const chunk of next()){adapter.#authorize(record);if(chunk.type==='usage')request.usage=copy(chunk.usage);yield chunk;}}
-      finally {record.models.delete(request);record.requests.push(request);}
+      const request={usage:'UNKNOWN',purpose:options.purpose??'conversation',submitted:false};record.models.add(request);let release;
+      try {
+        if(binding.purpose!=='execution')release=await adapter.#shortRound(binding.botId,options.sessionId,options.signal);
+        adapter.#authorize(record);options.signal.throwIfAborted();request.submitted=true;request.startedAt=Date.now();
+        for await(const chunk of next()){adapter.#authorize(record);if(chunk.type==='usage')request.usage=copy(chunk.usage);yield chunk;}}
+      finally {release?.();record.models.delete(request);if(request.submitted)record.requests.push(request);}
     },{global:true}));
+  }
+  #shortRound(botId,sessionId,signal) {
+    const pool=this.#shortPools.get(botId)??{active:0,queue:[],last:null};this.#shortPools.set(botId,pool);
+    requireCondition(pool.queue.length<64,'short_queue_full');
+    return new Promise((resolve,reject)=>{
+      const entry={sessionId,resolve,reject,signal};
+      entry.abort=()=>{const index=pool.queue.indexOf(entry);if(index>=0){pool.queue.splice(index,1);reject(signal.reason);}};
+      signal.addEventListener('abort',entry.abort,{once:true});pool.queue.push(entry);if(signal.aborted)entry.abort();this.#pumpShort(pool);
+    });
+  }
+  #pumpShort(pool) {
+    while(pool.active<2&&pool.queue.length) {
+      const index=pool.queue.findIndex(entry=>entry.sessionId!==pool.last),entry=pool.queue.splice(index<0?0:index,1)[0];
+      entry.signal.removeEventListener('abort',entry.abort);pool.active++;pool.last=entry.sessionId;let released=false;
+      entry.resolve(()=>{if(!released){released=true;pool.active--;this.#pumpShort(pool);}});
+    }
   }
   get context() {return this.#ctx;}
   setContextProvider(provider) {this.#contextProvider=provider;}
@@ -135,6 +154,14 @@ export class NativeDshAdapter {
     })();
     this.#creating.set(binding.sessionId,operation);
     try{return await operation;}finally{this.#creating.delete(binding.sessionId);}
+  }
+  async resumeOwned(binding) {
+    requireCondition(!this.#closed&&binding.state==='ready'&&!binding.archived,'session_not_ready');
+    const live=this.#ctx.agents.get(binding.sessionId);if(live)return live;
+    if(this.#creating.has(binding.sessionId))return (await this.#creating.get(binding.sessionId)).agent;
+    const pending=this.#ctx.agents.resume({resumeSessionId:binding.sessionId,agentOptions:{provider:binding.model.provider,model:binding.model.model},setup:async(agentCtx,agent)=>{const presets=this.#ctx.get('agentPresets');if(presets)await agentCtx.agentPresets.mount(agentCtx,binding.presetId??undefined);await this.bindAgent(agent,binding);}});
+    this.#creating.set(binding.sessionId,pending);
+    try{const handle=await pending;this.#handles.set(binding.sessionId,handle);return handle.agent;}finally{this.#creating.delete(binding.sessionId);}
   }
   async readNative(sessionId,signal) {
     const handle=await this.#ctx.sessionPersistence.open(sessionId,'read');

@@ -5,6 +5,7 @@ import * as Plugin from '../../src/native/plugin.mjs';
 
 test('native plugin mounts an authenticated business RPC and preserves Bot identities across reload',async()=>{
   const f=await createOfficialFixture(),operator={},handlers=new Map();
+  f.ctx.provide('profileContext',{name:'owned-test',dir:f.dir});f.ctx.provide('webServer',{});
   f.ctx.provide('connection',{operator,rpc:{handle(path,handler){handlers.set(path,handler);return ()=>handlers.delete(path);}}});
   try {
     const first=f.ctx.plugin(Plugin);await first.await();

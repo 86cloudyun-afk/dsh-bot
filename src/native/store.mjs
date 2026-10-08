@@ -48,9 +48,10 @@ function validate(state) {
 export class PluginStore {
   #unit; #state; #tail = Promise.resolve(); #closed = false; #broken = false; #listeners = new Set();
   constructor(unit, state) {this.#unit = unit; this.#state = state;}
-  static async open(kvFacet) {
+  static async open(kvFacet,{namespace='dsh_bot_v1'}={}) {
+    requireCondition(typeof namespace==='string'&&/^dsh_bot_v1(?:_[a-f0-9]{24})?$/.test(namespace),'invalid_namespace');
     requireCondition(typeof kvFacet?.open === 'function', 'storage_unavailable');
-    const unit = await kvFacet.open({name: 'dsh_bot_v1', version: 1, tables: ['state'], hasGlobal: false, layout: 'single'});
+    const unit = await kvFacet.open({name: namespace, version: 1, tables: ['state'], hasGlobal: false, layout: 'single'});
     try {
       const data = await unit.loadAll(), table = data.tables.state;
       requireCondition(plain(table) && Object.keys(table).every(key => key === 'current') && data.global === null, 'malformed_state');

@@ -4,8 +4,9 @@ import {copy,plain,requireCondition,validId} from './store.mjs';
 
 /** Durable admission precedes native work; terminal resources precede slot release. */
 export class TaskController {
-  runtimeId=randomUUID();#launching=new Map();#watching=new Map();#closed=false;#closing=false;#timers=new Set();
+  runtimeId=randomUUID();#launching=new Map();#watching=new Map();#closed=false;#closing=false;#timers=new Set();#resultSink;
   constructor({store,policy,adapter}) {Object.assign(this,{store,policy,adapter});}
+  setResultSink(broker){this.#resultSink=broker;}
   #source(actor) {
     if(actor.kind==='human')return {kind:'human'};
     const binding=this.store.read().sessions[actor.sessionId];
@@ -15,6 +16,7 @@ export class TaskController {
     command=copy(command);const input=command.input;
     requireCondition(plain(input)&&Object.keys(input).every(key=>['botId','title','goal','criteria','originSessionId'].includes(key))&&validId(input.botId)&&typeof input.title==='string'&&input.title.trim().length>0&&input.title.length<=200&&typeof input.goal==='string'&&input.goal.trim().length>0&&input.goal.length<=16000&&Array.isArray(input.criteria)&&input.criteria.length<=30&&input.criteria.every(item=>typeof item==='string'&&item.length<=2000),'invalid_task');
     return this.store.transact(this.policy.command(actor,command),draft=>{
+      if(input.originSessionId)this.policy.require(actor,'session.send',{kind:'session',id:input.originSessionId},draft);
       const bot=draft.bots[input.botId];requireCondition(bot?.lifecycle==='active','bot_not_active');
       const taskId=`task_${randomUUID()}`,task={taskId,botId:bot.botId,title:input.title.trim(),goal:input.goal,criteria:input.criteria,version:1,epoch:0,state:'queued',archived:false,acceptance:'unknown',currentAttemptId:null,originSessionId:input.originSessionId??(actor.kind==='bot'?actor.sessionId:null),source:this.#source(actor),origins:this.policy.readDependencies(actor),createdAt:new Date().toISOString()};
       draft.tasks[taskId]=task;this.policy.require(actor,'task.create',{kind:'task',id:taskId},draft);return task;
@@ -34,7 +36,7 @@ export class TaskController {
       requireCondition(Object.values(draft.attempts).filter(row=>row.botId===task.botId&&row.reservationHeld).length<15,'capacity_exhausted');
       const bot=draft.bots[task.botId];requireCondition(bot?.lifecycle==='active','bot_not_active');
       const attemptId=`attempt_${randomUUID()}`,sessionId=randomUUID(),epoch=task.epoch+1;
-      const attempt={attemptId,taskId:task.taskId,botId:bot.botId,sessionId,epoch,taskVersion:task.version+1,parentAttemptId:parent?.attemptId??null,depth,model:copy(bot.execution),configRevision:bot.configRevision,state:'starting',reservationHeld:true,runtimeId:this.runtimeId,operationId:command.operationId,messageId:randomUUID(),readyOperationId:randomUUID(),settleOperationId:randomUUID(),createdAt:new Date().toISOString(),usage:'UNKNOWN',externalEffects:'UNKNOWN'};
+      const attempt={attemptId,taskId:task.taskId,botId:bot.botId,sessionId,epoch,taskVersion:task.version+1,parentAttemptId:parent?.attemptId??null,depth,model:copy(bot.execution),configRevision:bot.configRevision,state:'starting',reservationHeld:true,runtimeId:this.runtimeId,operationId:command.operationId,messageId:randomUUID(),readyOperationId:randomUUID(),settleOperationId:randomUUID(),resultOutboxId:`outbox_${randomUUID()}`,resultOperationId:randomUUID(),resultMessageId:randomUUID(),createdAt:new Date().toISOString(),usage:'UNKNOWN',externalEffects:'UNKNOWN'};
       draft.attempts[attemptId]=attempt;task.epoch=epoch;task.version++;task.currentAttemptId=attemptId;task.state='running';task.acceptance='unknown';
       draft.sessions[sessionId]={sessionId,botId:bot.botId,purpose:'execution',attemptId,epoch,model:copy(attempt.model),configRevision:bot.configRevision,cwd:bot.cwd,presetId:bot.presetId,state:'creating',archived:false,source:copy(task.source),origins:copy(task.origins??[]),...(task.source.meetingId?{lineage:copy(task.source)}:{}),parentSessionId:parent?.sessionId??null,depth};
       return attempt;
@@ -78,17 +80,22 @@ export class TaskController {
             await this.store.transact({operationId:attempt.settleOperationId,action:'attempt.settled',input:{attemptId}},draft=>{
               const row=draft.attempts[attemptId];if(!row.reservationHeld)return null;
               const task=draft.tasks[row.taskId],stopped=['stop_requested','UNKNOWN'].includes(row.state)||task.version!==row.taskVersion;
-              row.state=stopped?'stopped':end?.data.reason.kind==='stop'?'returned':'failed';row.reservationHeld=false;row.settledAt=new Date().toISOString();row.localEvidence=evidence;row.usage=evidence.requests.map(request=>request.usage);
+              row.state=stopped?'stopped':end?.data.reason.kind==='completed'?'returned':'failed';row.reservationHeld=false;row.settledAt=new Date().toISOString();row.localEvidence=evidence;row.usage=evidence.requests.map(request=>request.usage);
               if(!stopped&&reply)row.result={sessionId:row.sessionId,eventSeq:reply.seq,content:copy(reply.data.content??reply.data.message?.content??[]),source:{sessionId:row.sessionId,eventSeq:reply.seq},origins:copy(draft.sessions[row.sessionId].origins??[])};
               draft.sessions[row.sessionId].state='settled';
               if(task.currentAttemptId===attemptId) {task.state=stopped?'stopped':row.state==='returned'?'awaiting_acceptance':'failed';task.version++;}
+              if(!stopped)this.#resultSink?.recordResult(draft,task,row);
               return null;
-            });await this.adapter.disposeOwned(attempt.sessionId);return;
+            });await this.#resultSink?.deliverResult(attemptId);await this.adapter.disposeOwned(attempt.sessionId);return;
           }
         }
         await new Promise(resolve=>{const timer=setTimeout(()=>{this.#timers.delete(timer);resolve();},20);this.#timers.add(timer);});
       }
-    })().catch(()=>{}).finally(()=>this.#watching.delete(attemptId));this.#watching.set(attemptId,run);
+    })().catch(async error=>{
+      await this.store.transact({operationId:randomUUID(),action:'attempt.evidence-unknown',input:{attemptId,reason:error.code??error.name}},draft=>{
+        const row=draft.attempts[attemptId];if(row?.reservationHeld){row.state='UNKNOWN';row.error=error.code??error.name;draft.tasks[row.taskId].state='UNKNOWN';draft.sessions[row.sessionId].state='UNKNOWN';}return null;
+      }).catch(()=>{});
+    }).finally(()=>this.#watching.delete(attemptId));this.#watching.set(attemptId,run);
   }
   async stop(actor,command) {
     command=copy(command);const input=command.input;

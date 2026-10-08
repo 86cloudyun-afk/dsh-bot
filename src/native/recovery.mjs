@@ -13,6 +13,7 @@ export class Reconciler {
         if(draft.tasks[attempt.taskId])draft.tasks[attempt.taskId].state='UNKNOWN';
       }
       for(const binding of Object.values(draft.sessions))if(binding.state==='creating') {binding.state='UNKNOWN';binding.error='creation_interrupted';}
+      for(const row of Object.values(draft.outbox))if(['queued','admitting'].includes(row.state)){row.state='UNKNOWN';row.error='previous_delivery_runtime';}
       return {unknown,replayed:0,released:0};
     });
   }

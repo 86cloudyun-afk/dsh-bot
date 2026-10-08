@@ -1,18 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Jobs from '@deepseek-ai/dsh-jobs-local';
-import {businessFixture} from './business-fixture.mjs';
+import {taskFixture} from './task-fixture.mjs';
 import {deferred,eventually,textChunks} from './official-fixture.mjs';
-import {BotService} from '../../src/native/service.mjs';
 
-export async function taskFixture(t,options={}) {
-  const f=await businessFixture(t,options);
-  const {TaskController}=await import('../../src/native/tasks.mjs').catch(error=>{if(error.code==='ERR_MODULE_NOT_FOUND')assert.fail('native task controller is missing');throw error;});
-  const {Reconciler}=await import('../../src/native/recovery.mjs');
-  const tasks=new TaskController(f),recovery=new Reconciler({...f,tasks});
-  const service=new BotService({...f,tasks,recovery});f.adapter.setService(service);f.beforeClose.push(()=>tasks.close());
-  return {...f,tasks,recovery,service,async task(bot,title='Work') {return tasks.create(f.human,{operationId:`task-${title}`,action:'task.create',input:{botId:bot.botId,title,goal:'One harmless response.',criteria:['Response exists']}});}};
-}
 test('parents children and UNKNOWN attempts share the same fifteen work slots',async t=>{
   const gate=deferred();t.after(()=>gate.resolve());const f=await taskFixture(t,{stream:async function*(){await gate.promise;yield*textChunks('done');}}),bot=await f.bot();
   await f.store.transact({operationId:'held',action:'seed',input:{}},draft=>{for(let i=0;i<13;i++)draft.attempts[`old-${i}`]={attemptId:`old-${i}`,taskId:`old-${i}`,botId:bot.botId,epoch:1,state:'UNKNOWN',reservationHeld:true,depth:0};return null;});
@@ -82,4 +73,12 @@ test('adjustment fences the old report and task archives restore without replay'
   let row=f.store.read().tasks[task.taskId];await f.tasks.archive(f.human,{operationId:'archive',action:'task.archive',input:{taskId:row.taskId,expectedVersion:row.version}});
   row=f.store.read().tasks[task.taskId];await f.tasks.restore(f.human,{operationId:'restore',action:'task.restore',input:{taskId:row.taskId,expectedVersion:row.version}});
   assert.equal(f.store.read().tasks[task.taskId].archived,false);assert.equal(f.requests.length,1);
+});
+
+test('an unreadable original task log preserves its work reservation as UNKNOWN',async t=>{
+  const f=await taskFixture(t),bot=await f.bot(),task=await f.task(bot),read=f.adapter.readNative.bind(f.adapter);
+  f.adapter.readNative=async(sessionId,signal)=>{if(f.store.read().sessions[sessionId]?.purpose==='execution')throw Object.assign(Error('Malformed original log'),{code:'malformed-medium'});return read(sessionId,signal);};
+  const attempt=await f.tasks.start(f.human,{operationId:'bad-log',action:'task.start',input:{taskId:task.taskId,expectedVersion:1}});
+  await eventually(()=>f.store.read().attempts[attempt.attemptId].state==='UNKNOWN','original log failure fencing');
+  assert.equal(f.store.read().attempts[attempt.attemptId].reservationHeld,true);assert.equal(f.requests.length,1);
 });
