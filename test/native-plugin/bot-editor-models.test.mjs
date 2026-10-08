@@ -115,3 +115,15 @@ test('persisted inherited execution follows a later contact model update', async
   assert.equal(updated.executionMode, 'inherit');
   assert.deepEqual(updated.execution, updated.contact);
 });
+
+test('pausing a Bot preserves independently tuned execution sampling', async t => {
+  const f = await fixture(t), bot = await f.bot('Tuned');
+  const tuned = await f.bots.update(f.human, {operationId:'tune-execution',action:'bot.update',input:{
+    botId:bot.botId,expectedVersion:bot.revision,executionMode:'inherit',execution:{...bot.execution,maxTokens:64},
+  }});
+  const paused = await f.bots.update(f.human, {operationId:'pause-tuned',action:'bot.update',input:{
+    botId:bot.botId,expectedVersion:tuned.revision,lifecycle:'paused',
+  }});
+  assert.equal(paused.lifecycle, 'paused');
+  assert.deepEqual(paused.execution, tuned.execution);
+});
