@@ -1,11 +1,15 @@
 # Private fresh first installation
 
-This draft starts from exact product commit
-`0a04532f05243265170e6c6d457662a422deadf0` and tree
-`5d43b7d4625333b51c4e1adf2f3d25dd2d38823a`. It has not run an SDK
-installation, Chromium, a native GUI or a provider. Root must review the
-exact draft and external inputs before its private branch is pushed.
-
+This input-only draft binds exact product source commit
+`1f111d7f3f5c54127a7523571c8ebc1a738575b8` and tree
+`49ca850d8837da106996e9717fe30dfde5ae3039`, with fresh package build
+`0f63cb5c-7951-4cfc-bf95-28b21c7fac33`. Its 81 packaged product files and product
+archive are byte-for-byte identical to the prior 0a04532 package. Source
+workflow and delivery-document changes are outside those packaged files.
+The original 84de1f31 first-install run and its artifacts remain historical
+evidence; this new input preparation does not relabel them or qualify a new
+SDK installation, browser, native GUI or model run. Root reviews the exact
+replacement files before committing or pushing its private branch.
 The workflow accepts only a push to `ci/first-install-v1-20261007` in a
 private repository, checks the genuine checkout HEAD against `github.sha`,
 uses read-only repository permission, and has no secret inputs. Actual
@@ -15,10 +19,10 @@ probe; this tooling invokes no sysctl, quarantine override or hardware
 probe command.
 
 `INPUT_PINS.json` binds Root's new final thin transport, descriptor and
-0a04532 source provenance. The 15,541,798-byte gzip archive has externally
-supplied SHA-256 `df548c893fa503d052167f8ccb30e7d768031f8bf8cc450d93298d8990898184`.
+1f111d7 source provenance. The 15,541,793-byte gzip archive has externally
+supplied SHA-256 `58e9b321840f557f317b9375a4e4e814665e7c6c60b0c26e8952be3f4b68b78d`.
 Its descriptor has externally supplied SHA-256
-`2136ff4290fa57a47beb3622eeb2ae3cda57261612877e151c95e3a9bc0bd145`.
+`5530e8316b6595d9141002eb1283f7b941007770b01238c1904f6a116f556c5c`.
 Neither pin is inferred from the archive's self-manifest. The extractor
 accepts exactly 2,369 sorted regular members, raw bundle-relative names,
 zero timestamps/owner metadata and no links, special files, PAX headers
