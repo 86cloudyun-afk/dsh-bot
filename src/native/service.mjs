@@ -188,6 +188,7 @@ export class BotService {
         ...(await this.adapter.models()),
         presets: (await this.adapter.context.get("agentPresets")?.list()) ?? [],
         defaultCwd: this.adapter.context.get("profileContext")?.cwd ?? null,
+        defaultModel: copy(this.adapter.context.get("agentDefaultModel")?.currentSelection() ?? null),
       };
     } else if (action === "session.page")
       result = await this.sessions.page(actor, input, signal);
