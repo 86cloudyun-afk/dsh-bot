@@ -404,6 +404,11 @@ window.__ModuleLoader__.load({
               h(
                 "small",
                 null,
+                `填写原生注册名，区分大小写，例如 bash。当前可查到：${(state.catalog.nativeTools ?? []).join("、") || "请先选择 preset 并创建会话"}`,
+              ),
+              h(
+                "small",
+                null,
                 "模型取自当前 DSH；执行尝试启动后保持当次配置。工具权限由你授予。",
               ),
             ),

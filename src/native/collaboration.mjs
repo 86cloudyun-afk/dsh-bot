@@ -786,6 +786,7 @@ export class GroupMeetingController {
             : phase === "discussion"
               ? "decision"
               : "complete";
+        if (phase === "independent") meeting.revealedEpoch = meeting.epoch;
         const old = meeting.participants.map((row) => row.sessionId);
         meeting.absenceHistory ??= [];
         meeting.absenceHistory.push(
@@ -986,6 +987,7 @@ export class GroupMeetingController {
         meeting.topic = input.topic;
         meeting.materials = input.materials;
         meeting.phase = "independent";
+        delete meeting.revealedEpoch;
         meeting.opinions = {};
         meeting.discussion = {};
         meeting.decision = null;

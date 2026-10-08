@@ -177,21 +177,16 @@ test("review: parent remains held while a child admitted during native read is a
   const bot = await f.bot(),
     parent = await f.task(bot, "Parent"),
     read = f.adapter.readNative.bind(f.adapter),
-    settle = f.store.transact.bind(f.store),
-    settlementTried = deferred();
+    readCompleted = deferred();
   let parentSession;
-  f.store.transact = (command, mutate) => {
-    const result = settle(command, mutate);
-    if (command.action === "attempt.settled")
-      result.finally(() => settlementTried.resolve()).catch(() => {});
-    return result;
-  };
   f.adapter.readNative = async (sessionId, signal) => {
     if (sessionId === parentSession) {
       readEntered.resolve();
       await releaseRead.promise;
     }
-    return read(sessionId, signal);
+    const result=await read(sessionId, signal);
+    if(sessionId===parentSession)readCompleted.resolve();
+    return result;
   };
   const parentAttempt = await f.tasks.start(f.human, {
     operationId: "parent-start",
@@ -212,7 +207,8 @@ test("review: parent remains held while a child admitted during native read is a
     });
   await eventually(() => f.requests.length === 2);
   releaseRead.resolve();
-  await settlementTried.promise;
+  await readCompleted.promise;
+  await new Promise(resolve=>setTimeout(resolve,60));
   await f.store.drain();
   assert.equal(
     f.store.read().attempts[parentAttempt.attemptId].reservationHeld,
