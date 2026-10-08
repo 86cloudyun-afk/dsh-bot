@@ -46,6 +46,10 @@ DSH_HOME=/opt/dsh-bot-installations/my-bot-v1/profile/home \
 
 Model requests default to disabled. A later deliberate startup with the actual product flag `--enable-model-requests` changes that gate; installation never adds it. Credential information is only the environment reference `DEEPSEEK_API_KEY`. The installer reads, stores and prints no key value or auth token. Supply credentials through your chosen environment mechanism only when you deliberately start model-enabled use.
 
+The first version routes work results of at most **4096 UTF-8 bytes** to the main dialog. Keep the requested result below 3400 bytes to leave room for numbering and punctuation. Chinese characters usually occupy three UTF-8 bytes; a character count alone does not establish that a result fits. Split larger outputs into independent smaller tasks.
+
+A work generation can have a verified native settlement while its result is too large to route. In that case, the original work Session retains the response, and the main dialog has no result acknowledgment for that work. Inspect that original Session before submitting a new, smaller task. A known native settlement and a delivered result are separate observations.
+
 ## Descriptor contract for bundle builders
 
 The descriptor is JSON with this shape. Paths below illustrate layout; hashes, byte counts, modes, build ID and source/artifact pins must come from the final reviewed materials.

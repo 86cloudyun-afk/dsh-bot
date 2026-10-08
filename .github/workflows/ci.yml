@@ -74,7 +74,12 @@ jobs:
           node-version: 24.19.0
       - name: Use a short canonical physical source directory
         run: |
-          dsh_native_source="$(mktemp -d /tmp/dsh-nc.XXXXXX)"
+          if [ "$RUNNER_OS" = Linux ]; then
+            dsh_native_source="$(sudo mktemp -d /dsh-nc.XXXXXX)"
+            sudo chown "$(id -u):$(id -g)" "$dsh_native_source"
+          else
+            dsh_native_source="$(mktemp -d /tmp/dsh-nc.XXXXXX)"
+          fi
           dsh_native_source="$(cd "$dsh_native_source" && pwd -P)"
           if [ "$RUNNER_OS" = Linux ]; then
             # A real executable filesystem for the complete installed SDK.
