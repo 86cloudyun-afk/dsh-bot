@@ -1,41 +1,69 @@
-# DSH Bot · 官方原生插件 v1
+# DSH Bot · 原生多 Bot 插件
 
-在正常工作的官方 DSH 中创建具名 Bot。每个 Bot 保存自己的记忆和会话；后台工作运行时仍能持续聊天、接受短任务、查看进度和响应停止。
+在你现有的 **官方 DSH** 中创建有名字、长期记忆和独立职责的 Bot。后台任务继续运行时，Bot 仍能聊天、接受新任务、查询进度和响应停止指令。
 
-**当前是已完成验收的私有插件候选。独立公开仓库尚待创建，正式公开发布未完成。**
+[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/dsh-bot-1.0.0.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/SHA256SUMS) · [安装与上手](../docs/install.zh-CN.md) · [使用手册](../docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](../docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
 
-[下载已验收安装包](https://github.com/86cloudyun-afk/dsh-bot/tree/delivery/native-dsh-plugin-v1/dist) · [安装与上手](../docs/install.zh-CN.md) · [使用手册](../docs/guide.zh-CN.md) · [完整验收记录](../docs/releases/v1.0.0-qualification.zh-CN.md) · [纯插件源码](https://github.com/86cloudyun-afk/dsh-bot/tree/delivery/native-dsh-plugin-v1)
+## 第一版包含什么
 
-## 第一版的能力
-
-| 能力 | 使用方式 |
+| 能力 | 日常使用 |
 | --- | --- |
-| 具名多 Bot | 先在工作台创建和命名 Bot，再选择已有 Bot 新建原生会话。 |
-| 各自记忆与会话 | 新会话带入身份、长期记忆和未完成任务，细节按需查阅自己的其他会话。 |
-| 持续聊天与后台任务 | 长任务运行时继续聊新话题、自主派发短任务、查询进度或停止；结果回到原会话。 |
-| 共享与持续授权 | 跨 Bot 默认只读；工作台设置接收者、范围和只读／控制权限，持续有效、可撤销。 |
-| 完整任务管理 | 登记、开始、查看实际执行、调整、接续、精确停止、结果回收、三态验收、归档和恢复。 |
-| 内部群与会议 | 多个内部群；同群可开不同议题会议，独立意见、讨论、协调者决定及真实行动任务。 |
+| 具名多 Bot | 在「Bot 工作台」创建 Bot 只需名称；职责选填、模型默认沿用 DSH。点击卡片“开始聊天”，或新建对话时选择已有 Bot。重名时用稳定 ID 区分。 |
+| 各自的长期记忆 | 同一 Bot 的新会话自动带入身份、记忆与未完成任务；细节按需查阅自有会话。其他 Bot 的记忆分别保存。 |
+| 持续聊天与后台工作 | 联络与执行分开；长任务未结束时，仍能回复新话题并运行另一个短任务。每个 Bot 的父工作、一级子工作和未结算未知任务共用 15 槽。 |
+| 共享与持续授权 | 跨 Bot 默认只读；设置接收 Bot、共享范围及只读／控制权限。授权持续有效，可随时撤销。 |
+| 任务闭环 | 登记、开始、查看原生执行、调整、接续、精确停止、投递结果和三态验收；归档后恢复原身份与日志。 |
+| 内部群与会议 | 多 Bot 群聊；同群可同时开不同议题会议，先独立意见，再讨论、协调者决定和实际行动任务。 |
+| 普通会话管理 | 分页查看普通会话及 Bot 会话；停止当前回复、归档和恢复，任务结果也可以投递到普通会话。 |
+| 每 Bot 模型配置 | 从 DSH 已配置的模型中选择；联络和执行可分别配置，全局默认保持原值。 |
 
 ## 安装
 
-基线为官方 `@deepseek-ai/dsh@0.2.0-rc.2`，Linux x64／macOS arm64，Node 22（≥22.19）或 24 及以上，官方插件安装器需要 pnpm。
+兼容基线为 **官方 `@deepseek-ai/dsh@0.2.0-rc.2`**、Node **22（≥22.19）或 24 及以上**，验证平台为 Linux 与 macOS。官方插件安装命令需要 `pnpm`。
 
-从上述安装包目录下载 `dsh-bot-1.0.0.tgz` 和 `SHA256SUMS`，按平台核对哈希后安装到已有 Web profile。以 `web` 为例：
+1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.0) 提供本版源码和验收记录。
+2. 将插件安装到你日常使用的 DSH profile。以 `web` 为例：
 
 ```bash
 dsh plugin --profile web add ./dsh-bot-1.0.0.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
-打开原 DSH 侧栏的 **Bot 工作台**。无需替换宿主、安装私有 SDK 或运行额外应用。
+3. 在原有 DSH 侧栏打开 **Bot 工作台**，填写名称创建 Bot，然后点击卡片上的 **开始聊天**。原生工作工具默认可用，无需逐项配置。
 
-## 本次验收
+完整的依赖检查、首次安装、升级和卸载步骤见 [安装说明](../docs/install.zh-CN.md)。版本是否正式交付，以对应 Release 的验收报告为准。
 
-同一冻结安装包通过：完整测试 **140/140**、Linux 与 Mac 各 **41/41** 原生 GUI 检查、Linux 真实 DeepSeek **22/22** 完整 GUI 流程。多轮独立复审所报问题已关闭，验证范围与限制见验收记录。
+## 几个使用例子
 
-插件 SHA-256：`47cd2b2857f2ba6b56d95b04ee89438a5e2046dd70c04c5f45db77d24847a8a4`。
+- 「把这项工作放到后台。现在我们继续聊另一个问题。」
+- 「查阅你自己的其他会话，告诉我还有哪些任务没完成。」
+- 「让资料 Bot 只读查看进展；需要控制任务时，我会在工作台授权。」
+- 「开一场会议，各自先提出意见，再讨论并把决定登记成行动任务。」
 
-**旧独立软件版完全作废。** 主分支已移除旧软件代码、独立网页、旧安装说明和旧资产发布流程。旧记录仅在私有历史中保留追溯，不进入原生插件安装包或独立新仓库。PR #1 未合并。
+工作台的常用导航为 Bots、任务、记忆、协作、管理；特殊模型参数、任务调整与验收、群设置按需展开。工作台提供相同操作的可视入口。停止被接受后，界面会继续等待真实资源结算；结果已返回与验收通过分别记录。无法确认的请求保留为“未知”，使用原始操作查回。
 
-原插件采用 [MIT License](../LICENSE)，宿主及其依赖仍由官方安装管理。
+## 与 DSH 的关系
+
+插件复用 DSH 的模型、凭据、工具、审批、会话、日志和存储。安装包只包含插件代码和中文说明，不携带 DSH／Host／SDK，也不要求改写 DSH 本体或另建应用。
+
+正式版本以同一不可变包完成两平台安装与 GUI 检查，另外保留真实模型和多轮独立复审证据。受控模型、真实模型和资源停止证据在验收报告中分别注明。
+
+**此前独立软件版已完全作废。** 旧 Host 装配、owner 启动器、专用 Home/profile、独立网页和旧安装器退出运行及分发入口；本仓库只交付原生插件。见 [作废说明](../docs/history/standalone-void.md)。
+
+## 开发与许可
+
+```bash
+npm ci --ignore-scripts
+npm test
+npm run check
+```
+
+源代码采用 [MIT License](../LICENSE)。DSH 及其依赖由官方安装管理，适用各自的许可；本插件不重新分发这些包。
+
+## 本版验收
+
+同一冻结安装包通过 **151 项自动化测试**，Linux 与 macOS 各 **54 项官方原生 GUI 检查**，以及 **5 项真实 DeepSeek GUI 定向验收**。真实模型已证明：无需工具名单，自主派发后台工作，工作未结束时继续聊天，然后停止确切工作。
+
+[完整验收报告](../docs/releases/v1.0.0-simplified-qualification.zh-CN.md) · [机器可读证据](../docs/releases/v1.0.0-simplified-qualification.json) · [两平台 CI](https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37819021179)
+
+插件 SHA-256：`1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724`。源码、安装包和验收身份分别记录；旧独立软件不再提供运行及安装入口。
