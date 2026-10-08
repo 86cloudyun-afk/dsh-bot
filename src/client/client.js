@@ -263,10 +263,15 @@ window.__ModuleLoader__.load({
             h("input", { type: "checkbox", name, defaultChecked: checked }),
             label,
           );
+        const botLabel = (bot) => bot
+          ? state.snapshot.bots.filter((row) => row.name === bot.name).length > 1
+            ? `${bot.name} · ${bot.botId}`
+            : bot.name
+          : "Bot";
         const botsOptions = () =>
           state.snapshot.bots.map((bot) => ({
             value: bot.botId,
-            label: bot.name,
+            label: botLabel(bot),
           }));
         const modelsOptions = () =>
           state.catalog.providers.flatMap((provider) =>
@@ -326,7 +331,9 @@ window.__ModuleLoader__.load({
             publish({ error: `无法打开原生会话：${error.message}` });
           }
         };
-        function BotEditor({ bot }) {
+        function BotEditor({ bot: latestBot }) {
+          const [bot, setDraftBase] = useState(latestBot),
+            [formEpoch, setFormEpoch] = useState(0);
           const models = modelsOptions(),
             contact = bot
               ? JSON.stringify({
@@ -336,9 +343,17 @@ window.__ModuleLoader__.load({
               : models[0]?.value;
           return card(
             bot ? "编辑 Bot" : "创建具名 Bot",
-            form(
+            latestBot && bot && latestBot.revision !== bot.revision && h(
+              "div", null,
+              h("p", { role: "status" }, "此 Bot 的配置已在其他页面更新。当前草稿已保留，保存将检查原版本。"),
+              button("重新载入最新配置", () => {
+                setDraftBase(latestBot);
+                setFormEpoch((epoch) => epoch + 1);
+              }),
+            ),
+            h("div", { key: formEpoch }, form(
               bot ? "保存配置" : "创建 Bot",
-              (data) => {
+              async (data) => {
                 const configuration = {
                   name: data.get("name"),
                   role: data.get("role"),
@@ -371,12 +386,17 @@ window.__ModuleLoader__.load({
                 ])
                   if (selected.reasoningEffort === undefined)
                     delete selected.reasoningEffort;
-                return command(bot ? "bot.update" : "bot.create", {
+                const saved = await command(bot ? "bot.update" : "bot.create", {
                   ...configuration,
                   ...(bot
                     ? { botId: bot.botId, expectedVersion: bot.revision }
                     : {}),
                 });
+                if (bot && saved) {
+                  setDraftBase(saved);
+                  setFormEpoch((epoch) => epoch + 1);
+                }
+                return saved;
               },
               field("名称", "name", { value: bot?.name, maxLength: 100 }),
               field("身份与职责", "role", {
@@ -448,7 +468,7 @@ window.__ModuleLoader__.load({
                 null,
                 "模型取自当前 DSH；执行尝试启动后保持当次配置。工具权限由你授予。",
               ),
-            ),
+            )),
           );
         }
         function BotsPane() {
@@ -460,7 +480,7 @@ window.__ModuleLoader__.load({
           const cards = view.snapshot.bots.map((bot) =>
             resourceCard(
               bot.botId,
-              bot.name,
+              botLabel(bot),
               h("p", { className: "muted" }, bot.role || "未设置职责"),
               h(
                 "p",
@@ -497,7 +517,7 @@ window.__ModuleLoader__.load({
               button("创建另一个 Bot", () => setEditing(null)),
             ),
             h(BotEditor, {
-              key: selected ? `${selected.botId}:${selected.revision}` : "new",
+              key: selected?.botId ?? "new",
               bot: selected,
             }),
           );
@@ -589,7 +609,7 @@ window.__ModuleLoader__.load({
             return () => {
               active = false;
             };
-          }, []);
+          }, [view.snapshot]);
           return h(
             "div",
             { className: "grid" },
@@ -789,6 +809,11 @@ window.__ModuleLoader__.load({
         }
         function SharingPane() {
           const view = useView();
+          const [receiverDrafts, setReceiverDrafts] = useState({});
+          const savedReceivers = (bot) => view.snapshot.bots
+            .filter((row) => row.botId !== bot.botId &&
+              (bot.share.receivers.includes("*") || bot.share.receivers.includes(row.botId)))
+            .map((row) => row.botId);
           return h(
             "div",
             { className: "grid" },
@@ -798,11 +823,11 @@ window.__ModuleLoader__.load({
               ...view.snapshot.bots.map((bot) =>
                 resourceCard(
                   bot.botId,
-                  `${bot.name} 的共享范围`,
+                  `${botLabel(bot)} 的共享范围`,
                   form(
                     "保存共享上限",
-                    (data) =>
-                      command("share.set", {
+                    async (data) => {
+                      const saved = await command("share.set", {
                         botId: bot.botId,
                         share: {
                           enabled: data.get("enabled") === "on",
@@ -814,7 +839,12 @@ window.__ModuleLoader__.load({
                             ]),
                           ),
                         },
-                      }),
+                      });
+                      if (saved) setReceiverDrafts((drafts) => {
+                        const next = { ...drafts }; delete next[bot.botId]; return next;
+                      });
+                      return saved;
+                    },
                     check(
                       "enabled",
                       "允许其他 Bot 只读了解",
@@ -823,34 +853,25 @@ window.__ModuleLoader__.load({
                     ...view.snapshot.bots
                       .filter((row) => row.botId !== bot.botId)
                       .map((row) =>
-                        check(
-                          "receiver",
-                          row.name,
-                          bot.share.receivers.includes("*") ||
-                            bot.share.receivers.includes(row.botId),
-                        ),
-                      )
-                      .map((element, index) =>
                         h(
                           "label",
-                          { className: "check", key: index },
+                          { className: "check", key: row.botId },
                           h("input", {
                             type: "checkbox",
                             name: "receiver",
-                            value: view.snapshot.bots.filter(
-                              (row) => row.botId !== bot.botId,
-                            )[index].botId,
-                            defaultChecked:
-                              bot.share.receivers.includes("*") ||
-                              bot.share.receivers.includes(
-                                view.snapshot.bots.filter(
-                                  (row) => row.botId !== bot.botId,
-                                )[index].botId,
-                              ),
+                            value: row.botId,
+                            checked: (receiverDrafts[bot.botId] ?? savedReceivers(bot)).includes(row.botId),
+                            onChange: (event) => {
+                              const checked = event.target.checked;
+                              setReceiverDrafts((drafts) => {
+                                const selected = drafts[bot.botId] ?? savedReceivers(bot);
+                                return { ...drafts, [bot.botId]: checked
+                                  ? [...new Set([...selected, row.botId])]
+                                  : selected.filter((id) => id !== row.botId) };
+                              });
+                            },
                           }),
-                          view.snapshot.bots.filter(
-                            (row) => row.botId !== bot.botId,
-                          )[index].name,
+                          botLabel(row),
                         ),
                       ),
                     check(
@@ -1418,7 +1439,7 @@ window.__ModuleLoader__.load({
                     field(t("choose"), "botId", {
                       options: bots.map((bot) => ({
                         value: bot.botId,
-                        label: bot.name,
+                        label: botLabel(bot),
                       })),
                     }),
                     h(
@@ -1453,7 +1474,7 @@ window.__ModuleLoader__.load({
               title: t("manage"),
               onClick: () => ctx.layout.selectPanel("dsh-bot"),
             },
-            bot.name,
+            botLabel(bot),
           );
         }
         ctx.slots.inject("main", () =>

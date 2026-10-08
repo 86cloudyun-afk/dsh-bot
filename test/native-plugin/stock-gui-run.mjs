@@ -1,5 +1,6 @@
-import { writeFile, readFile, access } from "node:fs/promises";
-import { join } from "node:path";
+import { writeFile, readFile, access, mkdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { runUiRegressions } from "./stock-ui-regressions.mjs";
 import {
   stockGui,
   controlledProvider,
@@ -784,6 +785,8 @@ try {
     "standardUninstallReinstallPreservesData",
     (await gui.snapshot()).bots.some((row) => row.botId === gui.botIds[0]),
   );
+  mark("ui-sharing-and-concurrent-draft-regressions");
+  await runUiRegressions(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");
   gui.report.passed = true;
@@ -791,10 +794,27 @@ try {
 } catch (error) {
   if (gui) {
     gui.report.passed = false;
-    gui.report.error = String(error.stack);
+    gui.report.error = String(error.stack).replace(/https?:\/\/\S+/g, "[URL omitted]");
     try {
       await gui.save("failure");
     } catch {}
+  } else {
+    const evidence = resolve(process.env.DSH_BOT_GUI_OUTPUT ?? "qualification/gui");
+    await mkdir(evidence, { recursive: true });
+    const report = {
+      passed: false,
+      stage: "standard-profile-initialization-or-plugin-install",
+      platform: process.platform,
+      arch: process.arch,
+      node: process.version,
+      realModelRequests: 0,
+      checks: {},
+      error: String(error.stack).replace(/https?:\/\/\S+/g, "[URL omitted]"),
+      ...(error.code ? { errorCode: error.code } : {}),
+      ...(error.status !== undefined ? { commandExitCode: error.status } : {}),
+    };
+    await writeFile(join(evidence, "stock-gui-report.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
+    console.log(JSON.stringify({ passed: false, stage: report.stage, error: report.error, evidence }));
   }
   process.exitCode = 1;
 } finally {

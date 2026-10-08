@@ -43,8 +43,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.19.0'
       - run: npm ci --ignore-scripts
-      - run: node node_modules/playwright-core/cli.js install chromium
+      - run: node node_modules/playwright-core/cli.js install --with-deps chromium
       - uses: actions/download-artifact@v4
         with:
           name: native-plugin-package
@@ -57,6 +60,9 @@ jobs:
           mkdir -p qualification/gui
           export DSH_BOT_GUI_SHA256="$(cut -d ' ' -f1 qualification/package/SHA256SUMS)"
           node test/native-plugin/stock-gui-run.mjs qualification/package/*.tgz > qualification/stock-boot-private.log 2>&1
+      - name: Sanitized GUI qualification report
+        if: always()
+        run: node -e 'const fs=require("fs");const p="qualification/gui/stock-gui-report.json";if(fs.existsSync(p))console.log(fs.readFileSync(p,"utf8"));else console.log("GUI report unavailable before runner initialization")'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

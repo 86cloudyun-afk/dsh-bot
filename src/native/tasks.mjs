@@ -367,14 +367,11 @@ export class TaskController {
         ) {
           const live = this.adapter.context.sessions.get(attempt.sessionId);
           if (live) await this.adapter.context.sessions.flush(live);
-          const history = await this.adapter.readNative(attempt.sessionId),
-            end = history.events
+          const candidate = await this.adapter.readNative(attempt.sessionId),
+            candidateEnd = candidate.events
               .filter((event) => event.type === "turn/end")
               .at(-1);
-          if (end || attempt.state === "stop_requested") {
-            const reply = history.events
-              .filter((event) => event.type === "assistant/message")
-              .at(-1);
+          if (candidateEnd || attempt.state === "stop_requested") {
             await this.adapter.quiesce(attempt.sessionId);
             if (
               this.#hasPendingChildren(
@@ -385,6 +382,13 @@ export class TaskController {
             )
               continue;
             await this.adapter.disposeOwned(attempt.sessionId);
+            // The idle barrier can follow later native turns, including child
+            // results. Read the final durable log after owned teardown, once
+            // admission is closed, rather than settling a pre-barrier reply.
+            const history = await this.adapter.readNative(attempt.sessionId),
+              end = history.events.filter((event) => event.type === "turn/end").at(-1),
+              reply = history.events.filter((event) => event.type === "assistant/message").at(-1),
+              finalEvidence = this.adapter.resources(attempt.sessionId);
             try {
               await this.store.transact(
                 {
@@ -411,8 +415,8 @@ export class TaskController {
                       : "failed";
                   row.reservationHeld = false;
                   row.settledAt = new Date().toISOString();
-                  row.localEvidence = evidence;
-                  row.usage = evidence.requests.map((request) => request.usage);
+                  row.localEvidence = finalEvidence;
+                  row.usage = finalEvidence.requests.map((request) => request.usage);
                   if (!stopped && reply)
                     row.result = {
                       sessionId: row.sessionId,

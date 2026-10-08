@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
-import { copy, plain, requireCondition, validId } from "./store.mjs";
+import { copy, digest, plain, requireCondition, validId } from "./store.mjs";
 const textOf = (event) =>
   event?.data.message?.content
     ?.filter((block) => block.type === "text")
@@ -1014,6 +1014,10 @@ export class GroupMeetingController {
           meeting?.epoch === command.input.epoch,
           "stale_meeting",
         );
+        // Prior plugin candidates revealed opinions through their phase alone.
+        // Preserve that existing reveal before cancellation changes the phase.
+        if (["discussion", "decision", "complete"].includes(meeting.phase))
+          meeting.revealedEpoch = meeting.epoch;
         meeting.phase = "cancelled";
         return {
           meetingId: meeting.meetingId,
@@ -1036,6 +1040,38 @@ export class GroupMeetingController {
       "criteria",
     ]);
     const input = command.input;
+    const state = this.store.read(), previous = state.operations[command.operationId];
+    if (previous?.action === "task.create") {
+      // Old candidates saved two completed receipts. Retrieve them only when
+      // BOTH original payloads and the original authenticated caller match.
+      // Never recreate/relink a partially committed old action.
+      const oldCreate = this.policy.command(actor, {
+        operationId: command.operationId,
+        action: "task.create",
+        input: { botId: input.botId, title: input.title, goal: input.goal, criteria: input.criteria },
+      });
+      requireCondition(previous.fingerprint === digest(oldCreate), "operation_conflict");
+      requireCondition(command.expectedRevision === undefined, "recovery_required");
+      const taskId = previous.result?.taskId,
+        link = state.operations[`${command.operationId}:meeting-link`];
+      requireCondition(link, "recovery_required");
+      requireCondition(
+        link.action === "meeting.task-linked" && link.fingerprint === digest({
+          operationId: `${command.operationId}:meeting-link`,
+          action: "meeting.task-linked",
+          input: { meetingId: input.meetingId, epoch: input.epoch, taskId },
+        }),
+        "operation_conflict",
+      );
+      requireCondition(
+        state.tasks[taskId]?.botId === input.botId &&
+          state.meetings[input.meetingId]?.actions.includes(taskId),
+        "recovery_required",
+      );
+      this.policy.require(actor, "meeting.read", { kind: "meeting", id: input.meetingId }, state);
+      this.policy.require(actor, "task.create", { kind: "task", id: taskId }, state);
+      return copy(previous.result);
+    }
     return this.store.transact(this.policy.command(actor, command), (draft) => {
       const meeting = draft.meetings[input.meetingId];
       this.policy.require(

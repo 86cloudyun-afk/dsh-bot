@@ -868,7 +868,19 @@ export class NativeDshAdapter {
   async disposeOwned(sessionId) {
     const handle = this.#handles.get(sessionId);
     if (!handle) return;
-    await handle.dispose();
+    try {
+      await handle.dispose();
+    } catch (error) {
+      const record = this.#records.get(sessionId);
+      if (record) {
+        record.resourceFaults ??= [];
+        record.resourceFaults.push({
+          kind: "owned-disposal",
+          error: error.code ?? error.name,
+        });
+      }
+      throw error;
+    }
     this.#handles.delete(sessionId);
     const record = this.#records.get(sessionId);
     if (record?.agent === handle.agent) record.disposed = true;

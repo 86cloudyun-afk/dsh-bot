@@ -53,3 +53,37 @@ test("a failed shutdown resource receipt leaves the contact UNKNOWN after disabl
   assert.equal(binding.error, "shutdown_resources_unsettled");
   assert.ok(binding.resourceEvidence.resourceFaults.length);
 });
+
+test("a native owned write-handle close rejection leaves the contact UNKNOWN", async (t) => {
+  const f = await businessFixture(t),
+    bot = await f.bot(),
+    create = f.ctx.sessionPersistence.create.bind(f.ctx.sessionPersistence);
+  let closeCalls = 0;
+  f.ctx.sessionPersistence.create = async (...args) => {
+    const handle = await create(...args), close = handle.close.bind(handle);
+    // Inject a lost close receipt at the public backend boundary. The real
+    // native handle still drains, releases its lease and unregisters normally.
+    handle.close = async () => {
+      await close();
+      closeCalls++;
+      throw Object.assign(Error("Controlled owned close receipt failure"), {
+        code: "controlled_owned_disposal_failed",
+      });
+    };
+    return handle;
+  };
+  const contact = await f.sessions.create(f.human, {
+      operationId: "contact",
+      action: "session.create",
+      input: { botId: bot.botId },
+    });
+  await f.adapter.close();
+  assert.equal(closeCalls, 1, "The native AgentHandle awaited the write handle close");
+  assert.equal(f.ctx.agents.get(contact.sessionId), undefined);
+  const binding = f.store.read().sessions[contact.sessionId];
+  assert.equal(binding.state, "UNKNOWN");
+  assert.equal(binding.error, "shutdown_resources_unsettled");
+  assert.ok(binding.resourceEvidence.resourceFaults.some(
+    (fault) => fault.error === "controlled_owned_disposal_failed",
+  ));
+});
