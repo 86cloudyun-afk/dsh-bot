@@ -180,7 +180,7 @@ export class BotService {
     let result;
     if (action === "help") {
       this.policy.actorKey(actor);
-      result = commandHelp(actor, input);
+      return commandHelp(actor, input);
     } else if (action === "snapshot") result = this.snapshot(actor);
     else if (action === "catalog") {
       this.policy.actorKey(actor);
