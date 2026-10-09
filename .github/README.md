@@ -64,7 +64,7 @@ npm run check
 
 ## 本版验收
 
-v1.0.1 同一冻结安装包通过 **178 项自动化测试**，Linux／macOS × Node 22／24 四组 CI 全部通过；两平台各通过 **64 项官方原生 GUI 检查**和 **4 项 v1.0.0 升级检查**。本轮 GUI 使用受控模型，新增查回与升级检查未调用外部模型。
+v1.0.1 同一冻结安装包本地通过 **180 项自动化测试**；运行代码的 Linux／macOS × Node 22／24 四组 CI 通过，两平台各通过 **64 项官方原生 GUI 检查**和 **4 项 v1.0.0 升级检查**。本轮 GUI 使用受控模型，新增查回与升级检查未调用外部模型。最终 PR 的检查与发布证据见验收报告。
 
 [完整验收报告](../docs/releases/v1.0.1-qualification.zh-CN.md) · [机器可读证据](../docs/releases/v1.0.1-qualification.json) · [两平台 CI](https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37909824120)
 

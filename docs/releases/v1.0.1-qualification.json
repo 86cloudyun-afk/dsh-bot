@@ -12,8 +12,8 @@
   },
   "local": {
     "unitTests": {
-      "tests": 178,
-      "passed": 178,
+      "tests": 180,
+      "passed": 180,
       "failed": 0
     },
     "syntaxAndEntryClosure": true,
@@ -94,11 +94,13 @@
         "refreshAddsOrdinaryResultRecipientsWithoutClearingTaskDraft": true,
         "slowRecipientResponsesSurviveAutomaticRefresh": true
       },
-      "sourceCommit": "f2cb9ea8dd4b92d7657743f9a31920829a0ebd9c",
+      "sourceCommit": "214270421cc4b3ae21907f642b637f09f0622185",
       "sourceTreeDirty": true,
       "browserErrors": [],
       "stage": "complete",
       "optionalOfficialPtyServices": true,
+      "testsPassed": true,
+      "teardownComplete": true,
       "passed": true,
       "checkCount": 64,
       "controlledRequests": 38
@@ -129,6 +131,27 @@
       "passed": true,
       "checkCount": 4,
       "controlledRequests": 0
+    },
+    "livePollingUi": {
+      "platform": "linux",
+      "arch": "x64",
+      "node": "v24.19.0",
+      "artifactSha256": "e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd",
+      "checks": {
+        "shareDraftRemainsBoundToSelectedBotIds": true,
+        "savingShareDoesNotAddAnUnselectedBot": true,
+        "externalBotUpdatePreservesDraftAndChecksItsOriginalVersion": true,
+        "explicitBotDraftReloadAllowsSavingTheLatestVersion": true,
+        "duplicateBotNamesAreDisambiguatedByStableIdentity": true,
+        "refreshAddsOrdinaryResultRecipientsWithoutClearingTaskDraft": true,
+        "slowRecipientResponsesSurviveAutomaticRefresh": true,
+        "noBrowserScriptErrors": true
+      },
+      "activePollingProbe": true,
+      "liveReadOnlyResponsesAtReadiness": 4,
+      "realModelRequests": 0,
+      "passed": true,
+      "checkCount": 8
     }
   },
   "independentReviews": {
@@ -141,6 +164,14 @@
       "minor": 0,
       "allImportantFindingsReproducedAndFixed": true,
       "finalRegressionsGreen": true
+    },
+    "sharingLocatorInvestigation": {
+      "bundledReactAndChromium": true,
+      "repetitions": 3,
+      "movingNthLocatorRed": 3,
+      "stableBotIdLocatorGreen": 3,
+      "sameProductCode": true,
+      "externalModelRequests": 0
     }
   },
   "remoteCi": {
@@ -397,7 +428,8 @@
       }
     },
     "latestPrCommitChecksRequiredBeforeMerge": true,
-    "pullRequest": "https://github.com/86cloudyun-afk/dsh-bot/pull/2"
+    "pullRequest": "https://github.com/86cloudyun-afk/dsh-bot/pull/2",
+    "unitTestsAtRuntimeFreeze": 178
   },
   "compatibility": {
     "officialDsh": "0.2.0-rc.2",
@@ -430,5 +462,15 @@
     "sourceFileCount": 25,
     "mitPresent": true,
     "anonymousCommitPinnedDownloadSha256Verified": true
+  },
+  "ciHarnessRegressions": {
+    "positionalLocatorRaceDeterministicallyReproduced": true,
+    "stableBotIdsAndCompleteInitialRoster": true,
+    "strictRecipientAssertionsPreserved": true,
+    "reportLostOnTeardownExceptionRedToGreen": true,
+    "teardownFailureCannotPublishSuccess": true,
+    "latestFailedPrRun": "https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37910579725",
+    "observedMacReportMissing": true,
+    "originalMacCauseConfirmed": false
   }
 }
