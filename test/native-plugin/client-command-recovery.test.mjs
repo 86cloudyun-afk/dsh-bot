@@ -7,7 +7,7 @@ const body = source.slice(source.indexOf('        const t = ctx.locale.bind'), s
 const version = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')).version;
 const original = {operationId:'retained-first-bot', action:'bot.create', input:{name:'First'}};
 
-function client({snapshot = {storeId:'test-store', bots:[], pluginVersion:version, clientProtocol:1}, stored = [], commandReply = {ok:true, value:{botId:'created'}}} = {}) {
+function client({snapshot = {storeId:'test-store', bots:[], pluginVersion:version, clientProtocol:2}, stored = [], commandReply = {ok:true, value:{botId:'created'}}} = {}) {
   const calls = [], cache = new Map([['dsh-bot.pending.v1.test-store', JSON.stringify(stored)]]);
   const ctx = {
     locale:{bind:()=>key=>key},
@@ -34,7 +34,7 @@ test('a new client refuses writes to an unidentified previous native release', a
 });
 
 test('release is checked again before a write after the host has changed', async () => {
-  const snapshot={storeId:'test-store',bots:[],pluginVersion:version,clientProtocol:1};
+  const snapshot={storeId:'test-store',bots:[],pluginVersion:version,clientProtocol:2};
   const ui=client({snapshot}); await ui.refresh();
   snapshot.pluginVersion='1.0.0';
   await ui.command('bot.create',{name:'New'});
@@ -91,7 +91,7 @@ test('operator can retain an original in history and release a full pending slot
 });
 
 test('profile changes cannot move old pending requests into another profile',async()=>{
-  const snapshot={storeId:'test-store',bots:[],pluginVersion:version,clientProtocol:1};
+  const snapshot={storeId:'test-store',bots:[],pluginVersion:version,clientProtocol:2};
   const ui=client({snapshot,stored:[original]});await ui.refresh();
   snapshot.storeId='different-store';await ui.refresh();
   await ui.command('bot.create',{name:'Another profile'});

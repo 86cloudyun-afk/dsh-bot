@@ -4,6 +4,8 @@ import { copy, plain, requireCondition, validId } from "./store.mjs";
 
 /** Native delivery has its own durable identity; uncertain inputs are never replayed. */
 export class ConversationBroker {
+  #noticeSink;
+  setNoticeSink(sink) {this.#noticeSink=sink;}
   #actors = new Map();
   #deliveries = new Map();
   #targets = new Map();
@@ -145,6 +147,7 @@ export class ConversationBroker {
         id: attempt.resultMessageId,
       }),
     };
+    this.#noticeSink?.recordResultNoticeInDraft(draft,task,attempt,draft.outbox[outboxId]);
   }
   async deliverResult(attemptId) {
     const attempt = this.store.read().attempts[attemptId],

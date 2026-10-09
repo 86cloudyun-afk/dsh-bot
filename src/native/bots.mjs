@@ -4,10 +4,12 @@ import {defaultShare} from './policy.mjs';
 
 export class BotDirectory {
   #validatedConfigs = new WeakMap();
+  #memory;
   constructor(store,policy,adapter) {
     this.store=store;this.policy=policy;this.adapter=adapter;
     adapter.setContextProvider((agent,binding)=>this.context(policy.fromAgent(agent),binding,{maxChars:12000}));
   }
+  setMemoryController(memory) {this.#memory=memory;}
   async #config(input,current) {
     try {return await this.#validateConfig(input,current);}
     catch(error) {throw Object.assign(new Error(error.message,{cause:error}),{code:error.code??'invalid_bot_config',details:{rejectedBeforeWrite:true}});}
@@ -135,6 +137,7 @@ export class BotDirectory {
   delete(actor,command) {return this.#setDeleted(actor,command,true);}
   restore(actor,command) {return this.#setDeleted(actor,command,false);}
   async memoryWrite(actor,command) {
+    if(this.#memory)return this.#memory.write(actor,command);
     command=copy(command);const input=command.input;
     requireCondition(plain(input) && Object.keys(input).every(key=>['botId','memoryId','expectedVersion','text','category','source','automatic'].includes(key)) &&
       typeof input.text==='string'&&input.text.trim().length>0&&input.text.length<=8192,'invalid_memory');
@@ -165,6 +168,7 @@ export class BotDirectory {
     });
   }
   async memoryForget(actor,command) {
+    if(this.#memory)return this.#memory.forget(actor,command);
     command=copy(command);const input=command.input;
     this.policy.require(actor,'memory.forget',{kind:'memory',id:input.memoryId});
     return this.store.transact(this.policy.command(actor,command),draft=>{
@@ -174,12 +178,14 @@ export class BotDirectory {
     });
   }
   searchMemory(actor,input={}) {
+    if(this.#memory)return this.#memory.search(actor,input);
     const state=this.store.read(),query=input.query??'';requireCondition(typeof query==='string'&&query.length<=500,'invalid_query');
     return Object.values(state.memories).filter(record=>!record.forgotten&&(!input.botId||record.botId===input.botId)&&record.text.toLocaleLowerCase().includes(query.toLocaleLowerCase())&&this.policy.canRead(actor,{kind:'memory',id:record.memoryId})).map(record=>{
       this.policy.noteRead(actor,{kind:'memory',id:record.memoryId});return copy(record);
     });
   }
   context(actor,binding,{maxChars=12000}={}) {
+    if(this.#memory)return this.#memory.context(actor,binding,{maxChars});
     const state=this.store.read(),bot=state.bots[binding.botId];requireCondition(bot,'not_found');
     requireCondition(actor.kind==='human'||actor.botId===binding.botId&&actor.sessionId===binding.sessionId,'access_denied');
     const memories=this.searchMemory(actor,{botId:bot.botId}).slice(-30).map(record=>({memoryId:record.memoryId,text:record.text,version:record.version,source:record.source}));
