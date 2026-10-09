@@ -2,9 +2,9 @@
 
 在你现有的 **官方 DSH** 中创建有名字、长期记忆和独立职责的 Bot。后台任务继续运行时，Bot 仍能聊天、接受新任务、查询进度和响应停止指令。
 
-[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/dsh-bot-1.0.2.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
+[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.0/dist/dsh-bot-1.1.0.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.0/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
 
-## 第一版包含什么
+## 日常能力
 
 | 能力 | 日常使用 |
 | --- | --- |
@@ -16,17 +16,21 @@
 | 内部群与会议 | 多 Bot 群聊；同群可同时开不同议题会议，先独立意见，再讨论、协调者决定和实际行动任务。 |
 | 普通会话管理 | 分页查看普通会话及 Bot 会话；停止当前回复、归档和恢复，任务结果也可以投递到普通会话。 |
 | 每 Bot 模型配置 | 从 DSH 已配置的模型中选择；联络和执行可分别配置，全局默认保持原值。 |
+| 自身会话管理 | Bot 可修改自己的职责和模型，管理所属会话的名称、模型、停止、归档、恢复与历史接续；跨 Bot 控制仍需要当前授权。 |
+| 协作增强 | Bot／团队模板一次创建，前置任务真实通过验收后开始，已结算任务可交接并保留原执行记录。 |
+| 知识增强 | 记忆搜索、分类、编辑与固定，文本／Markdown 资料收录与中文检索，精确原文引用，单 Bot 记忆 JSON 导入导出。 |
+| 助理与定时 | 当前聊天可查看任务简报和未读结果；提醒、单次／间隔／每日／每周定时，停止 DSH 时不运行，恢复策略明确。 |
 | 删除与恢复 Bot | 点击“删除”后明确确认；保留 Bot ID、会话、记忆、任务和执行记录。有活动或未知工作、未完成群／会议流程、原生待处理输入或待投递结果时阻止删除。可从“已删除的 Bot”恢复，再单独启用。 |
 
 ## 安装
 
 兼容基线为 **官方 `@deepseek-ai/dsh@0.2.0-rc.2`**、Node **22（≥22.19）或 24 及以上**，验证平台为 Linux 与 macOS。官方插件安装命令需要 `pnpm`。
 
-1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.2) 提供本版源码和验收记录。
+1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.0) 提供本版源码和验收记录。
 2. 将插件安装到你日常使用的 DSH profile。以 `web` 为例：
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.0.2.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.1.0.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -34,7 +38,9 @@ dsh web
 
 完整的依赖检查、首次安装、升级和卸载步骤见 [安装说明](docs/install.zh-CN.md)。版本是否正式交付，以对应 Release 的验收报告为准。
 
-**v1.0.2 修复版**补齐首条消息前与原生会话标题栏的 Bot 身份显示，增加可恢复的 Bot 删除，并让 `tools.list`／`help.toolCatalog` 展示当前调用会话实际挂载的工具及限制。从 v1.0.0 或 v1.0.1 升级后，完全重启 DSH 并刷新浏览器，核对 **插件 1.0.2 / 服务 1.0.2**；原 Bot、记忆、会话、任务及待查回的原始操作 ID 和回执保留。
+**v1.1.0**增加 Bot 自身会话管理、任务依赖与责任交接、团队模板、资料引用与记忆管理、简报和定时功能。从 v1.0.0／v1.0.1／v1.0.2 升级后，完全重启 DSH 并刷新浏览器，核对 **插件 1.1.0 / 服务 1.1.0**。迁移保留原 Bot、记忆、会话、任务、原始操作 ID 和回执，并在同一存储记录保留校验过的升级前备份；旧授权的新增资料范围默认为关闭。
+
+已有原生会话的工作目录固定，带历史的接续会话继承原有效 preset；更换 preset 时新建会话。停止被接受与资源结算分别记录；UNKNOWN 不自动重放。
 
 此前 **v1.0.1** 已增加界面／服务版本检查和原操作只读查回，修复默认 preset 恢复、模型目录变化及多页面草稿覆盖；旧共享草稿不能重新打开已撤销的共享。
 
@@ -51,7 +57,7 @@ dsh web
 
 插件复用 DSH 的模型、凭据、工具、审批、会话、日志和存储。安装包只包含插件代码和中文说明，不携带 DSH／Host／SDK，也不要求改写 DSH 本体或另建应用。
 
-正式版本以同一不可变包完成两平台安装与 GUI 检查，另外保留真实模型和多轮独立复审证据。受控模型、真实模型和资源停止证据在验收报告中分别注明。
+正式版本以同一不可变包完成两平台安装与 GUI 检查，模型调用类型和多轮独立复审证据均在对应报告注明。受控模型、真实模型和资源停止证据在验收报告中分别注明。
 
 **此前独立软件版已完全作废。** 旧 Host 装配、owner 启动器、专用 Home/profile、独立网页和旧安装器退出运行及分发入口；本仓库只交付原生插件。见 [作废说明](docs/history/standalone-void.md)。
 
