@@ -129,3 +129,26 @@ test('claimed local taskInput provenance requires an actual immutable input reco
   await f.store.transact(command('real-input','seed',{}),draft=>{draft.taskInputs['missing-frozen-input']={inputId:'missing-frozen-input',taskId:'upstream-task',botId:f.bot.botId,result:{text:'frozen body',source:{kind:'human'},origins:[]},origins:[]};return null;});
   const verified=await f.m.preview(f.human,{botId:f.bot.botId,fileText:exported.fileText,fileDigest:exported.fileDigest});assert.equal(verified.entries[0].verified,true);assert.equal(verified.entries[0].sourceVerification,'verified_local_source');
 });
+test('sealed Bot explicit material and ordinary native sources retain authenticated writer restrictions on new memories and edits',async t=>{
+  const f=await setup(t),normal=await f.sessions.create(f.human,command('writer-normal','session.create',{botId:f.bot.botId})),sealed=await f.sessions.create(f.human,command('writer-sealed','session.create',{botId:f.bot.botId})),normalAgent=f.ctx.agents.get(normal.sessionId);
+  const {createUserMessage}=await import('@deepseek-ai/dsh-llm'),{eventually}=await import('./official-fixture.mjs');normalAgent.followup(createUserMessage({content:[{type:'text',text:'PUBLIC'}],source:{kind:'test'}}));await eventually(()=>f.events.get(normal.sessionId)?.some(e=>e.type==='turn/end'));await f.ctx.sessions.flush(normalAgent.session);
+  const event=(await f.adapter.readNative(normal.sessionId)).events.find(e=>e.type==='user/message'),doc=await f.knowledge.ingest(f.human,command('ordinary-material','material.ingest',{botId:f.bot.botId,title:'ordinary',text:'PUBLIC'})),edit=await f.m.write(f.human,command('ordinary-edit','memory.write',{botId:f.bot.botId,text:'ordinary editable'})),pin=await f.m.write(f.human,command('ordinary-pin','memory.write',{botId:f.bot.botId,text:'ordinary pinnable'}));
+  await f.store.transact(command('seal-writer','seed',{}),draft=>{draft.meetings.writerMeeting={meetingId:'writerMeeting',epoch:1,phase:'independent'};draft.sessions[sealed.sessionId].lineage={meetingId:'writerMeeting',epoch:1,phase:'independent',sessionId:sealed.sessionId,botId:f.bot.botId};return null;});
+  const writer=f.policy.fromAgent(f.ctx.agents.get(sealed.sessionId)),reader=f.policy.fromAgent(normalAgent);assert.equal(f.policy.canRead(reader,{kind:'session',id:sealed.sessionId}),false);
+  const sources=[{kind:'material',docId:doc.docId,chunkId:doc.chunks[0].chunkId},{sessionId:normal.sessionId,eventSeq:event.seq}];
+  for(let i=0;i<sources.length;i++) {
+    const row=await f.m.write(writer,command(`explicit-writer-${i}`,'memory.write',{botId:f.bot.botId,text:`SEALED SECRET ${i}`,source:sources[i]}));
+    assert.ok(row.origins.some(ref=>ref.kind==='session'&&ref.id===sealed.sessionId));assert.ok(row.contentSources.some(source=>source.sessionId===sealed.sessionId&&source.meetingId==='writerMeeting'));assert.equal(f.policy.canRead(reader,{kind:'memory',id:row.memoryId}),false);
+  }
+  for(let i=0;i<sources.length;i++) {const edited=await f.m.write(writer,command(`sealed-edit-${i}`,'memory.write',{botId:f.bot.botId,memoryId:edit.memoryId,expectedVersion:i+1,text:`SEALED SECRET EDIT ${i}`,category:'decision',pinned:true,source:sources[i]}));assert.deepEqual(edited.source,edit.source);assert.equal(f.policy.canRead(reader,{kind:'memory',id:edited.memoryId}),false);assert.ok(edited.origins.some(ref=>ref.kind==='material'&&ref.id===doc.docId));}
+  await f.m.pin(writer,command('sealed-pin','memory.pin',{memoryId:pin.memoryId,expectedVersion:1,pinned:true}));assert.equal(f.policy.canRead(reader,{kind:'memory',id:pin.memoryId}),false);assert.deepEqual(f.m.search(reader,{query:'SEALED'}),[]);
+});
+test('escaped long roles preserve mandatory instructions complete identity and reserved unfinished task summaries',async t=>{
+  const f=await setup(t),role='"'.repeat(8192);await f.store.transact(command('escaped-context','seed',{}),draft=>{draft.bots[f.bot.botId].role=role;draft.tasks.escapedTask={taskId:'escapedTask',botId:f.bot.botId,title:'MUST KEEP SHORT TASK',state:'UNKNOWN'};return null;});
+  const binding=await f.sessions.create(f.human,command('escaped-session','session.create',{botId:f.bot.botId})),actor=f.policy.fromAgent(f.ctx.agents.get(binding.sessionId));
+  for(const maxChars of [12000,600]) {
+    const preview=f.m.contextPreview(actor,binding,{maxChars});assert.ok(preview.context.length<=maxChars);assert.ok(preview.context.includes('你是一个有长期身份的 Bot。'));assert.ok(preview.context.includes('task.create'));assert.deepEqual(preview.includedTaskIds,['escapedTask']);assert.ok(preview.context.includes('MUST KEEP SHORT TASK'));
+    const identity=JSON.parse(preview.context.split('\n').find(line=>line.startsWith('身份：')).slice(3));assert.equal(identity.rolePreview,true);assert.ok(identity.role.length<role.length);assert.equal(identity.role,role.slice(0,identity.role.length));
+  }
+  assert.throws(()=>f.m.contextPreview(actor,binding,{maxChars:256}),{code:'invalid_context'});
+});
