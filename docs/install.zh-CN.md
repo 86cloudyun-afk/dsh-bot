@@ -23,11 +23,11 @@ dsh web
 
 ## 2. 获取并验证插件包
 
-在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.0) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/dsh-bot-1.0.0.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
+在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.1) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/dsh-bot-1.0.1.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/dsh-bot-1.0.0.tgz
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/SHA256SUMS
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/dsh-bot-1.0.1.tgz
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/SHA256SUMS
 ```
 
 Linux：
@@ -49,7 +49,7 @@ shasum -a 256 -c SHA256SUMS
 以下命令使用官方 `web` profile。使用其他现有 Web profile 时，将 `web` 替换为你实际使用的名称。
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.0.0.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.0.1.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -87,10 +87,16 @@ dsh web
 
 ```bash
 dsh plugin --profile web remove dsh-bot --config.ignore-scripts=true
-dsh plugin --profile web add ./dsh-bot-1.0.0.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.0.1.tgz --ignore-scripts --strict-peer-dependencies
 ```
 
 重新启动或启用插件后，Bot ID、记忆、会话和任务读取原持久数据。卸载只移除插件依赖与入口；手动删除 DSH 存储不属于卸载步骤。
+
+从 v1.0.0 或早期同名候选包升级到 v1.0.1 时，请完全退出原 DSH 进程后执行上述命令，再启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.0.1 / 服务 1.0.1**。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
+
+浏览器中已有的原始操作 ID 继续保留。在“待查回的原始操作”先点 **查回原始操作**：它只读持久回执，不执行任务，也不调用模型。找到回执后刷新原对象；没有回执时保留“未确认”。**用原 ID 接续**是单独的显式提交，并先检查原回执；已提交操作不会重复创建。不要修改原 ID 的内容或将旧操作改用于新动作。
+
+已拒绝或不再接续的请求可以 **保留并收起**，原 ID 与完整请求仍在折叠的历史中可查。目录中暂时消失的模型或 preset 显示“当前不可用”，已保存和当前草稿选择都保留；选择替代项或默认配置必须由你明确操作。
 
 ## 7. 故障处理
 
@@ -101,6 +107,9 @@ dsh plugin --profile web add ./dsh-bot-1.0.0.tgz --ignore-scripts --strict-peer-
 | 模型列表为空／无法回答 | 先确认普通 DSH 对话正常，再检查该 Bot 的模型配置和 DSH 凭据。 |
 | `model_drift` | Bot 会话使用 Bot 配置的模型。回工作台调整联络／执行模型，再发起新轮或新尝试。 |
 | `revision_conflict` | 另一页面已经修改对象。当前 Bot 配置草稿保留；点击“重新载入最新配置”后按新版本修改。 |
+| `plugin_version_mismatch`／首次创建出现 `invalid_input` | 核对工作台的插件／服务版本，按升级步骤装同一新版、完全重启 DSH 并刷新页面；保留原操作 ID，先只读查回。配置验证失败时新版会注明提交被拒及未写入。 |
+| 模型目录变化 | 原模型会显示“当前不可用”；显式选择替代模型后保存，插件不会在改名时自动换模型。 |
+| 任务、共享、群或会议草稿冲突 | 原草稿保留在开始编辑时的版本／会议世代。先阅读最新内容，再点对应“重新载入最新…”重新编辑；旧共享草稿不能恢复已撤销的共享。 |
 | `access_denied` | 在“共享与授权”核对接收 Bot、共享上限、具体会话／任务范围和有效权限。 |
 | 停止已接受，但还未结算 | 等待模型、工具、作业、终端或子工作的真实终止证据；占用会在结算后释放。 |
 | 状态为 `UNKNOWN`／“未知” | 使用“结果与投递”及待查回的原始操作查询实际日志。不要重新登记替代任务来掩盖未知状态。 |

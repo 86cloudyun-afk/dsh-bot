@@ -51,8 +51,9 @@ export async function stockGui({
   stream,
   artifact = process.argv[2],
   output = process.env.DSH_BOT_GUI_OUTPUT,
+  existingRoot,
 } = {}) {
-  const root = await mkdtemp(join(tmpdir(), "dsh-bot-stock-gui-")),
+  const root = existingRoot ?? await mkdtemp(join(tmpdir(), "dsh-bot-stock-gui-")),
     evidence = output ? resolve(output) : join(root, "evidence"),
     profile = "plugin-qualification";
   for (const dir of [evidence, join(root, "work"), join(root, "packages")])
@@ -114,7 +115,7 @@ export async function stockGui({
     ["status", "--porcelain", "--untracked-files=normal"],
     { cwd: source, encoding: "utf8" },
   ).trim();
-  await writeFile(
+  if (!existingRoot) await writeFile(
     join(evidence, "initialization.log"),
     command([
       profile,
@@ -124,7 +125,7 @@ export async function stockGui({
     ]),
     { mode: 0o600 },
   );
-  await writeFile(
+  if (!existingRoot) await writeFile(
     join(evidence, "installation.log"),
     command([
       "plugin",
@@ -257,7 +258,7 @@ export async function stockGui({
       name: "继续",
       exact: true,
     });
-    if(firstBoot){
+    if(firstBoot && !existingRoot){
       await previewContinue.waitFor({ state: "visible" });
       await previewContinue.click();
       await previewContinue.waitFor({ state: "hidden" });
@@ -282,13 +283,13 @@ export async function stockGui({
       "--config.ignore-scripts=true",
       ...common,
     ]);
-  state.reinstall = () =>
+  state.reinstall = (packageArtifact = artifact) =>
     command([
       "plugin",
       "--profile",
       profile,
       "add",
-      artifact,
+      resolve(packageArtifact),
       "--ignore-scripts",
       ...common,
     ]);

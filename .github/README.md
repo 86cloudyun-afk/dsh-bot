@@ -2,7 +2,7 @@
 
 在你现有的 **官方 DSH** 中创建有名字、长期记忆和独立职责的 Bot。后台任务继续运行时，Bot 仍能聊天、接受新任务、查询进度和响应停止指令。
 
-[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/dsh-bot-1.0.0.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.0/dist/SHA256SUMS) · [安装与上手](../docs/install.zh-CN.md) · [使用手册](../docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](../docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
+[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/dsh-bot-1.0.1.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/SHA256SUMS) · [安装与上手](../docs/install.zh-CN.md) · [使用手册](../docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](../docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
 
 ## 第一版包含什么
 
@@ -21,17 +21,19 @@
 
 兼容基线为 **官方 `@deepseek-ai/dsh@0.2.0-rc.2`**、Node **22（≥22.19）或 24 及以上**，验证平台为 Linux 与 macOS。官方插件安装命令需要 `pnpm`。
 
-1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.0) 提供本版源码和验收记录。
+1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.1) 提供本版源码和验收记录。
 2. 将插件安装到你日常使用的 DSH profile。以 `web` 为例：
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.0.0.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.0.1.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
 3. 在原有 DSH 侧栏打开 **Bot 工作台**，填写名称创建 Bot，然后点击卡片上的 **开始聊天**。原生工作工具默认可用，无需逐项配置。
 
 完整的依赖检查、首次安装、升级和卸载步骤见 [安装说明](../docs/install.zh-CN.md)。版本是否正式交付，以对应 Release 的验收报告为准。
+
+**v1.0.1 修复版**增加界面／服务版本检查和原操作只读查回，修复默认 preset 恢复、模型目录变化及多页面草稿覆盖。旧共享草稿不能重新打开已撤销的共享。已安装 v1.0.0 时，先按安装说明升级，再完全重启 DSH 并刷新浏览器；原 Bot、记忆、会话、任务及操作 ID 保留。
 
 ## 几个使用例子
 
@@ -62,8 +64,8 @@ npm run check
 
 ## 本版验收
 
-同一冻结安装包通过 **151 项自动化测试**，Linux 与 macOS 各 **54 项官方原生 GUI 检查**，以及 **5 项真实 DeepSeek GUI 定向验收**。真实模型已证明：无需工具名单，自主派发后台工作，工作未结束时继续聊天，然后停止确切工作。
+v1.0.1 同一冻结安装包本地通过 **180 项自动化测试**；运行代码的 Linux／macOS × Node 22／24 四组 CI 通过，两平台各通过 **64 项官方原生 GUI 检查**和 **4 项 v1.0.0 升级检查**。本轮 GUI 使用受控模型，新增查回与升级检查未调用外部模型。最终 PR 的检查与发布证据见验收报告。
 
-[完整验收报告](../docs/releases/v1.0.0-simplified-qualification.zh-CN.md) · [机器可读证据](../docs/releases/v1.0.0-simplified-qualification.json) · [两平台 CI](https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37819021179)
+[完整验收报告](../docs/releases/v1.0.1-qualification.zh-CN.md) · [机器可读证据](../docs/releases/v1.0.1-qualification.json) · [两平台 CI](https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37909824120)
 
-插件 SHA-256：`1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724`。源码、安装包和验收身份分别记录；旧独立软件不再提供运行及安装入口。
+插件 SHA-256：`e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd`。v1.0.0 的真实模型证据单独保留，不能视作新版重新实测。旧独立软件不再提供运行及安装入口。

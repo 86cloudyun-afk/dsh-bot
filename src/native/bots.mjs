@@ -8,7 +8,13 @@ export class BotDirectory {
     adapter.setContextProvider((agent,binding)=>this.context(policy.fromAgent(agent),binding,{maxChars:12000}));
   }
   async #config(input,current) {
-    requireCondition(plain(input) && Object.keys(input).every(key=>['botId','expectedVersion','name','role','cwd','presetId','contact','execution','executionMode','lifecycle','capabilities'].includes(key)),'invalid_input');
+    try {return await this.#validateConfig(input,current);}
+    catch(error) {throw Object.assign(new Error(error.message,{cause:error}),{code:error.code??'invalid_bot_config',details:{rejectedBeforeWrite:true}});}
+  }
+  async #validateConfig(input,current) {
+    requireCondition(plain(input),'invalid_input','Bot 配置必须为对象');
+    const unsupported=Object.keys(input).filter(key=>!['botId','expectedVersion','name','role','cwd','presetId','contact','execution','executionMode','lifecycle','capabilities'].includes(key));
+    requireCondition(!unsupported.length,'invalid_input',`Bot 配置包含不支持的字段：${unsupported.slice(0,10).map(key=>key.slice(0,100)).join(', ')}`);
     const name=input.name??current?.name;requireCondition(typeof name==='string' && name.trim().length>0 && name.trim().length<=100,'invalid_name');
     const role=input.role??current?.role??'';requireCondition(typeof role==='string' && role.length<=8192,'invalid_role');
     const cwd=await this.adapter.validateLocation(input.cwd??current?.cwd??this.adapter.context.get('profileContext')?.cwd??process.cwd());
@@ -19,7 +25,10 @@ export class BotDirectory {
     const execution=await this.adapter.validateModel(input.execution??(followsChangedContact?contact:current?.execution)??contact);
     requireCondition(executionMode!=='inherit'||execution.provider===contact.provider&&execution.model===contact.model,'execution_model_conflict');
     const lifecycle=input.lifecycle??current?.lifecycle??'active';requireCondition(['active','paused','archived'].includes(lifecycle),'invalid_lifecycle');
-    const presets=this.adapter.context.get('agentPresets'),presetId=input.presetId??current?.presetId??presets?.defaultId??null;
+    const presets=this.adapter.context.get('agentPresets'),presetId=Object.hasOwn(input,'presetId')
+      ? input.presetId??presets?.defaultId??null
+      : current?.presetId??presets?.defaultId??null;
+    requireCondition(presetId===null||typeof presetId==='string'&&presetId.length>0&&presetId.length<=160,'invalid_preset');
     if(presets) {const preset=await presets.resolve(presetId);requireCondition(!preset.broken,'preset_unavailable');}
     const capabilities=input.capabilities??current?.capabilities??[];
     requireCondition(Array.isArray(capabilities)&&capabilities.length<=64&&capabilities.every(name=>typeof name==='string'&&/^[A-Za-z0-9_.-]+$/.test(name)),'invalid_capabilities');
@@ -47,7 +56,7 @@ export class BotDirectory {
     return this.store.transact(stamped,draft=>{
       this.policy.require(actor,'bot.update',{kind:'bot',id:input.botId},draft);
       const bot=draft.bots[input.botId];requireCondition(input.expectedVersion===bot.revision,'revision_conflict');
-      Object.assign(bot,config,{revision:bot.revision+1,configRevision:bot.configRevision+(input.contact||input.execution||Object.hasOwn(input,'executionMode')||input.presetId||input.cwd?1:0)});return bot;
+      Object.assign(bot,config,{revision:bot.revision+1,configRevision:bot.configRevision+(input.contact||input.execution||Object.hasOwn(input,'executionMode')||Object.hasOwn(input,'presetId')||input.cwd?1:0)});return bot;
     });
   }
   async memoryWrite(actor,command) {

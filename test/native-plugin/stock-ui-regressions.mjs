@@ -29,9 +29,14 @@ export async function runUiRegressions(gui) {
     await gui.workbench("共享与授权");
     const sharing = gui.card(`${owner.name} 的共享范围`);
     await sharing.waitFor();
-    for (const input of await sharing.locator('input[name="receiver"]').all()) {
-      if (await input.getAttribute("value") === selected.botId) await input.check();
-      else await input.uncheck();
+    for (const bot of [b,c]) {
+      await sharing.locator(`input[name="receiver"][value="${bot.botId}"]`).waitFor();
+    }
+    // Locator.all() returns moving nth(i) locators. A live roster refresh can
+    // insert a Bot while we click, so bind every operation to its stable ID.
+    const receiverIds=await sharing.locator('input[name="receiver"]').evaluateAll(rows=>rows.map(row=>row.value));
+    for (const botId of receiverIds) {
+      await sharing.locator(`input[name="receiver"][value="${botId}"]`).setChecked(botId===selected.botId);
     }
     const checked = () => sharing.locator('input[name="receiver"]:checked').evaluateAll(rows => rows.map(row => row.value));
     assert.deepEqual(await checked(), [selected.botId]);

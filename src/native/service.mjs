@@ -1,5 +1,6 @@
-import { copy, plain, requireCondition, validId } from "./store.mjs";
+import { copy, digest, plain, requireCondition, validId } from "./store.mjs";
 import {commandHelp} from "./commands.mjs";
+import manifest from "../../package.json" with {type:"json"};
 
 /** One business surface shared by authenticated GUI RPC and Agent-scoped tools. */
 export class BotService {
@@ -40,6 +41,8 @@ export class BotService {
         revision: state.revision,
         status: "enabled",
         releaseReady: false,
+        pluginVersion: manifest.version,
+        clientProtocol: 1,
       };
     for (const [kind, table] of Object.entries({
       bot: "bots",
@@ -196,6 +199,19 @@ export class BotService {
       result = await this.sessions.list(actor, input, signal);
     else if (action === "memory.search")
       result = this.bots.searchMemory(actor, input);
+    else if (action === "operation.lookup") {
+      this.policy.actorKey(actor);
+      requireCondition(actor.kind === "human", "human_required");
+      requireCondition(Object.keys(input).every(key => ["operationId", "request"].includes(key)) && validId(input.operationId), "invalid_operation");
+      const receipt = this.store.read().operations[input.operationId];
+      if (input.request !== undefined) {
+        requireCondition(plain(input.request) && input.request.operationId === input.operationId &&
+          typeof input.request.action === "string" && plain(input.request.input) &&
+          Object.keys(input.request).every(key => ["operationId", "action", "input", "expectedRevision"].includes(key)), "invalid_command");
+        if (receipt) requireCondition(receipt.fingerprint === digest(this.policy.command(actor, input.request)), "operation_conflict");
+      }
+      result = receipt ? {state:"committed", action:receipt.action, result:copy(receipt.result)} : {state:"unrecorded"};
+    }
     else {
       requireCondition(validId(command.operationId), "invalid_operation");
       const routes = {

@@ -6,6 +6,7 @@ const contracts = {
   help: [[], ["action"], "读取本工具的动作、输入字段及真实调用者身份。", "read"],
   snapshot: [[], [], "查询当前有权读取的 Bot、记忆、任务、尝试、群、会议与投递状态。", "read"],
   catalog: [[], [], "查询官方 DSH 已配置的模型与 preset。", "read"],
+  "operation.lookup": [["operationId"], ["request"], "人类只读查询原始操作回执；request 可验证完整原始请求。unrecorded 不代表原生工作已经停止或没有副作用。", "human-read"],
   "session.list": [[], ["cursor", "limit"], "分页查询可读会话；使用返回的 nextCursor。", "read"],
   "session.page": [["sessionId"], ["cursor", "limit"], "分页读取实际原生日志；使用返回的 nextCursor。", "read"],
   "memory.search": [[], ["botId", "query"], "按文本查询可读的长期记忆。", "read"],
@@ -30,8 +31,8 @@ const contracts = {
   "outbox.reconcile": [["outboxId"], [], "查回原始结果投递；UNKNOWN 不重放。明确从未入队且被阻止的投递只在当前授权有效后重试。"],
   "bot.create": [["name", "contact"], ["role", "cwd", "execution", "executionMode", "presetId", "lifecycle"], "人类创建具名 Bot；contact/execution 使用 {provider,model,...}。executionMode 为 inherit 或 explicit。", "human"],
   "bot.update": [["botId", "expectedVersion"], ["name", "role", "cwd", "contact", "execution", "executionMode", "presetId", "lifecycle"], "人类修改 Bot；expectedVersion 使用 Bot revision。executionMode 明确保存自动跟随或指定执行模型。", "human"],
-  "share.set": [["botId", "share"], [], "人类设置共享上限。", "human"],
-  "grant.set": [["grantId", "recipientBotId", "ownerBotId", "scope", "level", "active"], [], "人类设置或撤销持续授权；level 为 read 或 control，active 为布尔值。", "human"],
+  "share.set": [["botId", "share"], ["expectedVersion"], "人类设置共享上限；expectedVersion 使用 Bot revision 保护编辑草稿。", "human"],
+  "grant.set": [["grantId", "recipientBotId", "ownerBotId", "scope", "level", "active"], ["expectedVersion"], "人类设置或撤销持续授权；level 为 read 或 control，active 为布尔值。更新时 expectedVersion 使用授权 version。", "human"],
   "group.create": [["name", "botIds", "coordinatorBotId"], ["rounds", "maxRequests"], "人类创建内部群；协调者必须在成员中。", "human"],
   "group.members": [["groupId", "expectedVersion", "botIds", "coordinatorBotId"], [], "人类修改群成员和协调者。", "human"],
   "meeting.start": [["groupId", "topic", "materials"], ["maxRequests"], "人类为群开启新会议并启动独立意见。", "human"],
@@ -50,7 +51,7 @@ export function commandHelp(actor, input = {}) {
     commands = {};
   for (const name of input.action ? [input.action] : commandNames) {
     const [required, optional, description, level] = contracts[name];
-    commands[name] = {required, optional, description, readOnly: level === "read", humanOnly: level === "human"};
+    commands[name] = {required, optional, description, readOnly: ["read", "human-read"].includes(level), humanOnly: ["human", "human-read"].includes(level)};
   }
   if (commands["task.create"]) commands["task.create"].example = {
     action: "task.create", operationId: randomUUID(),
