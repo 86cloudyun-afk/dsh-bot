@@ -7,6 +7,7 @@ import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
 import { finishStockGui } from "./stock-report.mjs";
+import { installStockFatalReport } from "./stock-fatal-report.mjs";
 import {
   stockGui,
   controlledProvider,
@@ -16,6 +17,7 @@ import {
 } from "./stock-gui-runtime.mjs";
 
 let gui;
+installStockFatalReport(() => gui);
 const calls = new Map();
 async function* stream(options, state) {
   const service = state.app.ctx.dshBot,
@@ -838,7 +840,13 @@ try {
   process.exitCode = 1;
 } finally {
   if (gui) {
-    await writeFile(join(gui.root, "work/release"), "release", { mode: 0o600 });
+    try {
+      await writeFile(join(gui.root, "work/release"), "release", { mode: 0o600 });
+    } catch (error) {
+      gui.report.passed = false;
+      const code = ["ENOENT", "EACCES", "EPERM", "EIO", "ENOSPC", "EMFILE", "ENFILE"].includes(error.code) ? error.code : "cleanup_error";
+      gui.report.error ??= `Release cleanup failed: ${code}`;
+    }
     await finishStockGui(gui);
     console.log(
       JSON.stringify({
