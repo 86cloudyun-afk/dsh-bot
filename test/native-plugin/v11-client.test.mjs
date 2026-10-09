@@ -1,0 +1,145 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFile} from 'node:fs/promises';
+import {webcrypto} from 'node:crypto';
+
+const source=await readFile(new URL('../../src/client/client.js',import.meta.url),'utf8');
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const bot={botId:'bot_own',name:'Named identity',role:'Own role',revision:1,memoryRevision:7,lifecycle:'active',contact:{provider:'official',model:'chat'},execution:{provider:'official',model:'work'},executionMode:'inherit',share:{enabled:true,receivers:['*'],scope:{sessions:['*'],tasks:['*'],memories:['*'],materials:[]}}};
+const defaultSnapshot=()=>({storeId:'profile',revision:1,pluginVersion:'1.1.0',clientProtocol:2,bots:[structuredClone(bot)],tasks:[],sessions:[],memories:[],materials:[],grants:[],groups:[],meetings:[],outbox:[],attempts:[],notices:[]});
+const catalog={providers:[{id:'official',name:'Official',models:[{id:'chat'},{id:'work'}]}],presets:[{id:'default',name:'Default'}],defaultModel:{provider:'official',model:'chat'},defaultCwd:'/workspace'};
+function data(values={}) {return {get:key=>values[key]??'',getAll:key=>Array.isArray(values[key])?values[key]:values[key]?[values[key]]:[]};}
+function browser(snapshot=defaultSnapshot(),route=()=>({})) {
+  const registrations=[],lifecycle=[],calls=[],hooks=new Map(),effects=new Map(),cache=new Map(),copied=[],downloads=[],blobs=[];
+  let module,active='root',index=0,tree;
+  const hookKey=()=>`${active}:${index++}`;
+  function render(component,props={},key='root') {const before=[active,index];active=key;index=0;const result=component(props);[active,index]=before;return result;}
+  const react={
+    createElement(type,props,...children) {return typeof type==='function'?render(type,props??{},`${active}/${type.name}:${props?.key??''}`):{type,props:props??{},children:children.flat(Infinity)};},
+    useState(initial) {const key=hookKey();if(!hooks.has(key))hooks.set(key,initial);return [hooks.get(key),next=>hooks.set(key,typeof next==='function'?next(hooks.get(key)):next)];},
+    useRef(initial) {const key=hookKey();if(!hooks.has(key))hooks.set(key,{current:initial});return hooks.get(key);},
+    useEffect(effect,deps) {const key=hookKey(),prior=effects.get(key);if(prior&&deps?.every((item,i)=>Object.is(item,prior.deps[i])))return;prior?.cleanup?.();effects.set(key,{deps:deps??[],cleanup:effect()});},
+    useSyncExternalStore(_subscribe,get) {return get();},
+  };
+  vm.runInNewContext(source,{window:{__ModuleLoader__:{load:value=>module=value}},AbortController,AbortSignal,crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,Blob,
+    localStorage:{getItem:key=>cache.get(key)??null,setItem:(key,value)=>cache.set(key,value)},
+    FormData:class{constructor(value){return value;}},
+    URL:{createObjectURL(blob){blobs.push(blob);return `blob:${blobs.length}`;},revokeObjectURL(){}},document:{createElement:()=>({click(){downloads.push({href:this.href,name:this.download});}})},navigator:{clipboard:{writeText:async text=>copied.push(text)}},
+    setInterval:()=>1,clearInterval:()=>{},setTimeout:fn=>{fn();return 1;}});
+  const ctx={locale:{register:()=>()=>{},bind:()=>key=>key},effect:fn=>lifecycle.push(fn),
+    slots:{inject:(_name,fn)=>fn(),register:(options,component)=>{registrations.push({options,component});return()=>{};}},
+    connection:{rpc:{async call(_path,method,payload){calls.push(structuredClone({method,payload}));if(method==='dsh.bot/snapshot')return {ok:true,value:structuredClone(snapshot)};if(method==='dsh.bot/catalog')return {ok:true,value:structuredClone(catalog)};const result=await route(payload.action,payload.input,payload);return {ok:true,value:structuredClone(result)};}}},
+    sessions:{refresh:async()=>{}},uiWorkspace:{openSession(){}},layout:{selectPanel(){}}};
+  module.factory(()=>react).apply(ctx);
+  const disposers=lifecycle.map(fn=>fn());
+  const walk=(node,predicate)=>{if(!node||typeof node!=='object')return null;if(predicate(node))return node;for(const child of node.children??[]){const found=walk(child,predicate);if(found)return found;}return null;};
+  const text=node=>typeof node==='string'?node:(node?.children??[]).map(text).join('');
+  const find=(predicate)=>walk(tree,predicate);
+  return {snapshot,calls,copied,downloads,blobs,registrations,
+    async ready(){await tick();this.render();await tick();this.render();},
+    render(slot='main',props={}) {const component=registrations.find(row=>row.options.name===slot)?.component;assert.ok(component);tree=render(component,props,slot);return tree;},
+    find,text,
+    async click(label){const node=find(row=>row.type==='button'&&text(row)===label);assert.ok(node,`missing button ${label}`);await node.props.onClick({currentTarget:{}});this.render();await tick();this.render();},
+    async submit(label,values){const node=find(row=>row.type==='form'&&row.children.some(child=>child?.type==='button'&&text(child)===label));assert.ok(node,`missing form ${label}`);node.props.onSubmit({preventDefault(){},currentTarget:data(values)});await tick();this.render();await tick();this.render();},
+    async change(label,value){const node=find(row=>row.props?.['aria-label']===label);assert.ok(node,`missing field ${label}`);await node.props.onChange({target:{value,files:value?[value]:[]},currentTarget:{value,files:value?[value]:[]}});this.render();await tick();this.render();},
+    dispose(){for(const fn of disposers)fn?.();for(const value of effects.values())value.cleanup?.();},
+  };
+}
+
+test('v1.1 memory drafts keep their original version across snapshots and scoped bot selection',async()=>{
+  const snapshot=defaultSnapshot();snapshot.memories=[{memoryId:'memory_first',botId:bot.botId,text:'Original',category:'legacy',version:3,pinned:false,updatedAt:'2026-10-09T01:00:00Z'}];
+  const ui=browser(snapshot,()=>undefined);await ui.ready();await ui.click('记忆');await ui.click('编辑记忆');
+  snapshot.memories[0]={...snapshot.memories[0],text:'External newer edit',version:4};snapshot.revision++;
+  await ui.click('refresh');
+  await ui.submit('保存记忆修改',{text:'Local preserved draft',category:'legacy'});
+  const request=ui.calls.find(row=>row.payload.action==='memory.write').payload;
+  assert.equal(request.input.expectedVersion,3);assert.equal(request.input.botId,bot.botId);assert.equal(request.input.category,'legacy');assert.equal(request.input.text,'Local preserved draft');
+  assert.ok(ui.find(row=>row.props?.role==='status'&&ui.text(row).includes('草稿保留')));
+  ui.dispose();
+});
+
+test('memory import retains digest, preview memory revision and explicit pin overrides until atomic confirmation',async()=>{
+  const snapshot=defaultSnapshot(),fileText=JSON.stringify({format:'dsh-bot-memory',formatVersion:1,entries:[{text:'Pinned original',category:'fact',pinned:true}]}),bytes=new TextEncoder().encode(fileText);
+  const ui=browser(snapshot,(action)=>action==='memory.import.preview'?{botId:bot.botId,memoryRevision:7,pinCount:9,pinConflict:true,entries:[{index:0,text:'Pinned original',category:'fact',decision:'append',pinned:true,sourceVerification:'external_description'}]}:action==='memory.import'?{addedIds:['new']}:undefined);
+  await ui.ready();await ui.click('记忆');await ui.change('导入 JSON 文件',{size:bytes.length,arrayBuffer:async()=>bytes.buffer});
+  let confirm=ui.find(row=>row.type==='button'&&ui.text(row)==='确认整批追加');assert.equal(confirm.props.disabled,true);
+  const unpin=ui.find(row=>row.type==='input'&&row.props.type==='checkbox'&&row.props.checked===false&&!row.props.name);assert.ok(unpin);unpin.props.onChange({target:{checked:true}});ui.render();
+  snapshot.bots[0].memoryRevision=8;snapshot.revision++;await ui.click('refresh');
+  await ui.click('确认整批追加');const request=ui.calls.find(row=>row.payload.action==='memory.import').payload;
+  assert.equal(request.input.expectedMemoryRevision,7);assert.equal(request.input.fileText,fileText);assert.equal(request.input.fileDigest,Buffer.from(await webcrypto.subtle.digest('SHA-256',bytes)).toString('hex'));assert.deepEqual(request.input.unpinnedEntryIndexes,[0]);
+  assert.equal(ui.calls.some(row=>['task.start','session.create'].includes(row.payload.action)),false);ui.dispose();
+});
+
+test('invalid UTF-8 uploads never submit or truncate material text',async()=>{
+  const ui=browser();await ui.ready();await ui.click('记忆');await ui.click('资料');
+  await ui.change('UTF-8 文本或 Markdown 文件',{name:'bad.md',size:2,arrayBuffer:async()=>Uint8Array.from([0xc3,0x28]).buffer});
+  assert.equal(ui.calls.some(row=>row.payload.action==='material.ingest'),false);
+  assert.ok(ui.find(row=>row.props.role==='alert'&&ui.text(row).includes('UTF-8')));ui.dispose();
+});
+
+test('template creation preserves top-level draft revision and never wakes a native conversation',async()=>{
+  const snapshot=defaultSnapshot(),template={templateId:'personal-assistant',templateVersion:1,name:'个人助理',suggestedName:'个人助理',role:'Assist',roles:[{roleKey:'assistant',botTemplateId:'personal-assistant'}]};
+  const ui=browser(snapshot,action=>action==='template.list'?[template]:undefined);await ui.ready();
+  snapshot.revision=2;await ui.click('refresh');
+  await ui.submit('创建模板 Bot',{'assistant.name':'Chosen identity','assistant.role':'Chosen role','assistant.model':JSON.stringify({provider:'official',model:'chat'})});
+  const request=ui.calls.find(row=>row.payload.action==='template.instantiate').payload;
+  assert.equal(request.expectedRevision,1);assert.equal(request.input.expectedRevision,undefined);assert.equal(request.input.roles[0].config.name,'Chosen identity');assert.equal(ui.calls.some(row=>row.payload.action==='session.create'),false);ui.dispose();
+});
+
+test('chat briefing reads whole Bot scope without replaying tasks, and five primary tabs remain',async()=>{
+  const snapshot=defaultSnapshot();snapshot.sessions=[{sessionId:'own_contact',botId:bot.botId,purpose:'contact',state:'ready'}];
+  const ui=browser(snapshot,action=>action==='briefing'?{tasks:[],notices:[],unreadCount:0}:undefined);await ui.ready();
+  const primary=ui.find(row=>row.type==='nav'&&row.props['aria-label']==='Bot 工作台功能');assert.deepEqual(primary.children.map(ui.text),['Bots','记忆','任务','协作','管理']);
+  ui.render('conversation.session.header.utilities',{sessionId:'own_contact'});
+  const briefing=ui.find(row=>row.type==='button'&&ui.text(row)==='任务简报');assert.ok(briefing);briefing.props.onClick({currentTarget:{}});
+  ui.render('shell.overlay'); // First overlay remains the chooser; locate the briefing seat explicitly below.
+  const component=ui.registrations.find(row=>row.options.id==='dsh-bot.briefing').component;component();await tick();
+  const request=ui.calls.find(row=>row.payload.action==='briefing').payload;
+  assert.deepEqual(request.input,{botId:bot.botId});assert.equal(ui.calls.some(row=>['task.start','session.create'].includes(row.payload.action)),false);ui.dispose();
+});
+
+test('diagnostic copy exactly matches the reviewed allowlist response',async()=>{
+  const safe={pluginVersion:'1.1.0',counts:{bots:1},operationIds:[]};
+  const ui=browser(defaultSnapshot(),action=>action==='diagnostics.read'?safe:undefined);await ui.ready();await ui.click('管理');await ui.click('结果与投递');await ui.click('预览诊断');await ui.click('复制以上诊断');
+  assert.equal(ui.copied[0],JSON.stringify(safe,null,2));assert.equal(ui.calls.some(row=>row.payload.action==='session.create'),false);ui.dispose();
+});
+
+test('owned session rename preserves its draft version without resetting model or preset',async()=>{
+  const snapshot=defaultSnapshot();snapshot.sessions=[{sessionId:'contact_owned',botId:bot.botId,purpose:'contact',state:'ready',revision:4,name:'Owned contact',model:{provider:'official',model:'chat',reasoningEffort:'high'}}];
+  const ui=browser(snapshot,action=>action==='session.list'?{items:[{sessionId:'contact_owned',botId:bot.botId,purpose:'contact',header:{title:'Owned contact'}}],nextCursor:null}:undefined);
+  await ui.ready();await ui.click('管理');await ui.click('会话管理');
+  snapshot.sessions[0].revision=5;snapshot.revision++;await ui.click('refresh');
+  await ui.submit('保存此会话配置',{name:'Draft rename'});
+  const request=ui.calls.find(row=>row.payload.action==='session.configure').payload;
+  assert.equal(request.input.expectedVersion,4);assert.equal(request.input.name,'Draft rename');assert.equal(Object.hasOwn(request.input,'model'),false);assert.equal(Object.hasOwn(request.input,'presetId'),false);assert.equal(Object.hasOwn(request.input,'cwd'),false);ui.dispose();
+});
+
+test('settled occurrence pruning keeps the versions captured at explicit confirmation',async()=>{
+  const snapshot=defaultSnapshot(),schedule={scheduleId:'schedule_one',ownerBotId:bot.botId,kind:'reminder',message:'Reminder',rule:{kind:'once',timezone:'Asia/Shanghai',date:'2026-10-10',time:'09:00'},version:1,enabled:false},occurrence={occurrenceId:'occurrence_settled',scheduleId:'schedule_one',state:'settled',version:3,dueAt:'2026-10-10T01:00:00Z'};
+  const ui=browser(snapshot,action=>action==='schedule.list'?[schedule]:action==='occurrence.list'?[occurrence]:action==='notice.list'?[]:undefined);
+  await ui.ready();await ui.click('任务');await tick();ui.render();
+  const selected=ui.find(row=>row.type==='input'&&row.props.type==='checkbox'&&!row.props.name&&row.props.checked===false);assert.ok(selected);selected.props.onChange({target:{checked:true}});ui.render();await ui.click('清理所选历史');
+  occurrence.version=4;snapshot.revision++;await ui.click('refresh');await ui.click('确认清理所选记录');
+  const request=ui.calls.find(row=>row.payload.action==='occurrence.prune').payload;
+  assert.deepEqual(request.input,{occurrenceIds:['occurrence_settled'],expectedVersions:{occurrence_settled:3},confirm:true});ui.dispose();
+});
+
+test('material citations read the exact chunk again and changed source produces no native link',async()=>{
+  const snapshot=defaultSnapshot(),hit={docId:'doc_one',chunkId:'chunk_exact',title:'Original title',contentHash:'original_hash',startLine:2,endLine:3,excerpt:'Exact immutable excerpt',source:{kind:'session',sessionId:'source_session'}};
+  const ui=browser(snapshot,action=>action==='material.search'?[hit]:action==='material.page'?{...hit,text:hit.excerpt,nextCursor:null,source:{...hit.source,status:'changed'}}:undefined);
+  await ui.ready();await ui.click('记忆');await ui.click('资料');await ui.submit('搜索资料',{query:'immutable'});await ui.click('打开此引用');
+  const request=ui.calls.find(row=>row.payload.action==='material.page').payload;assert.deepEqual(request.input,{docId:'doc_one',chunkId:'chunk_exact'});
+  assert.ok(ui.find(row=>row.type==='pre'&&ui.text(row)==='Exact immutable excerpt'));
+  assert.equal(ui.find(row=>row.type==='button'&&ui.text(row)==='打开已核对的原生来源'),null);
+  assert.ok(ui.find(row=>row.type==='p'&&ui.text(row).includes('原生来源已变化')));ui.dispose();
+});
+
+test('context preview renders frozen bounded summaries instead of newer snapshot text',async()=>{
+  const snapshot=defaultSnapshot();snapshot.memories=[{memoryId:'memory_first',botId:bot.botId,text:'Original record',category:'fact',version:1}];
+  const context='Identity\n未完成任务：[]\n长期记忆（记录带来源，引用不授予控制权）：'+JSON.stringify([{memoryId:'memory_first',text:'Frozen preview text',version:1}]);
+  const ui=browser(snapshot,action=>action==='memory.context.preview'?{context,includedMemoryIds:['memory_first'],includedTaskIds:[],omitted:[]}:undefined);
+  await ui.ready();await ui.click('记忆');await ui.submit('查看上下文预览',{});
+  snapshot.memories[0].text='Newer snapshot text';snapshot.revision++;await ui.click('refresh');
+  assert.ok(ui.find(row=>row.type==='p'&&ui.text(row)==='Frozen preview text'));assert.equal(ui.calls.some(row=>['task.start','session.create'].includes(row.payload.action)),false);ui.dispose();
+});
