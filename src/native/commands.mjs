@@ -61,7 +61,7 @@ const contracts = {
   "recovery.reconcile": [[], [], "人类查回旧运行时状态，保留 UNKNOWN，不重放或伪造结算。", "human"],
   briefing: [[],["botId","sessionId"],"读取当前可见任务状态、真实结果摘要和未读提醒，不调用模型。","read"],
   "schedule.list": [[],["botId"],"读取有权查看的提醒与定时配方。","read"],
-  "occurrence.list": [["scheduleId"],["limit","cursor"],"读取原触发身份和真实任务／尝试状态。","read"],
+  "occurrence.list": [["scheduleId"],["limit"],"读取原触发身份和真实任务／尝试状态。","read"],
   "notice.list": [[],["botId","sessionId"],"读取当前可见结果和提醒通知。","read"],
   "schedule.create": [["ownerBotId","kind","rule"],["recipe","message","missedPolicy","enabled"],"为自己创建提醒或定时任务；rule 保存时区，task 配方与当前配置绑定，默认跳过错过的周期。"],
   "schedule.update": [["scheduleId","expectedVersion"],["rule","recipe","message","missedPolicy","enabled"],"按原版本修改所属定时配方并重新登记执行许可，旧触发记录保留。"],

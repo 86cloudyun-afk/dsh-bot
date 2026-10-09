@@ -18,14 +18,14 @@ import {TemplateController} from './templates.mjs';
 import {AssistantController} from './assistant.mjs';
 
 export const name='dsh-bot';
-export const inject=['connection','webServer','profileContext','storage',storageBackendServiceKey('json'),'agents','sessions','sessionPersistence','llm','tools','subagents'];
+export const inject=['connection','webServer','profileContext','storage',storageBackendServiceKey('json'),'agents','sessions','sessionProjections','sessionPersistence','llm','tools','subagents'];
 export async function apply(ctx) {
   await ctx.effect(async()=>{
     const scope=await openProfileScope(ctx);let store;
     try{store=await PluginStore.open(ctx.storage.backend.get('json').kv,{namespace:scope.namespace});}catch(error){await scope.close();throw error;}
     let adapter,service,tasks,broker,collaboration,assistant,unprovide,unrpc,closed=false;
     const dispose=async()=>{
-      closed=true;service?.close();await assistant?.close();await unrpc?.();await unprovide?.();
+      closed=true;const serviceDrain=service?.close();await assistant?.close();await serviceDrain;await unrpc?.();await unprovide?.();
       try{await collaboration?.close();await broker?.close();await tasks?.close();await adapter?.close();}finally{try{await store.close();}finally{await scope.close();}}
     };
     try {
