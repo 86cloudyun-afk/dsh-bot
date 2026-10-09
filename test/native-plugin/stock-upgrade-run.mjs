@@ -5,11 +5,16 @@ import {openSync,closeSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve,join} from 'node:path';
 import {stockGui,textReply,controlledProvider} from './stock-gui-runtime.mjs';
+import {finishStockGui} from './stock-report.mjs';
 
 let gui;
 try {
-  const patch=resolve(process.argv[2]),previous=resolve('dist/dsh-bot-1.0.0.tgz');
-  assert.equal(createHash('sha256').update(await readFile(previous)).digest('hex'),'1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724');
+  const previousVersion=process.env.DSH_BOT_UPGRADE_FROM??'1.0.0',
+    targetVersion=JSON.parse(await readFile('package.json','utf8')).version,
+    previousHashes={'1.0.0':'1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724','1.0.1':'e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd'};
+  assert.ok(Object.hasOwn(previousHashes,previousVersion),'Upgrade source must be an immutable previous release');
+  const patch=resolve(process.argv[2]),previous=resolve(`dist/dsh-bot-${previousVersion}.tgz`);
+  assert.equal(createHash('sha256').update(await readFile(previous)).digest('hex'),previousHashes[previousVersion]);
   const existingRoot=process.argv[3];
   gui=await stockGui({artifact:existingRoot?patch:previous,existingRoot,stream:async function*(){yield* textReply('Retained native history');}});
   if (!existingRoot) {
@@ -37,12 +42,12 @@ try {
   gui.report.upgradeArtifactSha256=createHash('sha256').update(await readFile(patch)).digest('hex');
   gui.report.freshHostProcessAfterUpgrade=true;
   const snapshot=service.snapshot(actor);
-  assert.equal(snapshot.pluginVersion,'1.0.1');
+  assert.equal(snapshot.pluginVersion,targetVersion);
   assert.equal(snapshot.bots.find(row=>row.botId===bot.botId)?.name,bot.name);
   assert.equal(snapshot.memories.find(row=>row.memoryId===memory.memoryId)?.text,memory.text);
   assert.equal(snapshot.tasks.find(row=>row.taskId===task.taskId)?.state,'queued');
   assert.equal(snapshot.sessions.find(row=>row.sessionId===contact.sessionId)?.botId,bot.botId);
-  gui.check('v100ToV101StandardUpgradePreservesOriginalIdentities',true);
+  gui.check(`v${previousVersion.replaceAll('.','')}ToV${targetVersion.replaceAll('.','')}StandardUpgradePreservesOriginalIdentities`,true);
   await gui.workbench('Bots');
   await gui.page.evaluate(({storeId,request})=>{
     localStorage.setItem(`dsh-bot.pending.v1.${storeId}`,JSON.stringify([request]));
@@ -67,5 +72,5 @@ try {
   process.exitCode=1;
   if(gui){gui.report.passed=false;gui.report.error=String(error.stack).replace(/https?:\/\/\S+/g,'[URL omitted]');}
 } finally {
-  if(gui){await gui.writeReport();await gui.shutdown();console.log(JSON.stringify({passed:gui.report.passed,checks:gui.report.checks,error:gui.report.error?.split('\n')[0],evidence:gui.evidence}));}
+  if(gui){if(!await finishStockGui(gui))process.exitCode=1;console.log(JSON.stringify({passed:gui.report.passed,checks:gui.report.checks,error:gui.report.error?.split('\n')[0],evidence:gui.evidence}));}
 }

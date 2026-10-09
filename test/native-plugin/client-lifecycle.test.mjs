@@ -91,6 +91,7 @@ test("client adds a Bot workbench and existing Bot chooser through additive nati
     "sidebar.footer.action",
     "shell.overlay",
     "conversation.session.header.utilities",
+    "conversation.input.dock",
   ])
     assert.ok(
       registrations.some((row) => row.options.name === slot),

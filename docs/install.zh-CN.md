@@ -23,11 +23,11 @@ dsh web
 
 ## 2. 获取并验证插件包
 
-在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.1) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/dsh-bot-1.0.1.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
+在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.2) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/dsh-bot-1.0.2.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/dsh-bot-1.0.1.tgz
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/SHA256SUMS
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/dsh-bot-1.0.2.tgz
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/SHA256SUMS
 ```
 
 Linux：
@@ -49,7 +49,7 @@ shasum -a 256 -c SHA256SUMS
 以下命令使用官方 `web` profile。使用其他现有 Web profile 时，将 `web` 替换为你实际使用的名称。
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.0.1.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.0.2.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -63,9 +63,13 @@ dsh web
 
 创建后，在 Bot 卡片点击 **开始聊天**，直接进入该 Bot 的原生会话。也可以点击 **新建 Bot 会话 → 选择已创建的 Bot → 开始对话**。
 
-原生工作工具默认使用 DSH 当前提供的工具，原生审批沿用 DSH。无需逐个填写工具名；已有 Bot 也不再受旧工具清单限制。
+在发送首条消息前，输入框上方即显示 **正在与某 Bot 聊天**；原生会话标题栏持续显示当前 Bot 身份。工作或协作会话会注明用途，重名 Bot 通过稳定 ID 区分。点击身份标识可返回工作台。
+
+当前会话实际挂载的原生工作工具默认可用，原生权限与审批沿用 DSH。无需逐个填写工具名；已有 Bot 也不再受旧工具清单限制。Bash 是否可用取决于该会话的 preset 是否挂载它。`dsh_bot` 的 `help.commands` 列出业务管理动作；`tools.list` 或 `help.toolCatalog` 才列出当前调用会话的原生工具及限制，详见 [使用手册](guide.zh-CN.md#原生工具与配置边界)。
 
 需要定制时展开 **更多设置**：工作目录、执行模型、思考程度、回复长度与原生会话配置都在这里。工作目录默认沿用 DSH。执行模型选择“与聊天模型相同”时自动跟随聊天模型；明确选择某个模型时保持该选择，即使两者暂时相同。新建 Bot 默认沿用当前 DSH 的模型与思考设置；两种会话的回复长度仍可分别设置。远程 DSH 的自定义工作目录应填写远程机器上存在的绝对目录。
+
+Bot 配置由人类在工作台修改，`bot.update` 不向 Bot 开放。修改工作目录或 preset 后，为新配置新建会话或任务尝试；已运行的原生会话不会热切换 preset 或工作目录。
 
 工作台常用导航只有 **Bots、任务、记忆、协作、管理**。内部群与会议在“协作”；共享与授权、会话管理、结果与投递在“管理”。
 
@@ -77,6 +81,8 @@ dsh web
 4. 点击 **查看执行** 打开实际原生执行日志；需要时调整目标、接续或停止本次尝试。结果返回后用 **记录验收** 保存通过、待定或不通过及证据。
 5. 归档已结算任务或会话，再从工作台恢复，确认身份和历史保留。
 
+需要移除 Bot 时，在卡片点击 **删除 → 确认删除**。这是保留原身份的可恢复删除：原会话、记忆、任务、执行记录和操作 ID 仍保存。活动或 `UNKNOWN` 工作、未完成群／会议流程、正在回复或 inbox 中待处理的输入、outbox 中待投递或入队状态不明的结果会阻止删除；先处理或停止确切工作并等待结算，未知状态先查回。在 **Bots → 已删除的 Bot → 恢复** 后，Bot 回到暂停状态；再通过 **状态管理 → 启用** 恢复使用。
+
 内部群、会议、持续授权和普通会话管理见 [使用手册](guide.zh-CN.md)。
 
 ## 6. 升级、禁用与卸载
@@ -87,12 +93,12 @@ dsh web
 
 ```bash
 dsh plugin --profile web remove dsh-bot --config.ignore-scripts=true
-dsh plugin --profile web add ./dsh-bot-1.0.1.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.0.2.tgz --ignore-scripts --strict-peer-dependencies
 ```
 
 重新启动或启用插件后，Bot ID、记忆、会话和任务读取原持久数据。卸载只移除插件依赖与入口；手动删除 DSH 存储不属于卸载步骤。
 
-从 v1.0.0 或早期同名候选包升级到 v1.0.1 时，请完全退出原 DSH 进程后执行上述命令，再启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.0.1 / 服务 1.0.1**。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
+从 v1.0.0、v1.0.1 或早期同名候选包升级到 v1.0.2 时，请完全退出原 DSH 进程后执行上述命令，再启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.0.2 / 服务 1.0.2**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
 
 浏览器中已有的原始操作 ID 继续保留。在“待查回的原始操作”先点 **查回原始操作**：它只读持久回执，不执行任务，也不调用模型。找到回执后刷新原对象；没有回执时保留“未确认”。**用原 ID 接续**是单独的显式提交，并先检查原回执；已提交操作不会重复创建。不要修改原 ID 的内容或将旧操作改用于新动作。
 
@@ -111,6 +117,9 @@ dsh plugin --profile web add ./dsh-bot-1.0.1.tgz --ignore-scripts --strict-peer-
 | 模型目录变化 | 原模型会显示“当前不可用”；显式选择替代模型后保存，插件不会在改名时自动换模型。 |
 | 任务、共享、群或会议草稿冲突 | 原草稿保留在开始编辑时的版本／会议世代。先阅读最新内容，再点对应“重新载入最新…”重新编辑；旧共享草稿不能恢复已撤销的共享。 |
 | `access_denied` | 在“共享与授权”核对接收 Bot、共享上限、具体会话／任务范围和有效权限。 |
+| Bot 找不到 Bash／把业务动作当作全部工具 | 让 Bot 调用 `tools.list` 或读取 `help.toolCatalog`，核对当前会话实际挂载的工具及限制；需要其他 preset 时由人类修改配置并新建会话。 |
+| 删除 Bot 被阻止 | 先处理活动任务、原生回复和待处理输入，查回 `UNKNOWN` 工作及待投递结果；停止被接受后仍须等待真实结算。 |
+| 恢复 Bot 后“开始聊天”不可用 | 恢复保留原 ID 并回到暂停状态；在“状态管理”中单独点击“启用”。 |
 | 停止已接受，但还未结算 | 等待模型、工具、作业、终端或子工作的真实终止证据；占用会在结算后释放。 |
 | 状态为 `UNKNOWN`／“未知” | 使用“结果与投递”及待查回的原始操作查询实际日志。不要重新登记替代任务来掩盖未知状态。 |
 | 同一 profile 写入者冲突 | 关闭该 profile 的重复宿主进程，再正常启动；多个浏览器页面可以连接同一个宿主。 |

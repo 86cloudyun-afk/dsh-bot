@@ -3,9 +3,10 @@ import {copy, plain, requireCondition} from "./store.mjs";
 
 // Public command documentation. Authorization stays in the business methods.
 const contracts = {
-  help: [[], ["action"], "读取本工具的动作、输入字段及真实调用者身份。", "read"],
+  help: [[], ["action"], "读取 dsh_bot 的业务动作、输入字段及真实调用者身份；toolCatalog 另列当前调用会话的原生工具。", "read"],
   snapshot: [[], [], "查询当前有权读取的 Bot、记忆、任务、尝试、群、会议与投递状态。", "read"],
-  catalog: [[], [], "查询官方 DSH 已配置的模型与 preset。", "read"],
+  catalog: [[], [], "查询官方 DSH 已配置的模型、preset 与当前调用会话的原生工具；人类查询返回全运行时工具清单。", "read"],
+  "tools.list": [[], [], "只读列出当前调用会话实际挂载的原生工具 schema、执行路径与限制；不授予工具或更改权限。", "read"],
   "operation.lookup": [["operationId"], ["request"], "人类只读查询原始操作回执；request 可验证完整原始请求。unrecorded 不代表原生工作已经停止或没有副作用。", "human-read"],
   "session.list": [[], ["cursor", "limit"], "分页查询可读会话；使用返回的 nextCursor。", "read"],
   "session.page": [["sessionId"], ["cursor", "limit"], "分页读取实际原生日志；使用返回的 nextCursor。", "read"],
@@ -31,6 +32,8 @@ const contracts = {
   "outbox.reconcile": [["outboxId"], [], "查回原始结果投递；UNKNOWN 不重放。明确从未入队且被阻止的投递只在当前授权有效后重试。"],
   "bot.create": [["name", "contact"], ["role", "cwd", "execution", "executionMode", "presetId", "lifecycle"], "人类创建具名 Bot；contact/execution 使用 {provider,model,...}。executionMode 为 inherit 或 explicit。", "human"],
   "bot.update": [["botId", "expectedVersion"], ["name", "role", "cwd", "contact", "execution", "executionMode", "presetId", "lifecycle"], "人类修改 Bot；expectedVersion 使用 Bot revision。executionMode 明确保存自动跟随或指定执行模型。", "human"],
+  "bot.delete": [["botId", "expectedVersion"], [], "人类删除已结算 Bot；expectedVersion 使用 Bot revision。保留同一 Bot ID、原生日志、记忆和任务；活动任务、UNKNOWN、未完成群/会议、待投递或原生回复/队列会阻止删除。", "human"],
+  "bot.restore": [["botId", "expectedVersion"], [], "人类恢复已删除 Bot 的同一身份；expectedVersion 使用 Bot revision。恢复后为 paused，需另用 bot.update 明确启用。", "human"],
   "share.set": [["botId", "share"], ["expectedVersion"], "人类设置共享上限；expectedVersion 使用 Bot revision 保护编辑草稿。", "human"],
   "grant.set": [["grantId", "recipientBotId", "ownerBotId", "scope", "level", "active"], ["expectedVersion"], "人类设置或撤销持续授权；level 为 read 或 control，active 为布尔值。更新时 expectedVersion 使用授权 version。", "human"],
   "group.create": [["name", "botIds", "coordinatorBotId"], ["rounds", "maxRequests"], "人类创建内部群；协调者必须在成员中。", "human"],
@@ -42,7 +45,7 @@ const contracts = {
   "recovery.reconcile": [[], [], "人类查回旧运行时状态，保留 UNKNOWN，不重放或伪造结算。", "human"],
 };
 export const commandNames = Object.keys(contracts);
-export const botToolDescription = "管理 Bot 自己的任务、会话、长期记忆、既有内部群和会议；跨 Bot 默认只读。先用 action=help 查询具体字段，或 snapshot 查询真实 ID/version。后台工作必须先 task.create（input={botId,title,goal,criteria:字符串数组}），再 task.start（input={taskId,expectedVersion:创建回执的version}）；两个写动作分别传新的唯一 operationId。task.start 立即返回，不等待任务结束，随后继续联络聊天。不要在联络会话执行用户要求放到后台的工作。写动作必须保留完整原始请求，UNKNOWN 不自动重放，交工作台查回；人类配置和会议阶段动作不能代替人类执行。";
+export const botToolDescription = "管理 Bot 自己的任务、会话、长期记忆、既有内部群和会议；跨 Bot 默认只读。先用 action=help 查询业务字段，或 snapshot 查询真实 ID/version。help.commands 只列 dsh_bot 业务动作，不是全部原生工具；bash 等是独立工具，使用 action=tools.list 或 help.toolCatalog 查看当前会话实际挂载的原生工具及限制，无需另找授予 Bash 的业务动作。后台工作必须先 task.create（input={botId,title,goal,criteria:字符串数组}），再 task.start（input={taskId,expectedVersion:创建回执的version}）；两个写动作分别传新的唯一 operationId。task.start 立即返回，不等待任务结束，随后继续联络聊天。不要在联络会话执行用户要求放到后台的工作。写动作必须保留完整原始请求，UNKNOWN 不自动重放，交工作台查回；人类配置和会议阶段动作不能代替人类执行。";
 
 export function commandHelp(actor, input = {}) {
   requireCondition(plain(input) && Object.keys(input).every(key => key === "action"), "invalid_input");
@@ -61,7 +64,8 @@ export function commandHelp(actor, input = {}) {
     action: "task.start", operationId: randomUUID(), input: {taskId: "<创建回执的 taskId>", expectedVersion: 1},
   };
   return copy({identity, protocol: {
-    read: "help/snapshot/catalog/session.list/session.page/memory.search 无需 operationId。input 只能使用所选动作列出的字段。",
+    read: "help/tools.list/snapshot/catalog/session.list/session.page/memory.search 无需 operationId。input 只能使用所选动作列出的字段。",
+    tools: "help.commands 只列 dsh_bot 业务动作，不是原生工具列表。bash 等是独立原生工具；没有 dsh_bot bash 动作不代表没有 Bash。用 tools.list 或 help.toolCatalog 查看当前调用会话实际挂载的工具及限制；原生工具无需业务授权清单，实际执行仍遵守 DSH 原生权限与审批。",
     write: "每个新动作使用新的唯一 operationId；示例 ID 可用于一个新动作。保存完整请求，原 ID 不可改内容、用途或调用者。expectedVersion 使用刚查询或创建回执中的最新 version，Bot 配置用 revision。",
     background: "task.create 返回后立即 task.start；不等待后台工作结束，继续联络对话。执行使用独立会话。",
     recovery: "UNKNOWN 保留原始请求，通过工作台查回；不换 ID 重发，不伪造完成。授权持续有效且可撤销。",

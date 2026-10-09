@@ -25,6 +25,7 @@ export class SessionOwnership {
     const intent = await this.store.transact(stamped, (draft) => {
       const bot = draft.bots[input.botId];
       requireCondition(bot, "not_found");
+      requireCondition(!bot.deletedAt, "bot_deleted");
       requireCondition(bot.lifecycle === "active", "bot_not_active");
       const sessionId = randomUUID(),
         purpose = input.purpose ?? "contact";

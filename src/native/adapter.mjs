@@ -17,6 +17,17 @@ import { realpath, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { copy, plain, requireCondition } from "./store.mjs";
 
+const blockedNativeTools = new Set([
+  "subagent", "plugin_manager", "cordis_inspect", "session_manager",
+]);
+const managedDelegationTools = new Set([
+  "subagent", "subagent_fork", "subagent_codex", "subagent_claude_code",
+  "workflow", "ralph", "spawn_teammate",
+]);
+const nativeChildControlTools = new Set([
+  "send_message", "interrupt_agent", "list_agents", "wait_agent",
+]);
+
 /** Thin public-service adapter. No host copies, private drivers or global defaults. */
 export class NativeDshAdapter {
   runtimeId = randomUUID();
@@ -34,6 +45,7 @@ export class NativeDshAdapter {
   #shortPools = new Map();
   #children;
   #activity = new Map();
+  #botAdmissionFences = new Set();
   constructor(ctx, { store, policy } = {}) {
     this.#ctx = ctx;
     this.#store = store;
@@ -265,6 +277,16 @@ export class NativeDshAdapter {
   setService(service) {
     this.#service = service;
   }
+  fenceBotAdmissions(botId) {
+    requireCondition(!this.#botAdmissionFences.has(botId), "bot_deletion_pending");
+    this.#botAdmissionFences.add(botId);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      this.#botAdmissionFences.delete(botId);
+    };
+  }
   #authorize(
     record,
     { ignoreModelIntent = false, state = this.#store.read() } = {},
@@ -275,6 +297,7 @@ export class NativeDshAdapter {
     );
     const binding = state.sessions[record.agent.id],
       bot = state.bots[binding?.botId];
+    requireCondition(!this.#botAdmissionFences.has(binding?.botId), "bot_deletion_pending");
     requireCondition(
       this.#ctx.agents.get(record.agent.id) === record.agent &&
         binding?.epoch === record.binding.epoch &&
@@ -509,6 +532,7 @@ export class NativeDshAdapter {
             requireCondition(
               [
                 "help",
+                "tools.list",
                 "snapshot",
                 "session.page",
                 "session.list",
@@ -521,12 +545,7 @@ export class NativeDshAdapter {
           if (exec.name !== "dsh_bot")
             requireCondition(
               binding.purpose !== "independent" &&
-                ![
-                  "subagent",
-                  "plugin_manager",
-                  "cordis_inspect",
-                  "session_manager",
-                ].includes(exec.name),
+                !blockedNativeTools.has(exec.name),
               "capability_denied",
             );
         } catch (error) {
@@ -606,28 +625,50 @@ export class NativeDshAdapter {
       );
     }
   }
-  async models() {
-    const providers = this.#ctx.llm.listProviders();
-    const nativeTools = [
-      ...new Set(
-        [undefined, ...this.#ctx.agents.list()].flatMap((scope) =>
-          this.#ctx.tools.schemas(scope).map((tool) => tool.name),
-        ),
-      ),
-    ]
-      .filter(
-        (name) =>
-          ![
-            "dsh_bot",
-            "subagent",
-            "plugin_manager",
-            "cordis_inspect",
-            "session_manager",
-          ].includes(name),
-      )
-      .sort();
+  nativeToolCatalog(agent) {
+    const binding = agent ? this.#store.read().sessions[agent.id] : null;
+    if (agent)
+      requireCondition(this.#ctx.agents.get(agent.id) === agent && binding?.botId, "access_denied");
+    const scopes = agent ? [agent] : [undefined, ...this.#ctx.agents.list()],
+      schemas = new Map(scopes.flatMap(scope =>
+        this.#ctx.tools.schemas(scope).map(tool => [tool.name, tool]),
+      )),
+      mountedTools = [...schemas.values()]
+        .filter(tool => tool.name !== "dsh_bot")
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(tool => {
+          const category = nativeChildControlTools.has(tool.name) ? "child_control"
+            : managedDelegationTools.has(tool.name) ? "delegation" : "native";
+          if (!agent) return {...tool, category, availability: "inventory"};
+          if (binding.purpose === "independent" || blockedNativeTools.has(tool.name))
+            return {...tool, category, availability: "plugin_blocked",
+              reason: "capability_denied",
+              ...(binding.purpose !== "independent" && category === "delegation" ? {route: "task.create/task.start"} : {})};
+          if (category === "delegation")
+            return {...tool, category, availability: "managed_work_required",
+              reason: "work_admission_required", route: "task.create/task.start"};
+          return {...tool, category, availability: "native_guarded"};
+        });
     return {
-      nativeTools,
+      toolScope: agent ? {kind: "session", sessionId: agent.id} : {kind: "inventory"},
+      ...(agent ? {runCodeMounted: schemas.has("run_code")} : {}),
+      nativeTools: mountedTools.filter(tool => agent
+        ? tool.availability === "native_guarded" : !blockedNativeTools.has(tool.name)).map(tool => tool.name),
+      mountedTools,
+      toolProtocol: {
+        native: "native_guarded 表示本会话已挂载，实际调用仍受 DSH 原生权限、审批、沙箱和当前会话状态约束，并非执行保证。原生工具不需要通过 dsh_bot 单独授予；以本会话实际工具 schema 为准。",
+        presentation: "沿用模型当前的原生工具说明；native 模式可直接调用，ptc 模式仅通过 run_code 调用，both 模式支持两种路径。runCodeMounted 只说明本会话挂载了该原生传输工具，不代表可直接调用其他工具。",
+        delegation: "联络和执行会话创建工作 Agent 必须通过 task.create/task.start 纳入每 Bot 15 槽及一级子工作管理；其他委派工具的创建路径仍可能被 work_admission_required 拒绝。独立意见会话保持封闭，不开放此任务派发路径。",
+        classification: "category 只按 DSH 常用工具名称提示委派和子 Agent 控制；自定义工具名无法仅凭公开 schema 确定提供方，因此保留为 native。所有工作 Agent 创建仍需受管准入，不能把别名或工具清单当作创建许可。",
+        childControl: "child_control 使用 DSH 原生调用者、父子关系和可继续会话授权；任务尝试的停止与接续仍使用 task.stop/task.start。",
+        inventory: "inventory 是人类查看的全运行时工具清单，包含不同 preset 的已挂载工具，不表示某个 Bot 都能调用。",
+      },
+    };
+  }
+  async models(agent) {
+    const providers = this.#ctx.llm.listProviders();
+    return {
+      ...this.nativeToolCatalog(agent),
       providers: await Promise.all(
         providers.map(async (provider) => ({
           ...copy(provider),
