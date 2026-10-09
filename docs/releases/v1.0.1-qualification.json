@@ -3,16 +3,16 @@
   "qualificationDate": "2026-10-09",
   "artifact": {
     "name": "dsh-bot-1.0.1.tgz",
-    "bytes": 70232,
-    "sha256": "2e67eeb77bb5913c2192101c6e9a37d7e6fff301fdc6b22262c6544af0d94518",
+    "bytes": 70251,
+    "sha256": "e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd",
     "sourceFiles": 25,
     "sourceFilesMatch": true,
     "licensePresent": true
   },
   "local": {
     "unitTests": {
-      "tests": 177,
-      "passed": 177,
+      "tests": 178,
+      "passed": 178,
       "failed": 0
     },
     "syntaxAndEntryClosure": true,
@@ -22,7 +22,7 @@
       "arch": "x64",
       "node": "v24.19.0",
       "officialVersion": "0.2.0-rc.2",
-      "artifactSha256": "2e67eeb77bb5913c2192101c6e9a37d7e6fff301fdc6b22262c6544af0d94518",
+      "artifactSha256": "e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd",
       "standardProfile": true,
       "standardPluginInstall": true,
       "controlledProvider": true,
@@ -93,7 +93,7 @@
         "refreshAddsOrdinaryResultRecipientsWithoutClearingTaskDraft": true,
         "slowRecipientResponsesSurviveAutomaticRefresh": true
       },
-      "sourceCommit": "78a09c2ebfeb41884bc8117aac165bf1b2d3710d",
+      "sourceCommit": "f2cb9ea8dd4b92d7657743f9a31920829a0ebd9c",
       "sourceTreeDirty": true,
       "browserErrors": [],
       "stage": "complete",
@@ -107,7 +107,7 @@
       "arch": "x64",
       "node": "v24.19.0",
       "officialVersion": "0.2.0-rc.2",
-      "artifactSha256": "2e67eeb77bb5913c2192101c6e9a37d7e6fff301fdc6b22262c6544af0d94518",
+      "artifactSha256": "e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd",
       "standardProfile": true,
       "standardPluginInstall": true,
       "controlledProvider": true,
@@ -118,12 +118,12 @@
         "upgradedStockGuiCreatesNextBot": true,
         "upgradeAndReceiptLookupIssueNoModelRequests": true
       },
-      "sourceCommit": "78a09c2ebfeb41884bc8117aac165bf1b2d3710d",
+      "sourceCommit": "f2cb9ea8dd4b92d7657743f9a31920829a0ebd9c",
       "sourceTreeDirty": true,
       "browserErrors": [],
       "optionalOfficialPtyServices": true,
       "previousArtifactSha256": "1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724",
-      "upgradeArtifactSha256": "2e67eeb77bb5913c2192101c6e9a37d7e6fff301fdc6b22262c6544af0d94518",
+      "upgradeArtifactSha256": "e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd",
       "freshHostProcessAfterUpgrade": true,
       "passed": true,
       "checkCount": 4,
@@ -164,5 +164,14 @@
     "unrecordedReceiptMeansUnconfirmed": true,
     "legacyDirectAuthorizationCasOptional": true,
     "historicalExternalModelEvidence": "v1.0.0-simplified-qualification.json"
+  },
+  "postReviewCiRegression": {
+    "initialPushRun": "https://github.com/86cloudyun-afk/dsh-bot/actions/runs/37908566400",
+    "initialSourceCommit": "f2cb9ea8dd4b92d7657743f9a31920829a0ebd9c",
+    "initialArtifactSha256": "2e67eeb77bb5913c2192101c6e9a37d7e6fff301fdc6b22262c6544af0d94518",
+    "failedAssertion": "macOS sharing draft recipient preservation",
+    "batchedCallbacksReproducedRed": true,
+    "functionalUpdaterRegressionGreen": true,
+    "refrozenPackageFreshlyRequalified": true
   }
 }

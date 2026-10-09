@@ -869,7 +869,7 @@ window.__ModuleLoader__.load({
             },check("enabled","允许其他 Bot 只读了解",bot.share.enabled),
             ...view.snapshot.bots.filter(row=>row.botId!==bot.botId).map(row=>h("label",{className:"check",key:row.botId},
               h("input",{type:"checkbox",name:"receiver",value:row.botId,checked:selected.includes(row.botId),onChange:event=>{
-                const checked=event.target.checked;setReceivers(checked?[...new Set([...selected,row.botId])]:selected.filter(id=>id!==row.botId));
+                const checked=event.target.checked;setReceivers(draft=>{const ids=draft??selected;return checked?[...new Set([...ids,row.botId])]:ids.filter(id=>id!==row.botId);});
               }}),botLabel(row))),
             check("sessions","共享会话",bot.share.scope.sessions?.includes("*")),
             check("tasks","共享任务",bot.share.scope.tasks?.includes("*")),
