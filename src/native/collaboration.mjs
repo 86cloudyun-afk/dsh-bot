@@ -1090,12 +1090,14 @@ export class GroupMeetingController {
   }
   async close() {
     this.#closed = true;
-    for (const binding of Object.values(this.store.read().sessions))
+    const pending = [];
+    // Cleanup needs the last published ownership ledger even when writes are fenced.
+    for (const binding of Object.values(this.store.read({diagnostic:true}).sessions))
       if (
         ["group", "independent", "meeting"].includes(binding.purpose) &&
         this.adapter.context.agents.get(binding.sessionId)
       )
-        void this.adapter.stopResources(binding.sessionId).catch(() => {});
-    await Promise.allSettled([...this.#runs.values()]);
+        pending.push(this.adapter.stopResources(binding.sessionId));
+    await Promise.allSettled([...pending, ...this.#runs.values()]);
   }
 }

@@ -375,6 +375,19 @@ export class SessionOwnership {
       value ? "session.archive" : "session.restore",
       reference,
     );
+    const stamped = this.policy.command(actor, command);
+    if (Object.hasOwn(this.store.read().operations, command.operationId)) {
+      const intent = await this.store.transact(stamped, () => null);
+      this.policy.require(
+        actor,
+        value ? "session.archive" : "session.restore",
+        reference,
+      );
+      const receipt =
+        this.store.read().operations[intent.statusOperationId]?.result;
+      requireCondition(receipt, "session_outcome_unknown");
+      return receipt;
+    }
     const previous = this.store.read().sessions[input.sessionId],
       resources = this.adapter.resources(input.sessionId);
     requireCondition(previous?.state !== "UNKNOWN", "recovery_required");
@@ -392,8 +405,9 @@ export class SessionOwnership {
       );
     if (value && resources.known)
       requireCondition(resources.settled, "session_active");
+    let createdIntent = false;
     const intent = await this.store.transact(
-      this.policy.command(actor, command),
+      stamped,
       (draft) => {
         this.policy.require(
           actor,
@@ -409,10 +423,17 @@ export class SessionOwnership {
           state: "ready",
           archived: false,
         };
+        requireCondition(row.state !== "UNKNOWN", "recovery_required");
         requireCondition(
-          !["archiving", "restoring"].includes(row.state),
+          !["configuring", "archiving", "restoring"].includes(row.state),
           "operation_pending",
         );
+        if (value) {
+          const currentResources = this.adapter.resources(input.sessionId);
+          if (currentResources.known)
+            requireCondition(currentResources.settled, "session_active");
+        }
+        createdIntent = true;
         row.archiveOperationId = command.operationId;
         row.archiveStatusId = randomUUID();
         row.previousState =
@@ -426,13 +447,15 @@ export class SessionOwnership {
         };
       },
     );
-    if (Object.hasOwn(this.store.read().operations, intent.statusOperationId))
-      return this.store.read().operations[intent.statusOperationId].result;
     this.policy.require(
       actor,
       value ? "session.archive" : "session.restore",
       reference,
     );
+    if (Object.hasOwn(this.store.read().operations, intent.statusOperationId))
+      return this.store.read().operations[intent.statusOperationId].result;
+    // A concurrent invocation may have recorded this intent during the native read.
+    requireCondition(createdIntent, "session_outcome_unknown");
     const workspaces = this.adapter.context.get("workspaceRegistry");
     requireCondition(workspaces, "workspace_unavailable");
     try {

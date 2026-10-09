@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import manifest from '../../package.json' with {type:'json'};
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -501,7 +502,7 @@ async function briefingAndDiagnostics(gui,task) {
   await diagnostic.locator('pre').waitFor();
   const rendered=await diagnostic.locator('pre').innerText(),value=JSON.parse(rendered);
   assert.deepEqual(value,reply.value);
-  assert.equal(value.versions.plugin,'1.1.0');
+  assert.equal(value.versions.plugin,manifest.version);
   assert.equal(value.versions.protocol,2);
   assert.equal(value.counts.materials,Object.keys(gui.app.ctx.dshBot.store.read().materials).length);
   assert.equal(value.counts.schedules,Object.keys(gui.app.ctx.dshBot.store.read().schedules).length);
@@ -515,7 +516,7 @@ async function briefingAndDiagnostics(gui,task) {
 /** Added to the existing stock suite; all writes originate from real UI controls. */
 export async function runV11UiChecks(gui) {
   const state=await gui.snapshot();
-  assert.equal(state.pluginVersion,'1.1.0');
+  assert.equal(state.pluginVersion,manifest.version);
   assert.equal(state.clientProtocol,2);
   assert.equal(gui.app.ctx.dshBot.store.read().schema,2);
   const originalChecks=Object.keys(gui.report.checks).length;

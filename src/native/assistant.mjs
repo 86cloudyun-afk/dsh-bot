@@ -1,10 +1,12 @@
 import {randomUUID} from 'node:crypto';
 import {canonical,copy,digest,plain,requireCondition,validId} from './store.mjs';
 import {normalizeScheduleRule,nextTrigger,latestTrigger} from './schedule-clock.mjs';
+import manifest from '../../package.json' with {type:'json'};
 
 const UNSETTLED=new Set(['planned','claimed','running','blocked','UNKNOWN']);
 const SAFE_BLOCK=new Set(['capacity_exceeded','capacity_exhausted','bot_capacity','work_capacity_exceeded','dependency_not_accepted','dependency_not_ready','dependency_blocked','prerequisite_not_accepted','task_dependencies_not_satisfied','attempt_unsettled']);
 const PAUSE_CODES=new Set(['schedule_config_changed','schedule_receiver_changed','model_unavailable','bot_not_active','access_denied','schedule_consent_invalid']);
+const DIAGNOSTIC_CODES=new Set([...SAFE_BLOCK,...PAUSE_CODES,'recovery_required','disposed','delivery_identity_unknown','native_admission_unknown','occurrence_capacity_exceeded']);
 const nowISO=at=>new Date(at).toISOString();
 const excerpt=value=>[...value].slice(0,800).join('');
 function textContent(value) {
@@ -22,7 +24,7 @@ function recipeOf(input,ownerBotId) {
 }
 /** Persistent notices and bounded triggers; native admission remains owned by Tasks. */
 export class AssistantController {
-  #timer;#generation=0;#started=false;#closed=false;#busy=false;#tail=Promise.resolve();#unsubscribe;
+  #timer;#generation=0;#started=false;#closed=false;#busy=false;#halted=false;#backgroundFailure;#tail=Promise.resolve();#unsubscribe;
   constructor({store,policy,adapter,tasks,clock={}}) {
     Object.assign(this,{store,policy,adapter,tasks});
     this.clock={now:clock.now??(()=>Date.now()),setTimeout:clock.setTimeout??globalThis.setTimeout,clearTimeout:clock.clearTimeout??globalThis.clearTimeout};
@@ -75,7 +77,12 @@ export class AssistantController {
       delete schedule.pauseReason;delete schedule.missedRange;
       if(config.recipe){schedule.recipeHash=digest(config.recipe);schedule.dependencyOrigins=config.recipe.dependsOn.map(id=>({kind:'task',id}));}else{delete schedule.recipe;delete schedule.recipeHash;delete schedule.dependencyOrigins;}
       if(trigger?.skipReason)schedule.lastSkippedLocalTimes={reason:trigger.skipReason,count:trigger.skippedLocalTimes};
-      schedule.executionConsent=this.#consent(actor,stamped,schedule,draft);draft.schedules[current.scheduleId]=schedule;return schedule;
+      schedule.executionConsent=this.#consent(actor,stamped,schedule,draft);draft.schedules[current.scheduleId]=schedule;
+      if(schedule.enabled)for(const occurrence of Object.values(draft.occurrences))if(occurrence.scheduleId===schedule.scheduleId&&occurrence.consentVersion!==schedule.consentVersion&&this.#provedUnadmitted(occurrence,draft)) {
+        // Superseded IDs retain their original consent, task and operation receipts.
+        occurrence.state='missed';occurrence.errorCode='schedule_superseded';occurrence.version++;this.#missedNotice(draft,schedule,occurrence,at);
+      }
+      return schedule;
     });
   }
   async setScheduleState(actor,command) {
@@ -173,10 +180,12 @@ export class AssistantController {
     });
   }
   diagnostics(actor,input={}) {
-    this.#authenticate(actor);const state=this.store.read({diagnostic:true}),versions={plugin:'1.1.0',service:'1.1.0',protocol:2,dsh:'0.2.0-rc.2',node:process.version,platform:process.platform,arch:process.arch};
+    const state=this.store.read({diagnostic:true});this.policy.actorKey(actor,state);requireCondition(['human','bot'].includes(actor.kind),'access_denied');
+    const versions={plugin:manifest.version,service:manifest.version,protocol:2,dsh:'0.2.0-rc.2',node:process.version,platform:process.platform,arch:process.arch};
     const counts={};for(const key of ['bots','sessions','tasks','attempts','schedules','occurrences','notices','materials'])counts[key]=Object.values(state[key]).filter(row=>actor.kind==='human'||(row.botId??row.ownerBotId)===actor.botId).length;
     const result={versions,profileId:digest(state.storeId).slice(0,24),features:{schedules:true,reminders:true,notices:true},counts,operationIds:(Array.isArray(input.operationIds)?input.operationIds:[]).filter(id=>validId(id)&&Object.hasOwn(state.operations,id)).slice(0,100)};
-    if(input.error)result.errorCode=[...SAFE_BLOCK,...PAUSE_CODES,'recovery_required','disposed','delivery_identity_unknown','native_admission_unknown','occurrence_capacity_exceeded'].includes(input.error.code)?input.error.code:'unknown_error';
+    if(this.#backgroundFailure)result.backgroundFailure=copy(this.#backgroundFailure);
+    if(input.error)result.errorCode=DIAGNOSTIC_CODES.has(input.error.code)?input.error.code:'unknown_error';
     if(typeof input.phase==='string'&&['idle','admission','execution','delivery','recovery','storage'].includes(input.phase))result.phase=input.phase;
     return result;
   }
@@ -184,21 +193,27 @@ export class AssistantController {
     if(this.#closed||this.#started)return;this.#started=true;this.#unsubscribe=this.store.subscribe(()=>{if(!this.#busy)this.#arm();});await this.runDue({recovery:true});this.#arm();
   }
   #clear(){if(this.#timer!==undefined){this.clock.clearTimeout(this.#timer);this.#timer=undefined;}this.#generation++;}
+  #halt(error) {
+    this.#halted=true;this.#clear();if(this.#backgroundFailure)return;
+    let fenced=false;try{this.store.read();}catch(failure){fenced=failure.code==='recovery_required';}
+    this.#backgroundFailure={errorCode:fenced?'recovery_required':DIAGNOSTIC_CODES.has(error?.code)?error.code:'unknown_error',phase:fenced?'storage':'admission'};
+  }
   #arm() {
-    this.#clear();if(!this.#started||this.#closed)return;const state=this.store.read(),now=this.#now();let due=Infinity;
+    this.#clear();if(!this.#started||this.#closed||this.#halted)return;let state;try{state=this.store.read();}catch(error){this.#halt(error);return;}const now=this.#now();let due=Infinity;
     for(const s of Object.values(state.schedules))if(s.enabled&&!s.archived&&s.pauseReason!=='occurrence_capacity_exceeded'){
       const pending=Object.values(state.occurrences).filter(o=>o.scheduleId===s.scheduleId&&UNSETTLED.has(o.state));
       if(pending.some(o=>['running','UNKNOWN'].includes(o.state)&&state.attempts[o.attemptId]?.reservationHeld&&o.state!==(state.attempts[o.attemptId].state==='UNKNOWN'?'UNKNOWN':'running'))){due=Math.min(due,now);continue;}
       if(pending.some(o=>['claimed','running','UNKNOWN'].includes(o.state)&&this.#attemptSettled(state.attempts[o.attemptId]))){due=Math.min(due,now);continue;}
       if(pending.some(o=>['claimed','running','UNKNOWN'].includes(o.state)))continue;
+      if(pending.some(o=>o.consentVersion!==s.consentVersion))continue;
       for(const o of pending)due=Math.min(due,Math.max(now+1000,Math.min(this.#deadline(o)+1,now+5000)));
       if(!pending.length&&s.nextDueAt)due=Math.min(due,Date.parse(s.nextDueAt));
     }
     if(!Number.isFinite(due))return;const generation=this.#generation;
-    this.#timer=this.clock.setTimeout(async()=>{if(this.#closed||generation!==this.#generation)return;this.#timer=undefined;await this.runDue();},Math.max(0,Math.min(due-now,2147483647)));this.#timer?.unref?.();
+    this.#timer=this.clock.setTimeout(async()=>{if(this.#closed||generation!==this.#generation)return;this.#timer=undefined;try{await this.runDue();}catch(error){this.#halt(error);}},Math.max(0,Math.min(due-now,2147483647)));this.#timer?.unref?.();
   }
   runDue(options={}) {
-    if(this.#closed)return Promise.resolve();const run=async()=>{if(this.#closed)return;this.#busy=true;try{await this.#run(options);}finally{this.#busy=false;this.#arm();}};
+    if(this.#closed)return Promise.resolve();const run=async()=>{if(this.#closed)return;this.#busy=true;try{await this.#run(options);}catch(error){this.#halt(error);throw error;}finally{this.#busy=false;this.#arm();}};
     const promise=this.#tail.then(run);this.#tail=promise.catch(()=>{});return promise;
   }
   async #run({recovery=false}={}) {
@@ -213,7 +228,7 @@ export class AssistantController {
         pending=Object.values(this.store.read().occurrences).filter(o=>o.scheduleId===s.scheduleId&&UNSETTLED.has(o.state));
         if(pending.some(o=>['claimed','running','UNKNOWN'].includes(o.state)))continue;
       }
-      if(pending.length) {for(const o of pending)if(['planned','blocked'].includes(o.state))await this.#admit(o.occurrenceId);continue;}
+      if(pending.length) {for(const o of pending)if(o.consentVersion===s.consentVersion&&['planned','blocked'].includes(o.state))await this.#admit(o.occurrenceId);continue;}
       if(!s.nextDueAt||Date.parse(s.nextDueAt)>at)continue;
       const ids=await this.#materialize(s.scheduleId,at,recovery);for(const id of ids)await this.#admit(id);
     }
@@ -221,8 +236,12 @@ export class AssistantController {
   #provedUnadmitted(occurrence,state) {
     return ['planned','blocked'].includes(occurrence.state)&&
       (occurrence.state==='planned'||SAFE_BLOCK.has(occurrence.errorCode)||PAUSE_CODES.has(occurrence.errorCode)||occurrence.errorCode==='disabled')&&
-      !occurrence.attemptId&&!state.operations[occurrence.startOperationId]&&
-      (!occurrence.taskId||!Object.values(state.attempts).some(attempt=>attempt.taskId===occurrence.taskId));
+      !occurrence.attemptId&&!occurrence.receipt&&!state.operations[occurrence.startOperationId]&&
+      state.operations[occurrence.createOperationId]?.result?.state!=='UNKNOWN'&&
+      (!occurrence.taskId||state.tasks[occurrence.taskId]?.state==='queued'&&state.tasks[occurrence.taskId].currentAttemptId===null&&state.tasks[occurrence.taskId].epoch===0)&&
+      !Object.values(state.attempts).some(attempt=>attempt.occurrenceId===occurrence.occurrenceId||occurrence.taskId&&attempt.taskId===occurrence.taskId)&&
+      !Object.values(state.outbox).some(row=>row.occurrenceId===occurrence.occurrenceId||occurrence.taskId&&row.taskId===occurrence.taskId||row.operationId===occurrence.createOperationId||row.operationId===occurrence.startOperationId)&&
+      !Object.values(state.operations).some(op=>op.result?.state==='UNKNOWN'&&(op.result.occurrenceId===occurrence.occurrenceId||occurrence.taskId&&op.result.taskId===occurrence.taskId));
   }
   async #observePendingRecovery(scheduleId,at) {
     return this.#internal('schedule.observeRecovery',{scheduleId,observedAt:nowISO(at)},draft=>{
@@ -282,6 +301,8 @@ export class AssistantController {
     if(this.#closed)return;
     const claimed=await this.#internal('schedule.claim',{occurrenceId:id},draft=>{
       const o=draft.occurrences[id],s=draft.schedules[o?.scheduleId];if(!o||!['planned','blocked'].includes(o.state)||!s?.enabled||s.archived)return false;
+      // Reconfirmation may commit while this claim waits in the storage queue.
+      if(o.consentVersion!==s.consentVersion)return false;
       if(this.#now()>this.#deadline(o)){o.state='missed';o.version++;this.#missedNotice(draft,s,o,this.#now());return false;}
       try {this.#authority(id,draft);}catch(error){if(PAUSE_CODES.has(error.code)){s.enabled=false;s.pauseReason=error.code;s.version++;o.state='blocked';o.errorCode=error.code;o.version++;return false;}throw error;}
       o.state='claimed';o.claimVersion++;o.version++;return true;
@@ -295,12 +316,14 @@ export class AssistantController {
       this.#assertAdmission(id);await this.tasks.startScheduled(actor,{operationId:o.startOperationId,action:'task.start',input:{occurrenceId:id}});
       await this.#internal('schedule.admitted',{occurrenceId:id},draft=>{const current=draft.occurrences[id];if(current?.state==='claimed'){current.state='running';current.version++;}return true;});
     } catch(error) {
+      // A fenced store cannot publish an admission outcome; retain the first failure.
+      try{this.store.read();}catch(failure){if(failure.code==='recovery_required')throw error;throw failure;}
       await this.#internal('schedule.admissionOutcome',{occurrenceId:id},draft=>{
         const o=draft.occurrences[id],s=draft.schedules[o.scheduleId],attempt=draft.attempts[o.attemptId];
         if(attempt?.reservationHeld){o.state=attempt.state==='UNKNOWN'?'UNKNOWN':'running';}
         else if(error.code==='schedule_missed'){o.state='missed';this.#missedNotice(draft,s,o,this.#now());}
         else if(SAFE_BLOCK.has(error.code)){o.state='blocked';}
-        else if(PAUSE_CODES.has(error.code)||error.code==='disabled'){o.state='blocked';if(s.enabled){s.enabled=false;s.pauseReason=error.code;s.version++;}}
+        else if(PAUSE_CODES.has(error.code)||error.code==='disabled'){o.state='blocked';if(s.enabled&&o.consentVersion===s.consentVersion){s.enabled=false;s.pauseReason=error.code;s.version++;}}
         else{o.state='UNKNOWN';}
         o.errorCode=typeof error.code==='string'&&/^[a-z][a-z0-9_]{0,79}$/.test(error.code)?error.code:'admission_unknown';o.version++;return true;
       });
