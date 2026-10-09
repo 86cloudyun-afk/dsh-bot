@@ -88,3 +88,15 @@ test('lexical ranking normalizes scoring only and preserves CJK singleton, secti
   const first=await f.k.ingest(f.human,command('tie1','material.ingest',{botId:f.bot.botId,title:'same',text:'tied'})),second=await f.k.ingest(f.human,command('tie2','material.ingest',{botId:f.bot.botId,title:'same',text:'tied'}));
   assert.deepEqual(f.k.search(f.human,{query:'tied'}).map(h=>h.docId),[first.docId,second.docId].sort());
 });
+test('sealed Bot native capture titles and replacement metadata retain the actual writer session',async t=>{
+  const f=await setup(t),normal=await f.sessions.create(f.human,command('metadata-normal','session.create',{botId:f.bot.botId})),sealed=await f.sessions.create(f.human,command('metadata-sealed','session.create',{botId:f.bot.botId})),agent=f.ctx.agents.get(normal.sessionId);
+  agent.followup(createUserMessage({content:[{type:'text',text:'PUBLIC'}],source:{kind:'test'}}));await eventually(()=>f.events.get(normal.sessionId)?.some(e=>e.type==='turn/end'));await f.ctx.sessions.flush(agent.session);
+  const event=(await f.adapter.readNative(normal.sessionId)).events.find(e=>e.type==='user/message'),previous=await f.k.ingest(f.human,command('public-prior','material.ingest',{botId:f.bot.botId,title:'public prior',text:'PUBLIC PRIOR'}));
+  await f.store.transact(command('seal-metadata','seed',{}),draft=>{draft.meetings.metadataMeeting={meetingId:'metadataMeeting',epoch:1,phase:'independent'};draft.sessions[sealed.sessionId].lineage={meetingId:'metadataMeeting',epoch:1,phase:'independent',sessionId:sealed.sessionId,botId:f.bot.botId};return null;});
+  const writer=f.policy.fromAgent(f.ctx.agents.get(sealed.sessionId)),reader=f.policy.fromAgent(agent),source={sessionId:normal.sessionId,eventSeq:event.seq,partIndex:0,startOffset:0,endOffset:6};
+  for(let i=0;i<2;i++) {
+    const doc=await f.k.ingest(writer,command(`sealed-metadata-${i}`,'material.ingest',{botId:f.bot.botId,title:`SEALED TITLE SECRET ${i}`,fileName:'PRIVATE.md',source,...(i?{replacesDocId:previous.docId}:{})}));assert.equal(doc.text,'PUBLIC');assert.ok(doc.origins.some(ref=>ref.kind==='session'&&ref.id===sealed.sessionId));assert.ok(doc.contentSources.some(s=>s.sessionId===sealed.sessionId&&s.meetingId==='metadataMeeting'));assert.equal(f.policy.canRead(reader,{kind:'material',id:doc.docId}),false);
+    await assert.rejects(f.k.page(reader,{docId:doc.docId}),{code:'access_denied'});
+  }
+  assert.deepEqual(f.k.search(reader,{query:'SECRET'}),[]);assert.equal(f.k.metadata(reader).some(doc=>doc.title.includes('SECRET')),false);
+});

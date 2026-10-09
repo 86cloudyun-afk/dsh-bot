@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {canonical, copy, digest, plain, requireCondition, validId} from './store.mjs';
-import {enforceQuota, lexicalScore, normalize, readSessionEvidence, strictObject, uniqueReferences, utf8Hash, validUnicode} from './knowledge.mjs';
+import {enforceQuota, lexicalScore, normalize, readSessionEvidence, strictObject, uniqueReferences, utf8Hash, validUnicode, writerProvenance} from './knowledge.mjs';
 
 const categories=['fact','preference','decision','responsibility'];
 const sourceFields=['kind','storeId','operationId','sessionId','eventSeq','partIndex','startOffset','endOffset','headerVersion','eventHash','fullPartHash','docId','chunkId','contentHash','derived','meetingId','groupId','roundId','epoch','memberEpoch','phase','botId','attemptId','taskId','description','fileDigest','sourceStoreId'];
@@ -78,19 +78,19 @@ export class MemoryController {
     strictObject(input,['botId','text','memoryId','expectedVersion','category','source','automatic','pinned'],'invalid_memory');this.#owner(actor,input.botId);
     requireCondition(validUnicode(input.text)&&input.text.trim().length>0&&input.text.length<=8192&&(input.pinned===undefined||typeof input.pinned==='boolean')&&(input.automatic===undefined||typeof input.automatic==='boolean'),'invalid_memory');
     const stamped=this.policy.command(actor,command);if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
-    let evidence;
+    const writer=writerProvenance(this,actor);let evidence;
     if(input.source?.kind==='material') {strictObject(input.source,['kind','docId','chunkId'],'invalid_source');evidence=await this.knowledge.resolveSource(actor,{docId:input.source.docId,chunkId:input.source.chunkId});}
     else if(input.source||actor.kind==='bot') {const ref=input.source??{sessionId:actor.sessionId,eventSeq:actor.agent.session.seq-1};evidence=await readSessionEvidence(this,actor,ref,{signal});}
     else evidence={source:{kind:'human',operationId:command.operationId},origins:[]};
     const createdAt=new Date().toISOString(),memoryId=input.memoryId??`memory_${randomUUID()}`;requireCondition(validId(memoryId),'invalid_memory');
     return this.store.transact(stamped,draft=>{
-      this.#owner(actor,input.botId,draft);for(const origin of evidence.origins)this.policy.require(actor,`${origin.kind}.read`,origin,draft);
+      this.#owner(actor,input.botId,draft);const liveWriter=writerProvenance(this,actor,draft);for(const origin of uniqueReferences([...evidence.origins,...writer.origins,...liveWriter.origins]))this.policy.require(actor,`${origin.kind}.read`,origin,draft);
       const before=copy(draft),current=draft.memories[memoryId];
       if(current) {requireCondition(current.botId===input.botId&&input.expectedVersion===current.version,'revision_conflict');requireCondition(!current.forgotten,'memory_forgotten');this.policy.require(actor,'memory.write',{kind:'memory',id:memoryId},draft);}
       else requireCondition(input.expectedVersion===undefined||input.expectedVersion===0,'revision_conflict');
       const category=input.category??current?.category??'fact';requireCondition(typeof category==='string'&&validUnicode(category)&&category.length>0&&(categories.includes(category)||category===current?.category),'invalid_category');
       if(actor.kind==='bot'||input.automatic)requireCondition(!Object.values(draft.memories).some(row=>row.botId===input.botId&&row.forgotten&&sourceIdentity(row.source,draft.storeId)===sourceIdentity(evidence.source,draft.storeId)),'forgotten_source');
-      const origins=uniqueReferences([...(current?.origins??[]),...evidence.origins,...this.policy.readDependencies(actor)]),contentSources=uniqueReferences([...(current?.contentSources??[]),...(current?[evidence.source]:[]),...(evidence.contentSources??[])]);
+      const origins=uniqueReferences([...(current?.origins??[]),...evidence.origins,...writer.origins,...liveWriter.origins]),contentSources=uniqueReferences([...(current?.contentSources??[]),...(current?[evidence.source]:[]),...(evidence.contentSources??[]),...writer.contentSources,...liveWriter.contentSources]);
       const record={...(current?copy(current):{}),memoryId,botId:input.botId,text:input.text.trim(),category,version:(current?.version??0)+1,source:current?.source??evidence.source,origins,contentSources,forgotten:current?.forgotten??false,inactive:current?.inactive??false,pinned:input.pinned??current?.pinned??false,createdAt:current?.createdAt??createdAt,updatedAt:createdAt};
       if(!current&&evidence.lineage)record.lineage=copy(evidence.lineage);
       draft.memories[memoryId]=record;requireCondition(this.#pins(draft,input.botId)<=8,'pin_quota');enforceQuota(draft,'memories',input.botId,{perBot:2000,profile:10000},before);this.#revision(draft,input.botId);return record;
@@ -102,6 +102,7 @@ export class MemoryController {
     if(action==='memory.pin')requireCondition(typeof input.pinned==='boolean','invalid_memory');
     return this.store.transact(this.policy.command(actor,command),draft=>{
       const row=this.#record(actor,input.memoryId,action,draft);requireCondition(input.expectedVersion===row.version,'revision_conflict');
+      const writer=writerProvenance(this,actor,draft);row.origins=uniqueReferences([...(row.origins??[]),...writer.origins]);row.contentSources=uniqueReferences([...(row.contentSources??[]),...writer.contentSources]);
       if(action==='memory.forget')row.forgotten=true;else {requireCondition(!row.forgotten,'memory_forgotten');row.pinned=input.pinned;requireCondition(this.#pins(draft,row.botId)<=8,'pin_quota');}
       row.version++;row.updatedAt=new Date().toISOString();this.#revision(draft,row.botId);return row;
     });
@@ -199,16 +200,19 @@ export class MemoryController {
   #assemble(actor,binding,{maxChars=12000,query}={}) {
     this.policy.actorKey(actor);requireCondition(Number.isSafeInteger(maxChars)&&maxChars>=256&&maxChars<=12000&&(query===undefined||typeof query==='string'&&query.length<=500),'invalid_context');
     const state=this.store.read(),bot=state.bots[binding.botId];requireCondition(bot,'not_found');requireCondition(actor.kind==='human'||actor.botId===binding.botId&&actor.sessionId===binding.sessionId,'access_denied');
-    const identity={botId:bot.botId,name:bot.name,role:bot.role??''},taskItems=[],memoryItems=[],includedTaskIds=[],includedMemoryIds=[],omitted=[];
-    let prefix=`${instruction}\n身份：${JSON.stringify(identity)}`;
+    const role=bot.role??'',identity={botId:bot.botId,name:bot.name,role:'',...(role?{rolePreview:true}:{})},taskItems=[],memoryItems=[],includedTaskIds=[],includedMemoryIds=[],omitted=[];
+    const makePrefix=()=>`${instruction}\n身份：${JSON.stringify(identity)}`;
     const suffix=()=>`\n${taskLabel}${JSON.stringify(taskItems)}\n${memoryLabel}${JSON.stringify(memoryItems)}`;
-    if(prefix.length+suffix().length>maxChars) {
-      const chars=[...identity.role];identity.role='';identity.rolePreview=true;prefix=`身份：${JSON.stringify(identity)}`;
-      while(chars.length&&prefix.length+suffix().length<maxChars){identity.role+=chars.shift();const next=`身份：${JSON.stringify(identity)}`;if(next.length+suffix().length>maxChars){identity.role=[...identity.role].slice(0,-1).join('');break;}prefix=next;}
-      prefix=`身份：${JSON.stringify(identity)}`;requireCondition(prefix.length+suffix().length<=maxChars,'invalid_context');
-    }
+    requireCondition(makePrefix().length+suffix().length<=maxChars,'invalid_context','上下文预算不足以容纳完整系统说明和身份。');
     const tasks=Object.values(state.tasks).filter(task=>(task.botId??task.ownerBotId)===bot.botId&&!task.archived&&!['completed','archived','cancelled'].includes(task.state)&&this.policy.canRead(actor,{kind:'task',id:task.taskId},undefined,state)).sort((a,b)=>binary(a.taskId,b.taskId));
-    for(const task of tasks) {const item={taskId:task.taskId,title:task.title??task.goal??'',state:task.state};taskItems.push(item);if(JSON.stringify(taskItems).length>1200||prefix.length+suffix().length>maxChars){taskItems.pop();continue;}includedTaskIds.push(task.taskId);}
+    for(const task of tasks) {const item={taskId:task.taskId,title:task.title??task.goal??'',state:task.state};taskItems.push(item);if(JSON.stringify(taskItems).length>1200||makePrefix().length+suffix().length>maxChars){taskItems.pop();continue;}includedTaskIds.push(task.taskId);}
+    identity.role=role;delete identity.rolePreview;
+    if(makePrefix().length+suffix().length>maxChars) {
+      const chars=[...role];identity.rolePreview=true;let low=0,high=chars.length;
+      while(low<high){const mid=Math.ceil((low+high)/2);identity.role=chars.slice(0,mid).join('');if(makePrefix().length+suffix().length<=maxChars)low=mid;else high=mid-1;}
+      identity.role=chars.slice(0,low).join('');
+    }
+    const prefix=makePrefix();
     const own=Object.values(state.memories).filter(row=>row.botId===bot.botId),readable=[];
     for(const row of own) {let reason=row.forgotten?'forgotten':row.inactive?'inactive':!this.policy.canRead(actor,{kind:'memory',id:row.memoryId},undefined,state)?'inaccessible':null;if(reason){if(actor.kind==='human')omitted.push({memoryId:row.memoryId,reason});}else readable.push(row);}
     const pinned=readable.filter(r=>r.pinned).sort(latest).slice(0,8),ordinary=readable.filter(r=>!r.pinned),ranked=query?ordinary.map(row=>({row,score:lexicalScore(query,{body:row.text})})).filter(r=>r.score>0).sort((a,b)=>b.score-a.score||latest(a.row,b.row)).map(r=>r.row):[],selected=[...pinned,...(ranked.length?ranked.slice(0,10):ordinary.sort(latest).slice(0,4))];

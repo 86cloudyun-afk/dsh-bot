@@ -3,6 +3,15 @@ import {canonical, copy, digest, plain, requireCondition, validId} from './store
 
 export const utf8Hash=text=>createHash('sha256').update(text,'utf8').digest('hex');
 export const uniqueReferences=refs=>[...new Map(refs.map(ref=>[canonical(ref),copy(ref)])).values()];
+/** Authenticated authorship adds restrictions independently of selected evidence. */
+export function writerProvenance({store,policy},actor,state=store.read()) {
+  policy.actorKey(actor);
+  if(actor.kind!=='bot')return {origins:[],contentSources:[]};
+  const reference={kind:'session',id:actor.sessionId};policy.require(actor,'session.read',reference,state);
+  const binding=state.sessions[actor.sessionId];requireCondition(binding?.botId===actor.botId,'access_denied');
+  const source={kind:'session',storeId:state.storeId,sessionId:actor.sessionId,derived:true,...copy(binding.lineage??{})};
+  return {origins:uniqueReferences([reference,...policy.readDependencies(actor)]),contentSources:[source]};
+}
 export function strictObject(value,keys,code='invalid_input') {
   requireCondition(plain(value)&&Object.keys(value).every(key=>keys.includes(key)&&!['__proto__','prototype','constructor'].includes(key)),code);
 }
@@ -102,19 +111,19 @@ export class KnowledgeController {
     const stamped=this.policy.command(actor,command);if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
     requireCondition(typeof input.title==='string'&&validUnicode(input.title)&&input.title.trim().length>0&&[...input.title].length<=200&&['text/plain','text/markdown'].includes(input.mediaType??'text/plain')&&Object.hasOwn(input,'text')!==Object.hasOwn(input,'source'),'invalid_material');
     if(input.fileName!==undefined)requireCondition(typeof input.fileName==='string'&&validUnicode(input.fileName)&&[...input.fileName].length>0&&[...input.fileName].length<=255&&!/[\\/\x00-\x1f\x7f]/.test(input.fileName)&&/\.(txt|md)$/i.test(input.fileName),'invalid_material');
-    let evidence;
+    const writer=writerProvenance(this,actor);let evidence;
     if(input.source)evidence=await readSessionEvidence(this,actor,input.source,{signal,range:true});
     else {
       requireCondition(validUnicode(input.text),'invalid_material');
-      if(actor.kind==='bot') {const binding=this.store.read().sessions[actor.sessionId];evidence={source:{kind:'session',storeId:this.store.read().storeId,sessionId:actor.sessionId,derived:true,...copy(binding?.lineage??{})},origins:uniqueReferences([{kind:'session',id:actor.sessionId},...this.policy.readDependencies(actor)]),text:input.text};}
+      if(actor.kind==='bot')evidence={source:writer.contentSources[0],origins:writer.origins,text:input.text};
       else evidence={source:{kind:'human',operationId:command.operationId},origins:[],text:input.text};
     }
     requireCondition(evidence.text.length>0,'invalid_material');requireCondition(Buffer.byteLength(evidence.text)<=65536,'material_quota');
     const docId=`doc_${randomUUID()}`,contentHash=utf8Hash(evidence.text),createdAt=new Date().toISOString();
     return this.store.transact(stamped,draft=>{
-      this.#owner(actor,input.botId,draft);for(const origin of evidence.origins)this.policy.require(actor,`${origin.kind}.read`,origin,draft);
+      this.#owner(actor,input.botId,draft);const liveWriter=writerProvenance(this,actor,draft);for(const origin of uniqueReferences([...evidence.origins,...writer.origins,...liveWriter.origins]))this.policy.require(actor,`${origin.kind}.read`,origin,draft);
       let previous;if(input.replacesDocId){previous=this.#read(actor,input.replacesDocId,draft);requireCondition(previous.botId===input.botId,'access_denied');}
-      const doc={docId,botId:input.botId,title:input.title.trim(),mediaType:input.mediaType??'text/plain',...(input.fileName===undefined?{}:{fileName:input.fileName}),text:evidence.text,contentHash,version:1,chunkingVersion:1,createdAt,source:evidence.source,contentSources:previous?uniqueReferences([previous.source,...(previous.contentSources??[])]):[],origins:uniqueReferences([...evidence.origins,...(previous?[{kind:'material',id:previous.docId},...(previous.origins??[])]:[])]),archived:false,chunks:chunkMaterial(docId,contentHash,evidence.text),...(previous?{replacesDocId:previous.docId}:{})};
+      const doc={docId,botId:input.botId,title:input.title.trim(),mediaType:input.mediaType??'text/plain',...(input.fileName===undefined?{}:{fileName:input.fileName}),text:evidence.text,contentHash,version:1,chunkingVersion:1,createdAt,source:evidence.source,contentSources:uniqueReferences([...writer.contentSources,...liveWriter.contentSources,...(previous?[previous.source,...(previous.contentSources??[])]:[])]),origins:uniqueReferences([...evidence.origins,...writer.origins,...liveWriter.origins,...(previous?[{kind:'material',id:previous.docId},...(previous.origins??[])]:[])]),archived:false,chunks:chunkMaterial(docId,contentHash,evidence.text),...(previous?{replacesDocId:previous.docId}:{})};
       (draft.materials??={})[docId]=doc;enforceQuota(draft,'materials',input.botId,{perBot:100,profile:500});return doc;
     });
   }
