@@ -2,6 +2,7 @@ import {runSimpleUiChecks} from './stock-simple-ui-checks.mjs';
 import {runRepairChecks} from './stock-repair-checks.mjs';
 import {runChatIdentityChecks} from './stock-chat-identity-checks.mjs';
 import {runBotDeleteChecks} from './stock-bot-delete-checks.mjs';
+import {runV11UiChecks} from './stock-v11-ui-checks.mjs';
 import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
@@ -73,12 +74,12 @@ async function* stream(options, state) {
 async function newTask(title, goal, origin = gui.contactId) {
   await gui.workbench("任务");
   const card = gui.card("新任务");
-  await card.getByLabel("负责人").selectOption(gui.botIds[0]);
+  await card.getByLabel("负责人", { exact: true }).selectOption(gui.botIds[0]);
   await card.getByLabel("标题", { exact: true }).fill(title);
   await card.getByLabel("目标", { exact: true }).fill(goal);
   await gui.expand(card, "验收与结果接收");
-  await card.getByLabel("验收条件（每行一项）").fill("原生结果和资源证据存在");
-  if (origin) await card.getByLabel("结果接收会话").selectOption(origin);
+  await card.getByLabel("验收条件（每行一项）", { exact: true }).fill("原生结果和资源证据存在");
+  if (origin) await card.getByLabel("结果接收会话", { exact: true }).selectOption(origin);
   await card.getByRole("button", { name: "登记任务", exact: true }).click();
   const state = await gui.until(
     (s) => s.tasks.some((row) => row.title === title),
@@ -120,7 +121,7 @@ async function chooseContact(botId) {
     .last()
     .click();
   const dialog = gui.page.getByRole("dialog", { name: "新建 Bot 会话" });
-  await dialog.getByLabel("选择已创建的 Bot").selectOption(botId);
+  await dialog.getByLabel("选择已创建的 Bot", { exact: true }).selectOption(botId);
   await dialog.getByRole("button", { name: "开始对话", exact: true }).click();
   await dialog.waitFor({ state: "hidden" });
   await gui.page.getByRole("textbox").last().waitFor();
@@ -164,21 +165,22 @@ try {
   await gui.page.getByRole("heading", { name: "创建具名 Bot" }).waitFor();
   mark("three-named-bots");
   for (const [index, name] of ["原生甲", "原生乙", "原生丙"].entries()) {
-    await gui.page.getByLabel("名称", { exact: true }).fill(name);
-    await gui.page
-      .getByLabel("身份与职责")
+    const botEditor = gui.card("创建具名 Bot");
+    await botEditor.getByLabel("名称", { exact: true }).fill(name);
+    await botEditor
+      .getByLabel("身份与职责", { exact: true })
       .fill("A harmless qualification Bot");
     await gui.expand(gui.card("创建具名 Bot"), "更多设置");
-    await gui.page
-      .getByLabel("工作目录（DSH 所在机器）")
+    await botEditor
+      .getByLabel("工作目录（DSH 所在机器）", { exact: true })
       .fill(join(gui.root, "work"));
-    await gui.page.getByLabel("模型", { exact: true }).selectOption(
+    await botEditor.getByLabel("模型", { exact: true }).selectOption(
       JSON.stringify({
         provider: controlledProvider,
         model: `model-${String.fromCharCode(97 + index)}`,
       }),
     );
-    await gui.page.getByLabel("执行模型", { exact: true }).selectOption(
+    await botEditor.getByLabel("执行模型", { exact: true }).selectOption(
       JSON.stringify({
         provider: controlledProvider,
         model: `model-${String.fromCharCode(97 + index)}`,
@@ -196,7 +198,7 @@ try {
   gui.check("threeSeparateBotIdentities", new Set(gui.botIds).size === 3);
   await gui.page.getByRole("button", { name: "记忆", exact: true }).click();
   await gui.page
-    .getByRole("combobox", { name: "Bot", exact: true })
+    .getByRole("combobox", { name: "所属 Bot", exact: true })
     .selectOption(gui.botIds[0]);
   await gui.page.getByLabel("内容", { exact: true }).fill("长期记忆代号：青草");
   await gui.page
@@ -318,7 +320,7 @@ try {
   await gui.expand(gui.card(child.title), "子工作");
   await gui
     .card(child.title)
-    .getByLabel("所属父工作")
+    .getByLabel("所属父工作", { exact: true })
     .selectOption(longAttempt.attemptId);
   await gui
     .card(child.title)
@@ -374,7 +376,7 @@ try {
   gui.check("actualExecutionView", true);
   await gui.workbench("任务");
   await gui.expand(gui.card(short.title), "调整与接续");
-  await gui.card(short.title).getByLabel("新目标").fill("GUI_SHORT 接续");
+  await gui.card(short.title).getByLabel("新目标", { exact: true }).fill("GUI_SHORT 接续");
   await gui
     .card(short.title)
     .getByRole("button", { name: "调整目标", exact: true })
@@ -403,10 +405,10 @@ try {
   );
   gui.check("sameTaskNewAttempt", second.attemptId !== first.attemptId);
   await gui.expand(gui.card(short.title), "验收结果");
-  await gui.card(short.title).getByLabel("结论").selectOption("passed");
+  await gui.card(short.title).getByLabel("结论", { exact: true }).selectOption("passed");
   await gui
     .card(short.title)
-    .getByLabel("实际证据")
+    .getByLabel("实际证据", { exact: true })
     .fill("原生日志中的受控模型答复及当次身份");
   await gui
     .card(short.title)
@@ -483,9 +485,9 @@ try {
   const groupIds = [];
   for (const name of ["内部群一", "内部群二"]) {
     const form = gui.card("新建内部群");
-    await form.getByLabel("群名称").fill(name);
-    await form.getByLabel("成员（可多选）").selectOption(gui.botIds);
-    await form.getByLabel("协调者（必须在成员中）").selectOption(gui.botIds[0]);
+    await form.getByLabel("群名称", { exact: true }).fill(name);
+    await form.getByLabel("成员（可多选）", { exact: true }).selectOption(gui.botIds);
+    await form.getByLabel("协调者（必须在成员中）", { exact: true }).selectOption(gui.botIds[0]);
     await form.getByRole("button", { name: "创建群", exact: true }).click();
     state = await gui.until(
       (s) => s.groups.some((row) => row.name === name),
@@ -513,7 +515,7 @@ try {
     const group = gui.card("内部群一");
     await gui.expand(group, "开会");
     await group.getByLabel("议题", { exact: true }).fill(`会议${index + 1}`);
-    await group.getByLabel("共同材料").fill(`会议${index + 1}的共同材料`);
+    await group.getByLabel("共同材料", { exact: true }).fill(`会议${index + 1}的共同材料`);
     await group.getByRole("button", { name: "发起会议", exact: true }).click();
     await gui.until(
       (s) => s.meetings.some((row) => row.topic === `会议${index + 1}`),
@@ -555,9 +557,9 @@ try {
   gui.check("nativeOpinionsDiscussionAndDecisions", true);
   const action = gui.card("会议1");
   await gui.expand(action, "登记行动任务");
-  await action.getByLabel("负责人").selectOption(gui.botIds[1]);
-  await action.getByLabel("任务标题").fill("会议行动");
-  await action.getByLabel("行动目标").fill("实际任务行动");
+  await action.getByLabel("负责人", { exact: true }).selectOption(gui.botIds[1]);
+  await action.getByLabel("任务标题", { exact: true }).fill("会议行动");
+  await action.getByLabel("行动目标", { exact: true }).fill("实际任务行动");
   await action.getByLabel("验收条件", { exact: true }).fill("原生执行");
   await action
     .getByRole("button", { name: "生成真实行动任务", exact: true })
@@ -802,6 +804,8 @@ try {
   mark("chat-identity-and-recoverable-bot-delete");
   await runChatIdentityChecks(gui);
   await runBotDeleteChecks(gui);
+  mark("v11-knowledge-collaboration-and-assistant-ui");
+  await runV11UiChecks(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");
   gui.report.passed = true;
