@@ -126,6 +126,34 @@ export class TaskController {
       requireCondition(this.policy.canProspectiveBotRead(prospect, ref, draft), "access_denied");
     }
   }
+  #readAttemptSession(actor, prospect, sessionId, state) {
+    requireCondition(validId(sessionId), "access_denied");
+    const reference = {kind: "session", id: sessionId};
+    this.policy.require(actor, "session.read", reference, state);
+    requireCondition(this.policy.canProspectiveBotRead(prospect, reference, state), "access_denied");
+  }
+  #persistInputs(inputs, draft) {
+    return inputs.map(input => {
+      const inputId = `taskinput_${digest({taskId: input.taskId, definitionDigest: input.definitionDigest,
+        attemptId: input.attemptId, epoch: input.epoch, evidenceHash: digest(input.acceptanceEvidence)})}`;
+      // The immutable ledger identity excludes later operation-only task versions.
+      // Each consuming attempt still retains its own admission-observed version.
+      draft.taskInputs[inputId] ??= {...copy(input), inputId};
+      return {...copy(draft.taskInputs[inputId]), version: input.version};
+    });
+  }
+  #publishAttempt(actor, attempt) {
+    const state = this.store.read(), current = state.attempts[attempt.attemptId];
+    requireCondition(current, "not_found");
+    for (const input of current.prerequisiteInputs ?? []) {
+      if (input.inputId) this.policy.require(actor, "taskInput.read", {kind: "taskInput", id: input.inputId}, state);
+      else this.policy.require(actor, "task.read", {kind: "task", id: input.taskId}, state);
+      this.policy.require(actor, "session.read", {kind: "session", id: input.attemptSessionId ?? state.attempts[input.attemptId]?.sessionId}, state);
+      for (const record of [input, input.result, input.report, input.acceptanceEvidence].filter(Boolean))
+        requireCondition(this.policy.canReadDerived(actor, record, state), "access_denied");
+    }
+    return current;
+  }
   #prerequisites(actor, task, draft) {
     const prospect = {botId: task.botId, purpose: "execution", lineage: {}};
     return (task.dependsOn ?? []).map(id => {
@@ -138,11 +166,13 @@ export class TaskController {
         this.#settled(attempt) && (attempt.result || attempt.report), "dependency_blocked", `等待依赖验收：${id}`);
       this.policy.require(actor, "task.read", {kind: "task", id}, draft);
       requireCondition(this.policy.canProspectiveBotRead(prospect, {kind: "task", id}, draft), "access_denied");
+      this.#readAttemptSession(actor, prospect, attempt.sessionId, draft);
       for (const record of [attempt.result, attempt.report, evidence]) this.#readContent(actor, prospect, record, draft);
-      return {taskId: id, version: prerequisite.version, definitionVersion: evidence.definitionVersion,
+      return {taskId: id, botId: attempt.botId, attemptSessionId: attempt.sessionId, version: prerequisite.version, definitionVersion: evidence.definitionVersion,
         definitionDigest, attemptId: attempt.attemptId, epoch: attempt.epoch,
         acceptanceEvidence: copy(evidence), result: attempt.result ? copy(attempt.result) : null,
-        report: attempt.report ? copy(attempt.report) : null, source: copy(prerequisite.source), origins: copy(prerequisite.origins ?? [])};
+        report: attempt.report ? copy(attempt.report) : null, source: copy(prerequisite.source), origins: copy(prerequisite.origins ?? []),
+        contentSources: copy(prerequisite.contentSources ?? [])};
     });
   }
   #scheduleInput(actor, command, action) {
@@ -283,7 +313,7 @@ export class TaskController {
           ),
           "attempt_unsettled",
         );
-        const prerequisiteInputs = this.#prerequisites(actor, task, draft);
+        const prerequisiteInputs = this.#persistInputs(this.#prerequisites(actor, task, draft), draft);
         const parentId =
           input.parentAttemptId ??
           (actor.kind === "bot"
@@ -362,7 +392,7 @@ export class TaskController {
           origins: [...new Map([
             ...(task.origins ?? []),
             ...prerequisiteInputs.flatMap(row => [
-              {kind: "task", id: row.taskId}, ...(row.origins ?? []),
+              {kind: "taskInput", id: row.inputId}, {kind: "session", id: row.attemptSessionId}, ...(row.origins ?? []),
               ...[row.result, row.report, row.acceptanceEvidence].filter(Boolean).flatMap(record => [
                 ...(record.origins ?? []), ...(record.source?.sessionId ? [{kind: "session", id: record.source.sessionId}] : []),
               ]),
@@ -376,14 +406,17 @@ export class TaskController {
       },
     );
     const current = this.store.read().attempts[intent.attemptId];
-    if (current.state !== "starting") return current;
+    if (current.state !== "starting") return this.#publishAttempt(actor, current);
     requireCondition(current.runtimeId === this.runtimeId, "recovery_required");
-    if (this.#launching.has(current.attemptId))
-      return this.#launching.get(current.attemptId);
+    if (this.#launching.has(current.attemptId)) {
+      const launched = await this.#launching.get(current.attemptId);
+      return this.#publishAttempt(actor, launched);
+    }
     const launch = this.#launch(actor, current);
     this.#launching.set(current.attemptId, launch);
     try {
-      return await launch;
+      const launched = await launch;
+      return this.#publishAttempt(actor, launched);
     } finally {
       this.#launching.delete(current.attemptId);
     }
@@ -707,9 +740,16 @@ export class TaskController {
     this.#readContent(actor, prospect, task, draft);
     this.#readContent(actor, prospect, task.acceptanceEvidence, draft);
     for (const row of related.filter(row => row.taskId === task.taskId)) {
+      this.#readAttemptSession(actor, prospect, row.sessionId, draft);
       for (const record of [row.result, row.report]) this.#readContent(actor, prospect, record, draft);
-      for (const prerequisite of row.prerequisiteInputs ?? [])
+      for (const prerequisite of row.prerequisiteInputs ?? []) {
+        this.#readAttemptSession(actor, prospect, prerequisite.attemptSessionId ?? draft.attempts[prerequisite.attemptId]?.sessionId, draft);
+        if (prerequisite.inputId) {
+          this.policy.require(actor, "taskInput.read", {kind: "taskInput", id: prerequisite.inputId}, draft);
+          requireCondition(this.policy.canProspectiveBotRead(prospect, {kind: "taskInput", id: prerequisite.inputId}, draft), "access_denied");
+        }
         for (const record of [prerequisite.result, prerequisite.report, prerequisite.acceptanceEvidence]) this.#readContent(actor, prospect, record, draft);
+      }
     }
     const beforeVersion = task.version;
     task.handoffs ??= [];

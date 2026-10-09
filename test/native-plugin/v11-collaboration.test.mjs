@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { taskFixture } from './task-fixture.mjs';
 import { collaborationFixture } from './collaboration-fixture.mjs';
-import { eventually } from './official-fixture.mjs';
+import { deferred, eventually, textChunks } from './official-fixture.mjs';
 
 const command = (action, input, operationId = action) => ({action,input,operationId});
 async function passed(f, bot, title = 'Prerequisite') {
@@ -160,4 +160,64 @@ test('explicit acceptance renews a truly settled legacy attempt without inferrin
   const attempt=await f.tasks.start(f.human,command('task.start',{taskId:task.taskId,expectedVersion:task.version},'renewed-start'));
   assert.equal(attempt.prerequisiteInputs[0].acceptanceEvidence.text,'Explicit renewed acceptance');
   await eventually(()=>!f.store.read().attempts[attempt.attemptId].reservationHeld);
+});
+
+
+test('review: frozen input authorization survives unrelated private upstream definition edits',async t=>{
+  const gate=deferred();t.after(()=>gate.resolve());let f,b;
+  f=await taskFixture(t,{stream:async function*(options){if(f.store.read().sessions[options.sessionId]?.botId===b?.botId)await gate.promise;yield*textChunks('Fixed actual output');}});
+  const a=await f.bot('A');b=await f.bot('B');const upstream=await passed(f,a),originalSession=f.store.read().attempts[upstream.currentAttemptId].sessionId;
+  await f.policy.authorizeShare(f.human,command('share.set',{botId:a.botId,share:{enabled:true,receivers:['*'],scope:{tasks:['*'],sessions:[originalSession],memories:['*']}}},'fixed-original-sharing'));
+  const task=await f.tasks.create(f.human,command('task.create',{botId:b.botId,title:'Fixed downstream',goal:'Use only admitted upstream content',criteria:[],dependsOn:[upstream.taskId]},'fixed-dependent'));
+  const attempt=await f.tasks.start(f.human,command('task.start',{taskId:task.taskId,expectedVersion:task.version},'fixed-start'));
+  const fixed=structuredClone(attempt.prerequisiteInputs),binding=f.store.read().sessions[attempt.sessionId],reference=binding.origins.find(row=>['task','taskInput'].includes(row.kind));
+  const writer=await f.sessions.create(f.human,command('session.create',{botId:a.botId},'private-writer')),actor=f.policy.fromAgent(f.ctx.agents.get(writer.sessionId));
+  await f.tasks.adjust(actor,command('task.adjust',{taskId:upstream.taskId,expectedVersion:upstream.version,goal:'An unrelated newly private definition'},'private-upstream-edit'));
+  assert.equal(f.policy.canProspectiveBotRead({botId:b.botId,purpose:'execution'},{kind:'task',id:upstream.taskId}),false);
+  assert.equal(f.policy.canProspectiveBotRead({botId:b.botId,purpose:'execution'},reference),true);
+  assert.equal(reference.kind,'taskInput');assert.deepEqual(f.store.read().attempts[attempt.attemptId].prerequisiteInputs,fixed);
+  const frozen=f.store.read().taskInputs[reference.id];assert.equal(frozen.attemptSessionId,originalSession);assert.deepEqual(frozen.source,upstream.source);
+  gate.resolve();await eventually(()=>!f.store.read().attempts[attempt.attemptId].reservationHeld);
+});
+
+test('review: human report provenance cannot bypass the original execution session for dependency or handoff',async t=>{
+  const gate=deferred();t.after(()=>gate.resolve());
+  const f=await taskFixture(t,{stream:async function*(){await gate.promise;yield*textChunks('Canceled');}}),a=await f.bot('A'),b=await f.bot('B'),upstream=await f.task(a,'HumanReport');
+  const attempt=await f.tasks.start(f.human,command('task.start',{taskId:upstream.taskId,expectedVersion:1},'report-start'));
+  await f.tasks.submit(f.human,command('task.submit',{taskId:upstream.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch,report:'Protected original report'},'human-report'));
+  await f.tasks.stop(f.human,command('task.stop',{taskId:upstream.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch},'report-stop'));gate.resolve();
+  await eventually(()=>!f.store.read().attempts[attempt.attemptId].reservationHeld);
+  const current=f.store.read().tasks[upstream.taskId];await f.tasks.accept(f.human,command('task.accept',{taskId:upstream.taskId,expectedVersion:current.version,attemptId:attempt.attemptId,outcome:'passed',evidence:'Verified saved report'},'report-accept'));
+  await f.policy.authorizeShare(f.human,command('share.set',{botId:a.botId,share:{enabled:true,receivers:['*'],scope:{tasks:['*'],sessions:[],memories:['*']}}},'protect-report-session'));
+  const task=await f.tasks.create(f.human,command('task.create',{botId:b.botId,title:'Report dependent',goal:'Use protected report',criteria:[],dependsOn:[upstream.taskId]},'report-dependent'));
+  const outcomes=await Promise.allSettled([
+    f.tasks.start(f.human,command('task.start',{taskId:task.taskId,expectedVersion:1},'report-dependent-start')),
+    f.tasks.handoff(f.human,command('task.handoff',{taskId:upstream.taskId,expectedVersion:f.store.read().tasks[upstream.taskId].version,toBotId:b.botId},'report-handoff')),
+  ]);
+  assert.deepEqual(outcomes.map(row=>row.status),['rejected','rejected']);
+  assert.ok(outcomes.every(row=>row.reason.code==='access_denied'));
+  assert.equal(Object.values(f.store.read().attempts).filter(row=>row.taskId===task.taskId).length,0);
+});
+
+test('review: replayed start through service denies nested fixed input after original source revocation without relaunch',async t=>{
+  const gate=deferred();t.after(()=>gate.resolve());let f,b;
+  f=await taskFixture(t,{stream:async function*(options){if(f.store.read().sessions[options.sessionId]?.botId===b?.botId)await gate.promise;yield*textChunks('Restricted upstream output');}});
+  const a=await f.bot('A');b=await f.bot('B');const upstream=await passed(f,a),contact=await f.sessions.create(f.human,command('session.create',{botId:b.botId},'replay-caller')),actor=f.policy.fromAgent(f.ctx.agents.get(contact.sessionId));
+  const task=await f.tasks.create(f.human,command('task.create',{botId:b.botId,title:'Replay dependent',goal:'Use upstream result',criteria:[],dependsOn:[upstream.taskId]},'replay-dependent'));
+  const request=command('task.start',{taskId:task.taskId,expectedVersion:1},'replay-fixed-start'),attempt=await f.service.dispatch(actor,request);
+  await f.policy.authorizeShare(f.human,command('share.set',{botId:a.botId,share:{enabled:true,receivers:['*'],scope:{tasks:['*'],sessions:[],memories:['*']}}},'replay-revoke-source'));
+  const count=f.requests.length;await assert.rejects(f.service.dispatch(actor,request),{code:'access_denied'});
+  assert.equal(f.requests.length,count);assert.equal(f.store.read().tasks[task.taskId].currentAttemptId,attempt.attemptId);assert.equal(Object.values(f.store.read().attempts).filter(row=>row.taskId===task.taskId).length,1);
+  gate.resolve();
+});
+
+test('review: later admissions reuse the immutable snapshot while retaining their newly observed task version',async t=>{
+  const f=await taskFixture(t),a=await f.bot(),upstream=await passed(f,a),task=await f.tasks.create(f.human,command('task.create',{botId:a.botId,title:'Repeat fixed input',goal:'Use accepted output',criteria:[],dependsOn:[upstream.taskId]},'repeat-dependent'));
+  const first=await f.tasks.start(f.human,command('task.start',{taskId:task.taskId,expectedVersion:1},'repeat-first'));await eventually(()=>!f.store.read().attempts[first.attemptId].reservationHeld);
+  const saved=structuredClone(f.store.read().taskInputs[first.prerequisiteInputs[0].inputId]);
+  const archived=await f.tasks.archive(f.human,command('task.archive',{taskId:upstream.taskId,expectedVersion:upstream.version},'archive-after-input'));
+  const second=await f.tasks.start(f.human,command('task.start',{taskId:task.taskId,expectedVersion:f.store.read().tasks[task.taskId].version},'repeat-second'));
+  assert.equal(second.prerequisiteInputs[0].inputId,first.prerequisiteInputs[0].inputId);assert.equal(second.prerequisiteInputs[0].version,archived.version);
+  assert.deepEqual(f.store.read().taskInputs[saved.inputId],saved);assert.equal(Object.keys(f.store.read().taskInputs).length,1);
+  await eventually(()=>!f.store.read().attempts[second.attemptId].reservationHeld);
 });
