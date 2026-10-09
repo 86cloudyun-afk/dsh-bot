@@ -108,7 +108,7 @@ test('RPC unknown failures retain safe error identity without disclosing native 
   let errorCode;
   const dispose=await mountBotRoutes({connection:{operator:{},fetch:{register(route){routes.set(route.path,route);return()=>routes.delete(route.path);}}}},{policy:{fromPeer:()=>({kind:'human'})},service:{dispatch(){throw Object.assign(new Error('private-token /private/native/path'),{code:errorCode});}},isClosed:()=>false});
   try {
-    for(const code of [undefined,'request_failed','agent-preset/locked']) {
+    for(const code of [undefined,'request_failed','agent-preset/locked','agent-preset/not-found','agent-preset/invalid']) {
     errorCode=code;
     const response=await routes.get('/api/dsh.bot/command').fetch(new Request('http://localhost/api/dsh.bot/command',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'retained-id',method:'dsh.bot/command',payload:{action:'snapshot',input:{}}})}));
     const body=await response.json();assert.equal(body.rpcId,'retained-id');assert.equal(body.result.error.code,code??'internal_error');

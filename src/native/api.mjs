@@ -91,7 +91,7 @@ export async function mountBotRoutes(ctx, { policy, service, isClosed }) {
                 value: await service.dispatch(actor, command, request.signal),
               };
             } catch (error) {
-              const publicCode=typeof error.code==='string'&&(/^[a-z][a-z0-9_]{0,79}$/.test(error.code)||error.code==='agent-preset/locked')
+              const publicCode=typeof error.code==='string'&&(/^[a-z][a-z0-9_]{0,79}$/.test(error.code)||['agent-preset/locked','agent-preset/not-found','agent-preset/invalid'].includes(error.code))
                 ? error.code : request.signal.aborted ? "cancelled" : "internal_error";
               result = {
                 ok: false,
