@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir} from 'node:fs/promises';
+import {mkdir,realpath} from 'node:fs/promises';
 import {createUserMessage} from '@deepseek-ai/dsh-llm';
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry';
 import SessionTitleService from '@deepseek-ai/dsh-session-title';
@@ -35,7 +35,7 @@ test('v1.1 configured contact creation uses its target name/model/preset/cwd and
  const f=await businessFixture(t);await presets(f);const bot=await f.bot(),command=cmd('session.create',{botId:bot.botId,name:'Configured',model:{provider:'controlled',model:'model-b'},presetId:'beta',cwd:f.dir});
  const row=await f.sessions.create(f.human,command);assert.deepEqual(await f.sessions.create(f.human,command),row);
  assert.equal(row.name,'Configured');assert.equal(row.model.model,'model-b');assert.equal(row.presetId,'beta');assert.equal(row.revision,1);
- const native=await f.adapter.readNative(row.sessionId);assert.equal(native.header.cwd,f.dir);assert.equal(native.header.agentPreset,'beta');assert.ok(native.events.some(e=>e.type==='session/title'&&e.data.title==='Configured'));
+ const native=await f.adapter.readNative(row.sessionId);assert.equal(native.header.cwd,await realpath(f.dir));assert.equal(native.header.agentPreset,'beta');assert.ok(native.events.some(e=>e.type==='session/title'&&e.data.title==='Configured'));
  await reply(f,row);assert.equal(f.requests[0].model,'model-b');assert.equal(f.store.read().bots[bot.botId].contact.model,'model-a');
 });
 

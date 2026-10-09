@@ -33,8 +33,12 @@ try {
     const state=service.store.read(),row=state.attempts[attempt.attemptId];
     return row?.result&&!row.reservationHeld&&Object.values(state.outbox).some(out=>out.attemptId===attempt.attemptId&&out.state==='accepted');
   },'real legacy native result and accepted outbox before upgrade');
-  const events=await gui.original(contact.sessionId),eventProof=events.map(event=>({seq:event.seq,type:event.type,checksum:stateChecksum(event)}));
-  assert.ok(events.some(event=>event.type==='user/message'&&event.data.id===attempt.resultMessageId));
+  let events;
+  await waitFor(async()=>{
+    events=await gui.original(contact.sessionId);
+    return events.some(event=>event.type==='user/message'&&event.data.id===attempt.resultMessageId);
+  },'legacy native result message is durably visible before migration snapshot');
+  const eventProof=events.map(event=>({seq:event.seq,type:event.type,checksum:stateChecksum(event)}));
   await writeFile(join(gui.root,'upgrade-original.json'),JSON.stringify({request,bot,contact,memory,task,completed,attempt,eventProof,legacyControlledRequests:gui.report.requests.length}),{mode:0o600});
   await service.store.drain();
   const originalStoreId=service.store.read().storeId,jsonRoot=gui.app.ctx.storage.backend.get('json').root;

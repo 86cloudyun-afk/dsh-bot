@@ -7,17 +7,37 @@ import {controlledProvider, waitFor} from './stock-gui-runtime.mjs';
 const button = (scope, name) => scope.getByRole('button', {name, exact:true});
 const v11Card = (gui, title) => gui.page.locator('section.card').filter({has:gui.page.getByRole('heading',{name:title,level:2,exact:true})});
 const article = (scope, text) => scope.locator('article.card').filter({hasText:text});
-const details = (scope, title) => scope.locator('details').filter({hasText:title}).first();
+const details = (scope, title) => {
+  const page=typeof scope.page==='function'?scope.page():scope;
+  const exact=new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}$`);
+  return scope.locator('details').filter({has:page.locator('summary').filter({hasText:exact})}).first();
+};
 const hash = text => createHash('sha256').update(text, 'utf8').digest('hex');
 const canonical = value => Array.isArray(value)?`[${value.map(canonical).join(',')}]`:value&&typeof value==='object'?`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`:JSON.stringify(value);
 
 // Observe the real browser RPC. No replacement transport or synthetic response.
 async function uiRpc(gui, action, interact, {errorCode}={}) {
-  const responsePromise=gui.page.waitForResponse(response=>{
-    try {return response.request().postDataJSON()?.payload?.action===action;}
+  const observed={action,requestObserved:false,responseObserved:false,interactionComplete:false};
+  gui.report.v11Ui.lastRpc=observed;
+  const matches=request=>{
+    try {return request.postDataJSON()?.payload?.action===action;}
     catch {return false;}
+  };
+  const onRequest=request=>{if(matches(request))observed.requestObserved=true;};
+  gui.page.on('request',onRequest);
+  const responsePromise=gui.page.waitForResponse(response=>{
+    if(!matches(response.request()))return false;
+    observed.responseObserved=true;
+    return true;
   });
-  const [,response]=await Promise.all([interact(),responsePromise]),request=response.request().postDataJSON().payload,
+  let response;
+  try {
+    [,response]=await Promise.all([(async()=>{await interact();observed.interactionComplete=true;})(),responsePromise]);
+  } finally {
+    gui.page.off('request',onRequest);
+    if(action==='material.page')observed.readerMounted=await button(gui.page,'关闭正文').count()===1;
+  }
+  const request=response.request().postDataJSON().payload,
     reply=(await response.json()).result;
   if(errorCode) {
     assert.equal(reply?.ok,false);
@@ -280,7 +300,9 @@ async function createTask(gui,botId,title,dependsOn=[]) {
 async function finishTask(gui,task) {
   const started=await uiRpc(gui,'task.start',()=>button(v11Card(gui,task.title),'开始／接续').click());
   receipt(gui,started);
-  const snapshot=await gui.until(s=>s.attempts.some(row=>row.taskId===task.taskId&&row.result&&!row.reservationHeld)&&s.outbox.some(row=>row.taskId===task.taskId&&row.state==='accepted'),'v11 real native task result and delivery');
+  const snapshot=await gui.until(s=>s.tasks.find(row=>row.taskId===task.taskId)?.currentAttemptId===started.value.attemptId&&
+    s.attempts.some(row=>row.attemptId===started.value.attemptId&&row.result&&!row.reservationHeld)&&
+    s.outbox.some(row=>row.attemptId===started.value.attemptId&&row.state==='accepted'),'v11 exact newly started native attempt result and delivery');
   const current=snapshot.tasks.find(row=>row.taskId===task.taskId),attempt=snapshot.attempts.find(row=>row.attemptId===current.currentAttemptId);
   assert.ok(gui.report.requests.some(row=>row.sessionId===attempt.sessionId&&row.finish==='stop'));
   assert.ok((await gui.original(gui.contactId)).some(row=>row.type==='user/message'&&row.data.id===attempt.resultMessageId));
@@ -289,6 +311,12 @@ async function finishTask(gui,task) {
     return gui.app.ctx.dshBot.adapter.resources(gui.contactId).settled&&
       (!agent||!agent.inbox.nextTurn.length&&!agent.inbox.nextStep.length);
   },'native result receiver finishes before read-only GUI checks');
+  const resultText=attempt.result.content.map(part=>part.text??'').join('\n');
+  assert.ok(resultText);
+  // The polling UI can still show the running-version relationship draft even
+  // after an independent snapshot observes native settlement. Wait for this
+  // exact new attempt's result to be rendered before reloading that draft.
+  await v11Card(gui,task.title).getByText(resultText,{exact:true}).waitFor();
   return attempt;
 }
 
@@ -324,7 +352,8 @@ async function dependenciesAndHandoff(gui) {
   await gui.expand(v11Card(gui,dependent.title),'前置任务与责任交接');
   const liveRelations=details(v11Card(gui,dependent.title),'前置任务与责任交接');
   // The real component explicitly reloads the relationship draft after execution.
-  if(await button(liveRelations,'重新载入任务关系').count())await button(liveRelations,'重新载入任务关系').click();
+  await button(liveRelations,'重新载入任务关系').waitFor();
+  await button(liveRelations,'重新载入任务关系').click();
   await liveRelations.getByLabel('接手 Bot').selectOption(target);
   await liveRelations.getByLabel('交接说明').fill('V11_GUI_HANDOFF：结算后接手，保留原运行身份。');
   const handed=await uiRpc(gui,'task.handoff',()=>button(liveRelations,'确认交给所选 Bot').click());
@@ -445,7 +474,7 @@ async function briefingAndDiagnostics(gui,task) {
   await button(gui.page,'刷新会话').click();
   await button(gui.page.locator('article').filter({hasText:gui.contactId}),'查看原生会话').click();
   await gui.page.locator('[data-composer-input="true"][contenteditable="true"]').waitFor();
-  const briefing=await uiRpc(gui,'briefing',()=>gui.page.getByRole('button',{name:/^任务简报/}).click());
+  const briefing=await uiRpc(gui,'briefing',()=>gui.page.getByRole('banner').getByRole('button',{name:/^任务简报/}).click());
   const dialog=gui.page.getByRole('dialog',{name:'任务简报',exact:true});
   assert.equal(briefing.request.input.botId,gui.botIds[0]);
   const result=briefing.value.tasks.find(row=>row.taskId===task.taskId);
