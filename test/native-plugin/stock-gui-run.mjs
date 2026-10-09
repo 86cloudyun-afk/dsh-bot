@@ -142,7 +142,7 @@ try {
   gui = await stockGui({ stream });
   await writeFile(
     join(gui.root, "work/heartbeat.mjs"),
-    `import {writeFileSync,existsSync} from 'node:fs';let tick=0;function beat(){if(existsSync(${JSON.stringify(join(gui.root, "work/release"))}))process.exit(0);writeFileSync(${JSON.stringify(join(gui.root, "work/heartbeat.json"))},JSON.stringify({pid:process.pid,tick:++tick}));}beat();setInterval(beat,50);\n`,
+    `import {writeFileSync,renameSync,existsSync} from 'node:fs';const frame=${JSON.stringify(join(gui.root, "work/heartbeat.json"))};let tick=0;function beat(){if(existsSync(${JSON.stringify(join(gui.root, "work/release"))}))process.exit(0);writeFileSync(frame+'.tmp',JSON.stringify({pid:process.pid,tick:++tick}));renameSync(frame+'.tmp',frame);}beat();setInterval(beat,50);\n`,
     { mode: 0o600 },
   );
   mark("standard-install-and-stock-browser");
