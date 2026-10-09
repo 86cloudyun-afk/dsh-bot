@@ -46,7 +46,7 @@ async function modelFreeCollaborationFixture(t) {
     gate={botId:null,entered:deferred(),release:deferred()};
   agents.withoutInitiator=async operation=>operation();
   const adapter={runtimeId:'model-free-runtime',context:{agents,get:()=>undefined,sessions:{flush:async()=>{}}},
-    setContextProvider(){},validateLocation:async value=>value,validateModel:async value=>value,fenceBotAdmissions:()=>()=>{},
+    setContextProvider(){},validateLocation:async value=>value,validateModel:async value=>value,validatePreset:async value=>value??null,fenceBotAdmissions:()=>()=>{},
     resources:sessionId=>({known:agents.has(sessionId),settled:agents.has(sessionId),requests:[]}),
     async createOwned(binding) {
       if(binding.botId===gate.botId) {gate.entered.resolve(binding);await gate.release.promise;throw Object.assign(new Error('Fixture closes pending channel'),{code:'fixture_channel_closed'});}
