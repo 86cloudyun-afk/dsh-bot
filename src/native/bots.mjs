@@ -48,10 +48,11 @@ export class BotDirectory {
   }
   async update(actor,command) {
     command=copy(command);
+    const stamped=this.policy.command(actor,command);
+    requireCondition(actor.kind==='human','access_denied');
+    if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
     const input=command.input;this.policy.require(actor,'bot.update',{kind:'bot',id:input.botId});
     const current=this.store.read().bots[input.botId];requireCondition(current,'not_found');
-    const stamped=this.policy.command(actor,command);
-    if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
     const config=await this.#config(input,current);
     return this.store.transact(stamped,draft=>{
       this.policy.require(actor,'bot.update',{kind:'bot',id:input.botId},draft);
@@ -59,6 +60,74 @@ export class BotDirectory {
       Object.assign(bot,config,{revision:bot.revision+1,configRevision:bot.configRevision+(input.contact||input.execution||Object.hasOwn(input,'executionMode')||Object.hasOwn(input,'presetId')||input.cwd?1:0)});return bot;
     });
   }
+  #requireDeletionSettled(botId,state) {
+    const tasks=Object.values(state.tasks).filter(row=>(row.botId??row.ownerBotId)===botId),
+      taskIds=new Set(tasks.map(row=>row.taskId)),
+      sessions=Object.values(state.sessions).filter(row=>row.botId===botId),
+      sessionIds=new Set(sessions.map(row=>row.sessionId)),
+      attempts=Object.values(state.attempts),
+      attemptIds=new Set(attempts.filter(row=>row.botId===botId||taskIds.has(row.taskId)||sessionIds.has(row.sessionId)).map(row=>row.attemptId));
+    // Pending descendants remain owned work even if their Bot was reassigned.
+    let added;
+    do {added=false;for(const row of attempts)if(attemptIds.has(row.parentAttemptId)&&!attemptIds.has(row.attemptId)){attemptIds.add(row.attemptId);added=true;}}while(added);
+    requireCondition(!tasks.some(row=>row.state==='UNKNOWN'||row.reservationHeld)&&
+      !attempts.some(row=>attemptIds.has(row.attemptId)&&(row.reservationHeld||row.state==='UNKNOWN')),
+      'bot_tasks_unsettled','Bot 的任务或子工作尚未结算；请先查回或停止确切尝试并等待真实结算。');
+    // Collaboration may still need this identity before its channel is created,
+    // or in a later meeting phase after its present channel has settled.
+    requireCondition(!Object.values(state.groups).some(group=>
+      (group.ownerBotId===botId||group.coordinatorBotId===botId||group.members?.some(row=>row.botId===botId&&row.active))&&
+      Object.values(group.rounds??{}).some(row=>['running','UNKNOWN'].includes(row.state)))&&
+      !Object.values(state.meetings).some(meeting=>!['complete','cancelled'].includes(meeting.phase)&&
+        (meeting.ownerBotId===botId||meeting.coordinatorBotId===botId||meeting.participants?.some(row=>row.botId===botId&&row.active))),
+      'bot_tasks_unsettled','Bot 仍参与未结算的群轮次或会议；请先完成、取消会议或查回原始协作状态。');
+    for(const row of attempts)if(attemptIds.has(row.attemptId)&&row.sessionId)sessionIds.add(row.sessionId);
+    requireCondition(!Object.values(state.outbox).some(row=>
+      (row.botId===botId||taskIds.has(row.taskId)||attemptIds.has(row.attemptId)||sessionIds.has(row.sessionId)||sessionIds.has(row.source?.sessionId))&&
+      (['queued','admitting','UNKNOWN'].includes(row.state)||row.state==='blocked'&&row.nativeAdmission!==false)),
+      'bot_delivery_pending','Bot 仍有待投递或入队状态不明的原生消息；请先查回原始投递。');
+    for(const sessionId of sessionIds) {
+      const row=state.sessions[sessionId];
+      requireCondition(!['creating','UNKNOWN','archiving','restoring'].includes(row?.state),
+        'bot_contact_unsettled','Bot 的原生会话状态尚未结算；请先查回原始操作。');
+      const agent=this.adapter.context.agents.get(sessionId),resources=this.adapter.resources(sessionId);
+      requireCondition(agent?.status!=='running'&&!agent?.inbox?.nextTurn?.length&&!agent?.inbox?.nextStep?.length&&
+        (!resources.known||resources.settled),
+        'bot_contact_active','Bot 仍有原生回复、待处理输入或活动资源；请先完成或停止回复并处理队列。');
+    }
+  }
+  #deletionPreconditions(check) {
+    try {return check();}
+    catch(error) {
+      if(['invalid_input','not_found','revision_conflict','bot_deleted','bot_not_deleted','bot_tasks_unsettled','bot_delivery_pending','bot_contact_unsettled','bot_contact_active'].includes(error.code))
+        error.details={...error.details,rejectedBeforeWrite:true};
+      throw error;
+    }
+  }
+  async #setDeleted(actor,command,value) {
+    command=copy(command);const input=command.input,action=value?'bot.delete':'bot.restore';
+    this.#deletionPreconditions(()=>requireCondition(plain(input)&&Object.keys(input).every(key=>['botId','expectedVersion'].includes(key))&&
+      validId(input.botId)&&Number.isSafeInteger(input.expectedVersion)&&input.expectedVersion>=1,'invalid_input'));
+    this.policy.require(actor,action,{kind:'bot',id:input.botId});
+    let releaseFence;
+    try {return await this.store.transact(this.policy.command(actor,command),draft=>{
+      const bot=this.#deletionPreconditions(()=>{
+        this.policy.require(actor,action,{kind:'bot',id:input.botId},draft);
+        const bot=draft.bots[input.botId];requireCondition(bot,'not_found');
+        requireCondition(input.expectedVersion===bot.revision,'revision_conflict');
+        requireCondition(value?!bot.deletedAt:!!bot.deletedAt,value?'bot_deleted':'bot_not_deleted');
+        if(value)this.#requireDeletionSettled(bot.botId,draft);
+        return bot;
+      });
+      if(value) {
+        releaseFence=this.adapter.fenceBotAdmissions(bot.botId);
+        bot.deletedAt=new Date().toISOString();bot.lifecycle='archived';
+      }else {delete bot.deletedAt;bot.lifecycle='paused';}
+      bot.revision++;bot.epoch++;return bot;
+    });}finally{releaseFence?.();}
+  }
+  delete(actor,command) {return this.#setDeleted(actor,command,true);}
+  restore(actor,command) {return this.#setDeleted(actor,command,false);}
   async memoryWrite(actor,command) {
     command=copy(command);const input=command.input;
     requireCondition(plain(input) && Object.keys(input).every(key=>['botId','memoryId','expectedVersion','text','category','source','automatic'].includes(key)) &&

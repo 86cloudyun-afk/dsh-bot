@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const source = await readFile(new URL('../../src/client/client.js', import.meta.url), 'utf8');
 const body = source.slice(source.indexOf('        const t = ctx.locale.bind'), source.indexOf('        const button ='));
-const version = '1.0.1';
+const version = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')).version;
 const original = {operationId:'retained-first-bot', action:'bot.create', input:{name:'First'}};
 
 function client({snapshot = {storeId:'test-store', bots:[], pluginVersion:version, clientProtocol:1}, stored = [], commandReply = {ok:true, value:{botId:'created'}}} = {}) {

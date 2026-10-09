@@ -2,13 +2,13 @@
 
 在你现有的 **官方 DSH** 中创建有名字、长期记忆和独立职责的 Bot。后台任务继续运行时，Bot 仍能聊天、接受新任务、查询进度和响应停止指令。
 
-[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/dsh-bot-1.0.1.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.1/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
+[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/dsh-bot-1.0.2.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
 
 ## 第一版包含什么
 
 | 能力 | 日常使用 |
 | --- | --- |
-| 具名多 Bot | 在「Bot 工作台」创建 Bot 只需名称；职责选填、模型默认沿用 DSH。点击卡片“开始聊天”，或新建对话时选择已有 Bot。重名时用稳定 ID 区分。 |
+| 具名多 Bot | 在「Bot 工作台」创建 Bot 只需名称；职责选填、模型默认沿用 DSH。点击卡片“开始聊天”，或新建对话时选择已有 Bot。首条消息前，输入框上方已显示 Bot 身份；原生会话标题栏持续标明当前 Bot 和会话用途，重名时用稳定 ID 区分。 |
 | 各自的长期记忆 | 同一 Bot 的新会话自动带入身份、记忆与未完成任务；细节按需查阅自有会话。其他 Bot 的记忆分别保存。 |
 | 持续聊天与后台工作 | 联络与执行分开；长任务未结束时，仍能回复新话题并运行另一个短任务。每个 Bot 的父工作、一级子工作和未结算未知任务共用 15 槽。 |
 | 共享与持续授权 | 跨 Bot 默认只读；设置接收 Bot、共享范围及只读／控制权限。授权持续有效，可随时撤销。 |
@@ -16,24 +16,27 @@
 | 内部群与会议 | 多 Bot 群聊；同群可同时开不同议题会议，先独立意见，再讨论、协调者决定和实际行动任务。 |
 | 普通会话管理 | 分页查看普通会话及 Bot 会话；停止当前回复、归档和恢复，任务结果也可以投递到普通会话。 |
 | 每 Bot 模型配置 | 从 DSH 已配置的模型中选择；联络和执行可分别配置，全局默认保持原值。 |
+| 删除与恢复 Bot | 点击“删除”后明确确认；保留 Bot ID、会话、记忆、任务和执行记录。有活动或未知工作、未完成群／会议流程、原生待处理输入或待投递结果时阻止删除。可从“已删除的 Bot”恢复，再单独启用。 |
 
 ## 安装
 
 兼容基线为 **官方 `@deepseek-ai/dsh@0.2.0-rc.2`**、Node **22（≥22.19）或 24 及以上**，验证平台为 Linux 与 macOS。官方插件安装命令需要 `pnpm`。
 
-1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.1) 提供本版源码和验收记录。
+1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.2) 提供本版源码和验收记录。
 2. 将插件安装到你日常使用的 DSH profile。以 `web` 为例：
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.0.1.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.0.2.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
-3. 在原有 DSH 侧栏打开 **Bot 工作台**，填写名称创建 Bot，然后点击卡片上的 **开始聊天**。原生工作工具默认可用，无需逐项配置。
+3. 在原有 DSH 侧栏打开 **Bot 工作台**，填写名称创建 Bot，然后点击卡片上的 **开始聊天**。当前会话已挂载的原生工作工具默认可用，无需逐项配置；实际调用沿用 DSH 权限与审批。preset 挂载 Bash 时即可使用，工具范围见 [使用手册](docs/guide.zh-CN.md)。
 
 完整的依赖检查、首次安装、升级和卸载步骤见 [安装说明](docs/install.zh-CN.md)。版本是否正式交付，以对应 Release 的验收报告为准。
 
-**v1.0.1 修复版**增加界面／服务版本检查和原操作只读查回，修复默认 preset 恢复、模型目录变化及多页面草稿覆盖。旧共享草稿不能重新打开已撤销的共享。已安装 v1.0.0 时，先按安装说明升级，再完全重启 DSH 并刷新浏览器；原 Bot、记忆、会话、任务及操作 ID 保留。
+**v1.0.2 修复版**补齐首条消息前与原生会话标题栏的 Bot 身份显示，增加可恢复的 Bot 删除，并让 `tools.list`／`help.toolCatalog` 展示当前调用会话实际挂载的工具及限制。从 v1.0.0 或 v1.0.1 升级后，完全重启 DSH 并刷新浏览器，核对 **插件 1.0.2 / 服务 1.0.2**；原 Bot、记忆、会话、任务及待查回的原始操作 ID 和回执保留。
+
+此前 **v1.0.1** 已增加界面／服务版本检查和原操作只读查回，修复默认 preset 恢复、模型目录变化及多页面草稿覆盖；旧共享草稿不能重新打开已撤销的共享。
 
 ## 几个使用例子
 

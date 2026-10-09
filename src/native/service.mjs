@@ -183,12 +183,16 @@ export class BotService {
     let result;
     if (action === "help") {
       this.policy.actorKey(actor);
-      return commandHelp(actor, input);
+      return {...commandHelp(actor, input), toolCatalog: this.adapter.nativeToolCatalog(actor.kind === "bot" ? actor.agent : undefined)};
+    } else if (action === "tools.list") {
+      this.policy.actorKey(actor);
+      requireCondition(Object.keys(input).length === 0, "invalid_input");
+      return this.adapter.nativeToolCatalog(actor.kind === "bot" ? actor.agent : undefined);
     } else if (action === "snapshot") result = this.snapshot(actor);
     else if (action === "catalog") {
       this.policy.actorKey(actor);
       result = {
-        ...(await this.adapter.models()),
+        ...(await this.adapter.models(actor.kind === "bot" ? actor.agent : undefined)),
         presets: (await this.adapter.context.get("agentPresets")?.list()) ?? [],
         defaultCwd: this.adapter.context.get("profileContext")?.cwd ?? null,
         defaultModel: copy(this.adapter.context.get("agentDefaultModel")?.currentSelection() ?? null),
@@ -217,6 +221,8 @@ export class BotService {
       const routes = {
         "bot.create": [this.bots, "create"],
         "bot.update": [this.bots, "update"],
+        "bot.delete": [this.bots, "delete"],
+        "bot.restore": [this.bots, "restore"],
         "session.create": [this.sessions, "create"],
         "session.stop": [this.sessions, "stop"],
         "session.archive": [this.sessions, "archive"],

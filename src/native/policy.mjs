@@ -12,6 +12,8 @@ const scopeKeys = { session: "sessions", memory: "memories", task: "tasks" };
 const humanOnly = new Set([
   "bot.create",
   "bot.update",
+  "bot.delete",
+  "bot.restore",
   "share.set",
   "grant.set",
   "group.members",
@@ -267,8 +269,12 @@ export class PermissionPolicy {
     this.#requirePrincipal(actor, action, reference, state);
   }
   #requirePrincipal(actor, action, reference, state) {
+    if (actor.kind !== "human") requireCondition(!humanOnly.has(action), "access_denied");
+    if (["bot.update", "session.create", "session.send", "task.create", "task.start"].includes(action)) {
+      const resource = this.resolve(reference, state);
+      requireCondition(!state.bots[resource.botId]?.deletedAt, "bot_deleted");
+    }
     if (actor.kind === "human") return;
-    requireCondition(!humanOnly.has(action), "access_denied");
     const resource = this.resolve(reference, state);
     requireCondition(
       this.#readAllowed(actor, reference, state, new Set()),

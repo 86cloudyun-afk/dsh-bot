@@ -1,5 +1,7 @@
 import {runSimpleUiChecks} from './stock-simple-ui-checks.mjs';
 import {runRepairChecks} from './stock-repair-checks.mjs';
+import {runChatIdentityChecks} from './stock-chat-identity-checks.mjs';
+import {runBotDeleteChecks} from './stock-bot-delete-checks.mjs';
 import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
@@ -797,6 +799,9 @@ try {
   await runSimpleUiChecks(gui);
   await runRepairChecks(gui);
   await runUiRegressions(gui);
+  mark("chat-identity-and-recoverable-bot-delete");
+  await runChatIdentityChecks(gui);
+  await runBotDeleteChecks(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");
   gui.report.passed = true;
