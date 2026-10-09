@@ -92,7 +92,7 @@ async function memorySearch(gui) {
     await button(gui.page,'添加另一条记忆').click();
     const editor=card(gui,'添加记忆');await editor.getByLabel('内容',{exact:true}).fill(text);
     await uiRpc(gui,'memory.write',()=>button(editor,'保存到所选 Bot').click());
-    await card(gui,'长期记忆').getByText(text,{exact:true}).waitFor();
+    await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${text}$`)}).waitFor();
   }
   await gui.page.getByLabel('所属 Bot',{exact:true}).selectOption(botA);
   const release=deferred(),completed=deferred();let actual;
@@ -109,10 +109,10 @@ async function memorySearch(gui) {
     await waitFor(()=>actual!==undefined,'actual native memory-search response is held');
     assert.equal(actual.ok,true);assert.ok(actual.value.some(row=>gui.app.ctx.dshBot.store.read().memories[row.memoryId]?.text===markerA));
     await gui.page.getByLabel('所属 Bot',{exact:true}).selectOption(botB);
-    await card(gui,'长期记忆').getByText(markerB,{exact:true}).waitFor();
+    await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${markerB}$`)}).waitFor();
     release.resolve();await completed.promise;await rpc;await paint(gui.page);
     assert.equal(await gui.page.getByLabel('所属 Bot',{exact:true}).inputValue(),botB);
-    assert.equal(await card(gui,'长期记忆').getByText(markerB,{exact:true}).count(),1);
+    assert.equal(await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${markerB}$`)}).count(),1);
     assert.equal(await button(gui.page,'显示全部记忆').count(),0);
     gui.check('v111HeldActualBotAMemorySearchCannotReplaceBotBVisibleMemory',true);
   } finally {release.resolve();await gui.page.unroute('**/api/dsh.bot/command',gate);}
