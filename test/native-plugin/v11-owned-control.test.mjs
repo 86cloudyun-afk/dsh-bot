@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {createUserMessage} from '@deepseek-ai/dsh-llm';
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry';
+import SessionTitleService from '@deepseek-ai/dsh-session-title';
 import {businessFixture} from './business-fixture.mjs';
 import {BotService} from '../../src/native/service.mjs';
 import {deferred,eventually,textChunks} from './official-fixture.mjs';
@@ -174,4 +175,12 @@ test('review P1: native tool waiting on a public admission gate remains a live r
  t.after(f.ctx.tools.register({name:'owned-review-gated-tool',description:'Harmless native gated tool',parameters:{type:'object',properties:{},additionalProperties:false},output:{schema:{type:'boolean'},render:()=>[{type:'text',text:'done'}]},execute:async()=>{calls++;return true;}}));
  t.after(f.ctx.on('tools/pre-execute',async(exec,next)=>{if(exec.name==='owned-review-gated-tool'){entered.resolve();await release.promise;}return next();},{global:true}));
  const pending=nativeTool(f,agent,'owned-review-gated-tool');await entered.promise;const before=f.store.read();await assert.rejects(f.sessions.configure(f.human,cmd('session.configure',{sessionId:agent.id,expectedVersion:1,name:'Must await native gate'})),{code:'session_active'});assert.deepEqual(f.store.read(),before);release.resolve();assert.equal((await pending).isError,false);assert.equal(calls,1);assert.equal(f.adapter.resources(agent.id).settled,true);
+});
+
+
+test('stock title service: named contact creation waits for native publication before explicit rename',async t=>{
+ const f=await businessFixture(t);await f.ctx.plugin(SessionTitleService,{fallbackMaxWords:8,fallbackMaxBytes:100,maxTitleBytes:160}).await();const bot=await f.bot(),command=cmd('session.create',{botId:bot.botId,name:'Native published contact'});
+ const row=await f.sessions.create(f.human,command),agent=f.ctx.agents.get(row.sessionId);assert.equal(row.state,'ready');assert.ok(agent);assert.equal(f.ctx.sessions.get(row.sessionId),agent.session);
+ const title=f.ctx.sessionTitle.get(agent.session);assert.equal(title.title,'Native published contact');assert.equal(title.source.kind,'user');
+ const native=await f.adapter.readNative(row.sessionId);assert.equal(native.header.id,row.sessionId);assert.ok(native.events.some(event=>event.type==='session/title'&&event.data.title==='Native published contact'));assert.deepEqual(await f.sessions.create(f.human,command),row);assert.equal(Object.keys(f.store.read().sessions).length,1);assert.equal(f.requests.length,0);
 });

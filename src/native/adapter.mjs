@@ -922,6 +922,7 @@ export class NativeDshAdapter {
       } else handle = await this.#createHandle(binding, setup);
       try {
         requireCondition(!this.#closed, "disposed");
+        if (binding.name !== undefined) this.renameSession(handle.agent.session,binding.name);
         await this.#ctx.sessions.flush(handle.agent.session);
         const registry = this.#ctx.get("workspaceRegistry");
         if (registry && binding.purpose === "contact")
@@ -993,7 +994,6 @@ export class NativeDshAdapter {
         if (presets)
           await presets.mount(agentCtx, binding.presetId ?? undefined);
         await this.bindAgent(agent, binding);
-        if (binding.name !== undefined) this.renameSession(agent.session,binding.name);
         await setup?.(agentCtx, agent);
       },
     });
