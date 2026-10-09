@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {LlmAdapter} from '@deepseek-ai/dsh-llm';
+import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry';
 import {businessFixture} from './business-fixture.mjs';
 
 const source = await readFile(new URL('../../src/client/client.js', import.meta.url), 'utf8');
@@ -19,17 +20,20 @@ class ReasoningProvider extends LlmAdapter {
   async *stream() { throw Error('Model calls are not part of editor tests'); }
 }
 
-function editor(f, bot, defaultModel = preferred, modelRoutes = [route('controlled','model-a'), route('controlled','model-b'), route('reasoning-test','reasoner')]) {
+function editor(f, bot, defaultModel = preferred, modelRoutes = [route('controlled','model-a'), route('controlled','model-b'), route('reasoning-test','reasoner')],presets=[]) {
   let submit;
   const fields = {}, elements = {};
+  const hooks=[];let hook=0;
+  const state={catalog:{defaultModel,defaultCwd:f.dir,presets}};
   const factory = new Function('useState','modelsOptions','state','card','h','button','form','field','advanced','command', editorSource + '; return BotEditor;');
-  const render = factory(value => [value, () => {}],
+  const render = factory(value => {const index=hook++;if(!(index in hooks))hooks[index]=value;return [hooks[index],next=>hooks[index]=typeof next==='function'?next(hooks[index]):next];},
     () => modelRoutes.map(value => ({value})),
-    {catalog:{defaultModel, defaultCwd:f.dir, presets:[]}},
+    state,
     () => {}, () => {}, () => {}, (_label, callback) => {submit = callback;},
     (_label, name, options) => {
       fields[name] = options;
-      elements[name] = {value:String(options.value ?? '')};
+      const initial=elements[name]?.value??String(options.value ?? '');
+      elements[name] = {value:options.options && !options.options.some(row=>row.value===initial) ? options.options[0]?.value??'' : initial};
     }, () => {}, async (action, input) => f.bots[action === 'bot.create' ? 'create' : 'update'](f.human, {
       operationId:crypto.randomUUID(), action, input,
     }));
@@ -40,6 +44,7 @@ function editor(f, bot, defaultModel = preferred, modelRoutes = [route('controll
       elements[name].value = value;
       fields[name].onChange?.({currentTarget:{value, form:{elements}}});
     },
+    rerender(options={}) {modelRoutes=options.modelRoutes??modelRoutes;state.catalog.presets=options.presets??state.catalog.presets;hook=0;render({bot});},
     save(values = {}) {
       for (const [name, value] of Object.entries(values)) elements[name].value = value;
       return submit(new Map(Object.entries(elements).map(([name, element]) => [name, element.value])));
@@ -126,4 +131,45 @@ test('pausing a Bot preserves independently tuned execution sampling', async t =
   }});
   assert.equal(paused.lifecycle, 'paused');
   assert.deepEqual(paused.execution, tuned.execution);
+});
+
+test('an existing contact model missing from the refreshed catalog is not silently replaced',async t=>{
+  const f=await fixture(t), bot=await f.bot('CatalogChanged');
+  const draft=editor(f,bot,preferred,[route('controlled','model-b')]);
+  const saved=await draft.save({name:'Name only'});
+  assert.deepEqual(saved.contact,bot.contact);
+  assert.deepEqual(saved.execution,bot.execution);
+});
+
+test('an explicit execution model missing from the catalog stays visibly selected',async t=>{
+  const f=await fixture(t), bot=await f.bot('ExplicitOldRoute');
+  const explicit=await f.bots.update(f.human,{operationId:'old-execution-route',action:'bot.update',input:{botId:bot.botId,expectedVersion:bot.revision,executionMode:'explicit',execution:{provider:'controlled',model:'model-b'}}});
+  const draft=editor(f,explicit,preferred,[route('controlled','model-a')]);
+  const saved=await draft.save({name:'Name only'});
+  assert.deepEqual(saved.execution,explicit.execution);
+  assert.equal(saved.executionMode,'explicit');
+});
+
+test('catalog refresh preserves the unsaved contact and execution model choices',async t=>{
+  const f=await fixture(t),bot=await f.bot('UnsavedRoute'),draft=editor(f,bot);
+  draft.change('contact',route('controlled','model-b'));
+  draft.change('execution',route('controlled','model-b'));
+  draft.rerender({modelRoutes:[route('controlled','model-a')]});
+  assert.equal(draft.value('contact'),route('controlled','model-b'));
+  assert.equal(draft.value('execution'),route('controlled','model-b'));
+  const saved=await draft.save();
+  assert.equal(saved.contact.model,'model-b');
+  assert.equal(saved.execution.model,'model-b');
+});
+
+test('disappearing presets cannot turn a name-only edit into an implicit default reset',async t=>{
+  const f=await fixture(t);await f.ctx.plugin(AgentPresets,{default:'default'});
+  await f.ctx.agentPresets.register({id:'default',plugins:[]});
+  const remove=await f.ctx.agentPresets.register({id:'custom',plugins:[]});
+  const bot=await f.bots.create(f.human,{operationId:'preset-draft',action:'bot.create',input:{name:'PresetDraft',presetId:'custom',contact:{provider:'controlled',model:'model-a'}}});
+  const draft=editor(f,bot,preferred,[route('controlled','model-a')],await f.ctx.agentPresets.list());
+  await remove();draft.rerender({presets:await f.ctx.agentPresets.list()});
+  assert.equal(draft.value('preset'),'custom');
+  await assert.rejects(draft.save({name:'Name only'}),{code:'agent-preset/not-found'});
+  assert.equal(f.store.read().bots[bot.botId].presetId,'custom');
 });
