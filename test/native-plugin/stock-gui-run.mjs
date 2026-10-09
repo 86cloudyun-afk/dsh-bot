@@ -1,5 +1,7 @@
 import {runSimpleUiChecks} from './stock-simple-ui-checks.mjs';
 import {runRepairChecks} from './stock-repair-checks.mjs';
+import {runChatIdentityChecks} from './stock-chat-identity-checks.mjs';
+import {runBotDeleteChecks} from './stock-bot-delete-checks.mjs';
 import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
@@ -140,7 +142,7 @@ try {
   gui = await stockGui({ stream });
   await writeFile(
     join(gui.root, "work/heartbeat.mjs"),
-    `import {writeFileSync,existsSync} from 'node:fs';let tick=0;function beat(){if(existsSync(${JSON.stringify(join(gui.root, "work/release"))}))process.exit(0);writeFileSync(${JSON.stringify(join(gui.root, "work/heartbeat.json"))},JSON.stringify({pid:process.pid,tick:++tick}));}beat();setInterval(beat,50);\n`,
+    `import {writeFileSync,renameSync,existsSync} from 'node:fs';const frame=${JSON.stringify(join(gui.root, "work/heartbeat.json"))};let tick=0;function beat(){if(existsSync(${JSON.stringify(join(gui.root, "work/release"))}))process.exit(0);writeFileSync(frame+'.tmp',JSON.stringify({pid:process.pid,tick:++tick}));renameSync(frame+'.tmp',frame);}beat();setInterval(beat,50);\n`,
     { mode: 0o600 },
   );
   mark("standard-install-and-stock-browser");
@@ -797,6 +799,9 @@ try {
   await runSimpleUiChecks(gui);
   await runRepairChecks(gui);
   await runUiRegressions(gui);
+  mark("chat-identity-and-recoverable-bot-delete");
+  await runChatIdentityChecks(gui);
+  await runBotDeleteChecks(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");
   gui.report.passed = true;

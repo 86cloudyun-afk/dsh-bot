@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind("dsh.bot"),
           listeners = new Set(),
           lifetime = new AbortController();
-        const pluginVersion = "1.0.1", clientProtocol = 1;
+        const pluginVersion = "1.0.2", clientProtocol = 1;
         let interval,
           refreshing,
           pendingLoaded = false,
@@ -66,6 +66,7 @@ window.__ModuleLoader__.load({
           error: "",
           busy: false,
           chooser: false,
+          deleting: null,
           pending: [],
           retained: [],
           loading: true,
@@ -220,7 +221,7 @@ window.__ModuleLoader__.load({
             return value;
           } catch (error) {
             publish({
-              error: `${error.code ?? "unknown"}：${error.message}${error.beforeWrite ? "\n原始请求未发送。" : error.details?.rejectedBeforeWrite ? `\n提交被拒，未写入 Bot 配置。原始操作 ${request.operationId} 已保留；修正配置后可重新提交，也可先查回原始操作。` : `\n原始操作 ${request.operationId} 已保留，结果未确认，请先查回。`}`,
+              error: `${error.code ?? "unknown"}：${error.message}${error.beforeWrite ? "\n原始请求未发送。" : error.details?.rejectedBeforeWrite ? `\n${["bot.create","bot.update"].includes(request.action) ? "提交被拒，未写入 Bot 配置。" : "提交被拒，未执行本次修改。"}原始操作 ${request.operationId} 已保留；处理提示的问题后可重新提交，也可先查回原始操作。` : `\n原始操作 ${request.operationId} 已保留，结果未确认，请先查回。`}`,
             });
           } finally {
             publish({ busy: false });
@@ -506,9 +507,10 @@ window.__ModuleLoader__.load({
           const [editing, setEditing] = useState(null),
             view = useView();
           const selected = view.snapshot.bots.find(
-            (bot) => bot.botId === editing,
+            (bot) => bot.botId === editing && !bot.deletedAt,
           );
-          const cards = view.snapshot.bots.map((bot) =>
+          useEffect(()=>{if(editing&&!selected)setEditing(null);},[editing,selected]);
+          const cards = view.snapshot.bots.filter(bot=>!bot.deletedAt).map((bot) =>
             resourceCard(
               bot.botId,
               botLabel(bot),
@@ -531,6 +533,7 @@ window.__ModuleLoader__.load({
                   if (contact?.state === "ready") await openSession(contact.sessionId);
                 }, {className: "primary", disabled: view.busy || bot.lifecycle !== "active"}),
                 button("编辑", () => setEditing(bot.botId)),
+                button("删除", event => publish({deleting:{botId:bot.botId,expectedVersion:bot.revision,name:botLabel(bot),returnFocus:event.currentTarget},error:""})),
                 advanced("状态管理", button(bot.lifecycle === "active" ? "暂停" : "启用", () =>
                   command("bot.update", {
                     botId: bot.botId, expectedVersion: bot.revision,
@@ -547,6 +550,13 @@ window.__ModuleLoader__.load({
               "div",
               null,
               ...cards,
+              view.snapshot.bots.some(bot=>bot.deletedAt) && advanced("已删除的 Bot",
+                h("p",{className:"muted"},"原会话、记忆与任务保留。恢复后先暂停，启用后可继续使用同一 Bot。"),
+                ...view.snapshot.bots.filter(bot=>bot.deletedAt).map(bot=>h("article",{key:bot.botId},
+                  h("p",null,botLabel(bot)),
+                  button("恢复",()=>command("bot.restore",{botId:bot.botId,expectedVersion:bot.revision})),
+                )),
+              ),
               editing && button("创建另一个 Bot", () => setEditing(null)),
             ),
             h(BotEditor, {
@@ -1471,14 +1481,63 @@ window.__ModuleLoader__.load({
               (row) => row.botId === binding?.botId,
             );
           if (!bot) return null;
+          const identity=bot.deletedAt
+            ? `${botLabel(bot)} · 已删除 Bot 的历史会话`
+            : binding.purpose === "contact"
+              ? `正在与${botLabel(bot)}聊天${bot.lifecycle === "active" ? "" : " · 已暂停"}`
+              : `${botLabel(bot)} · ${binding.purpose === "execution" ? "工作会话" : "协作会话"}`;
           return h(
             "button",
             {
               type: "button",
-              title: t("manage"),
+              title: `${identity} · ${t("manage")}`,
+              "aria-label": identity,
+              style: {font:"inherit",color:"var(--dsw-alias-label-primary)",background:"var(--dsw-alias-bg-layer-2,transparent)",border:"1px solid var(--dsw-alias-border-l2,currentColor)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",maxWidth:"100%",overflowWrap:"anywhere"},
               onClick: () => ctx.layout.selectPanel("dsh-bot"),
             },
-            botLabel(bot),
+            identity,
+          );
+        }
+        function DeleteDialog() {
+          const view=useView(),request=view.deleting,modal=useRef(null);
+          useEffect(()=>{
+            const element=modal.current;
+            if(!request||!element)return;
+            element.showModal();
+            return ()=>{
+              if(element.open)element.close();
+              if(request.returnFocus?.isConnected)request.returnFocus.focus();
+            };
+          },[request?.botId,request?.expectedVersion]);
+          if(!request)return null;
+          const current=view.snapshot.bots.find(bot=>bot.botId===request.botId);
+          return h("dialog",{ref:modal,className:"dsh-bot-delete-modal","aria-label":"删除 Bot",
+            onCancel:event=>{event.preventDefault();if(!view.busy)publish({deleting:null,error:""});},
+            onKeyDown:event=>{
+              if(event.key!=="Tab")return;
+              const controls=[...event.currentTarget.querySelectorAll('button:not(:disabled),[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])')].filter(node=>node.getClientRects().length);
+              const first=controls[0],last=controls.at(-1);
+              if(!first){event.preventDefault();return;}
+              if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+              else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+            },
+          },
+            h("style",null,".dsh-bot-delete-modal{border:0;padding:0;background:transparent;color:inherit;width:min(480px,calc(100vw - 32px));max-height:90vh;overflow:auto;border-radius:16px}.dsh-bot-delete-modal::backdrop{background:rgba(0,0,0,.35)}.dsh-bot-delete-modal .dsh-bot{height:auto;background:var(--dsw-alias-bg-layer-1,Canvas)}"),
+            h("section",{className:"dsh-bot"},
+              h("style",null,styles),
+              h("h2",null,`删除 ${request.name}？`),
+              h("p",null,"删除后从 Bots 列表和新建聊天选择中移除。原会话、记忆、任务与执行记录保留，可以恢复。"),
+              h("p",{className:"muted"},"正在回复、排队、未完成群/会议或未结算的工作会阻止删除。请先停止并等待结算；未知工作需先查回。"),
+              current?.revision!==request.expectedVersion && h("p",{role:"status"},"Bot 已被其他页面修改，请取消后按最新配置重新确认删除。"),
+              view.error && h("p",{role:"alert",className:"error"},view.error),
+              h("div",{className:"actions"},
+                button("取消",()=>publish({deleting:null,error:""}),{autoFocus:true}),
+                button("确认删除",async()=>{
+                  const deleted=await command("bot.delete",{botId:request.botId,expectedVersion:request.expectedVersion});
+                  if(deleted?.deletedAt)publish({deleting:null});
+                },{disabled:view.busy||!current||current.revision!==request.expectedVersion}),
+              ),
+            ),
           );
         }
         ctx.slots.inject("main", () =>
@@ -1541,6 +1600,12 @@ window.__ModuleLoader__.load({
             Chooser,
           ),
         );
+        ctx.slots.inject("shell.overlay", () =>
+          ctx.slots.register(
+            {name:"shell.overlay",id:"dsh-bot.delete",order:260},
+            DeleteDialog,
+          ),
+        );
         ctx.slots.inject("conversation.session.header.utilities", () =>
           ctx.slots.register(
             {
@@ -1548,6 +1613,12 @@ window.__ModuleLoader__.load({
               id: "dsh-bot.identity",
               order: 250,
             },
+            Header,
+          ),
+        );
+        ctx.slots.inject("conversation.input.dock", () =>
+          ctx.slots.register(
+            {name:"conversation.input.dock",id:"dsh-bot.identity",order:250},
             Header,
           ),
         );
