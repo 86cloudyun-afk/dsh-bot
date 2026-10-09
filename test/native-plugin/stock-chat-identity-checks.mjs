@@ -47,7 +47,7 @@ export async function runChatIdentityChecks(gui) {
   await reopen(secondId);
   await dock().getByRole('button',{name:'正在与另一只Bot聊天',exact:true}).waitFor();
   gui.check('switchingNativeSessionsUsesTheirOwnBotBinding',true);
-  await gui.page.reload({waitUntil:'networkidle'});
+  await gui.page.reload({waitUntil:'domcontentloaded'});
   await dock().getByRole('button',{name:'正在与另一只Bot聊天',exact:true}).waitFor();
   gui.check('botChatIdentitySurvivesBrowserRefresh',true);
   await gui.workbench('Bots');
