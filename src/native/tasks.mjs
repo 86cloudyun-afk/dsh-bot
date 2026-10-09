@@ -145,6 +145,12 @@ export class TaskController {
   #publishAttempt(actor, attempt) {
     const state = this.store.read(), current = state.attempts[attempt.attemptId];
     requireCondition(current, "not_found");
+    this.policy.require(actor, "session.read", {kind: "session", id: current.sessionId}, state);
+    const binding = state.sessions[current.sessionId];
+    requireCondition(binding && this.policy.canReadDerived(actor, binding, state) &&
+      this.policy.canReadDerived(actor, current, state), "access_denied");
+    for (const artifact of [current.result, current.report].filter(Boolean))
+      requireCondition(this.policy.canReadDerived(actor, {...artifact, botId: current.botId}, state), "access_denied");
     for (const input of current.prerequisiteInputs ?? []) {
       if (input.inputId) this.policy.require(actor, "taskInput.read", {kind: "taskInput", id: input.inputId}, state);
       else this.policy.require(actor, "task.read", {kind: "task", id: input.taskId}, state);

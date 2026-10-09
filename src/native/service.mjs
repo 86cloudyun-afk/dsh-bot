@@ -202,11 +202,14 @@ export class BotService {
       const state=this.store.read();
       if(result.attemptId && state.attempts[result.attemptId]) {
         const attempt=state.attempts[result.attemptId],binding=state.sessions[attempt.sessionId];
+        if(attempt.sessionId)this.policy.noteRead(actor,{kind:"session",id:attempt.sessionId});
         requireCondition(!binding || this.policy.canReadDerived(actor,binding,state),"access_denied");
         for(const input of attempt.prerequisiteInputs ?? []) {
           requireCondition(input.inputId,"access_denied");
           this.policy.noteRead(actor,{kind:"taskInput",id:input.inputId});
         }
+        for(const artifact of [attempt.result,attempt.report].filter(Boolean))
+          this.policy.noteDerivedRead(actor,{...artifact,botId:attempt.botId},{sessionId:attempt.sessionId});
       }
       requireCondition(
         this.policy.canReadDerived(actor, result),

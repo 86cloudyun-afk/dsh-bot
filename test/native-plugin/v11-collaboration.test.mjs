@@ -221,3 +221,32 @@ test('review: later admissions reuse the immutable snapshot while retaining thei
   assert.deepEqual(f.store.read().taskInputs[saved.inputId],saved);assert.equal(Object.keys(f.store.read().taskInputs).length,1);
   await eventually(()=>!f.store.read().attempts[second.attemptId].reservationHeld);
 });
+
+test('final review: replay of an own saved result is denied when only its original execution session read is revoked',async t=>{
+  const f=await taskFixture(t),reader=await f.bot('Reader'),executor=await f.bot('Executor'),contact=await f.sessions.create(f.human,command('session.create',{botId:reader.botId},'own-result-reader')),actor=f.policy.fromAgent(f.ctx.agents.get(contact.sessionId)),task=await f.task(executor,'OwnResult');
+  await f.policy.authorizeShare(f.human,command('grant.set',{grantId:'own-result-control',ownerBotId:executor.botId,recipientBotId:reader.botId,level:'control',active:true,scope:{tasks:[task.taskId]}},'own-result-grant'));
+  const request=command('task.start',{taskId:task.taskId,expectedVersion:1},'own-result-start'),attempt=await f.service.dispatch(actor,request);
+  await eventually(()=>!f.store.read().attempts[attempt.attemptId].reservationHeld);assert.ok(f.store.read().attempts[attempt.attemptId].result);
+  await f.policy.authorizeShare(f.human,command('share.set',{botId:executor.botId,share:{enabled:true,receivers:['*'],scope:{tasks:['*'],sessions:[],memories:['*'],materials:['*']}}},'own-result-revoke-session'));
+  assert.equal(f.policy.canRead(actor,{kind:'task',id:task.taskId}),true);assert.equal(f.policy.canRead(actor,{kind:'session',id:attempt.sessionId}),false);
+  assert.equal(f.service.snapshot(actor).attempts.some(row=>row.attemptId===attempt.attemptId),false);
+  const count=f.requests.length;await assert.rejects(f.tasks.start(actor,request),{code:'access_denied'});await assert.rejects(f.service.dispatch(actor,request),{code:'access_denied'});
+  assert.equal(f.requests.length,count);assert.equal(f.store.read().tasks[task.taskId].currentAttemptId,attempt.attemptId);assert.equal(Object.keys(f.store.read().attempts).length,1);
+});
+
+test('final review: replay checks result and report provenance independently without rewriting either saved artifact',async t=>{
+  const gate=deferred();t.after(()=>gate.resolve());
+  const f=await taskFixture(t,{stream:async function*(){await gate.promise;yield*textChunks('Public authentic execution result');}}),reader=await f.bot('Reader'),executor=await f.bot('Executor'),privateBot=await f.bot('Private'),contact=await f.sessions.create(f.human,command('session.create',{botId:reader.botId},'artifact-reader')),actor=f.policy.fromAgent(f.ctx.agents.get(contact.sessionId)),task=await f.task(executor,'ArtifactResult');
+  await f.policy.authorizeShare(f.human,command('grant.set',{grantId:'artifact-control',ownerBotId:executor.botId,recipientBotId:reader.botId,level:'control',active:true,scope:{tasks:[task.taskId]}},'artifact-grant'));
+  const request=command('task.start',{taskId:task.taskId,expectedVersion:1},'artifact-start'),attempt=await f.service.dispatch(actor,request);
+  await eventually(()=>f.requests.length===1);
+  const memory=await f.bots.memoryWrite(f.human,command('memory.write',{botId:privateBot.botId,text:'Private report input'},'private-report-memory')),executionActor=f.policy.fromAgent(f.ctx.agents.get(attempt.sessionId));
+  f.policy.noteRead(executionActor,{kind:'memory',id:memory.memoryId});
+  await f.tasks.submit(executionActor,command('task.submit',{taskId:task.taskId,attemptId:attempt.attemptId,epoch:attempt.epoch,report:'Report derived from private memory'},'private-report-submit'));
+  gate.resolve();await eventually(()=>!f.store.read().attempts[attempt.attemptId].reservationHeld);
+  await f.policy.authorizeShare(f.human,command('share.set',{botId:privateBot.botId,share:{enabled:false,receivers:[],scope:{}}},'private-report-revoke'));
+  const saved=structuredClone(f.store.read().attempts[attempt.attemptId]);
+  assert.equal(f.policy.canReadDerived(actor,{...saved.result,botId:executor.botId}),true);assert.equal(f.policy.canReadDerived(actor,{...saved.report,botId:executor.botId}),false);
+  await assert.rejects(f.tasks.start(actor,request),{code:'access_denied'});await assert.rejects(f.service.dispatch(actor,request),{code:'access_denied'});
+  assert.deepEqual(f.store.read().attempts[attempt.attemptId].result,saved.result);assert.deepEqual(f.store.read().attempts[attempt.attemptId].report,saved.report);assert.equal(f.requests.length,1);
+});

@@ -187,6 +187,7 @@ export class PermissionPolicy {
       collect(task?.acceptanceEvidence);collect(attempt?.result);collect(attempt?.report);
     }
     const admitted=state.attempts[authority.attemptId];
+    if(admitted?.sessionId && admitted.taskId===authority.taskId && admitted.botId===authority.botId)add({kind:'session',id:admitted.sessionId});
     if(admitted && admitted.taskId === authority.taskId) for(const snapshot of admitted.prerequisiteInputs ?? []) {
       const input=state.taskInputs[snapshot.inputId];
       if(input && (authority.recipe.dependsOn ?? []).includes(input.taskId)) {

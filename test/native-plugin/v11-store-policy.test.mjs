@@ -210,8 +210,12 @@ test('schedule fixed input reads are limited to its exact admitted attempt',asyn
   await f.store.transact({operationId:'scheduled-fixed-inputs',action:'seed'},d=>{
     for(const inputId of ['used','history'])d.taskInputs[inputId]={inputId,botId:'b',taskId:'tb',attemptId:'accepted',epoch:1,attemptSessionId:'sb',source:{kind:'human'},origins:[]};
     d.tasks.st={taskId:'st',...recipe,createdBy:{kind:'schedule',occurrenceId:'oc',scheduleId:'sc'},source:{kind:'schedule',occurrenceId:'oc',scheduleId:'sc',sessionId:'sa'},originSessionId:'sa'};
-    d.attempts['scheduled-at']={attemptId:'scheduled-at',taskId:'st',sessionId:'sa',prerequisiteInputs:[{inputId:'used'}]};return null;
+    d.sessions['scheduled-session']={sessionId:'scheduled-session',botId:'a',purpose:'execution',state:'ready'};
+    d.sessions['unrelated-execution']={sessionId:'unrelated-execution',botId:'a',purpose:'execution',state:'ready'};
+    d.attempts['scheduled-at']={attemptId:'scheduled-at',taskId:'st',botId:'a',sessionId:'scheduled-session',prerequisiteInputs:[{inputId:'used'}]};return null;
   });
   f.policy.registerScheduleAuthority(id=>({occurrenceId:id,scheduleId:'sc',consentVersion:1,botId:'a',sessionId:'sa',taskId:'st',attemptId:'scheduled-at',recipe,recipeHash:digest(recipe),executionConsent,origins:[],createOperationId:'c',startOperationId:'s'}));
   const actor=f.policy.fromScheduleOccurrence('oc');assert.equal(f.policy.canRead(actor,{kind:'taskInput',id:'used'}),true);assert.equal(f.policy.canRead(actor,{kind:'taskInput',id:'history'}),false);
+  assert.equal(f.policy.canRead(actor,{kind:'session',id:'scheduled-session'}),true);
+  assert.equal(f.policy.canRead(actor,{kind:'session',id:'unrelated-execution'}),false);
 });
