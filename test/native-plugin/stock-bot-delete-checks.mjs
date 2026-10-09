@@ -12,6 +12,8 @@ export async function runBotDeleteChecks(gui) {
   const memory=(await gui.until(s=>s.memories.some(row=>row.botId===bot.botId),'delete fixture memory')).memories.find(row=>row.botId===bot.botId);
   await gui.workbench('Bots');await gui.card(bot.name).getByRole('button',{name:'开始聊天',exact:true}).click();
   const contact=(await gui.until(s=>s.sessions.some(row=>row.botId===bot.botId),'delete fixture contact')).sessions.find(row=>row.botId===bot.botId);
+  await gui.page.getByRole('heading',{name:'Bot 工作台',exact:true}).waitFor({state:'hidden'});
+  await gui.page.locator('[data-slot="conversation.input.dock"]').getByRole('button',{name:`正在与${bot.name}聊天`,exact:true}).waitFor();
   await gui.workbench('Bots');
   await gui.card(bot.name).getByRole('button',{name:'编辑',exact:true}).click();
   await gui.card('编辑 Bot').waitFor();
