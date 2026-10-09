@@ -58,42 +58,30 @@ export class GroupMeetingController {
       "rounds",
       "maxRequests",
     ]);
-    const input = command.input;
+    return this.store.transact(this.policy.command(actor, command), (draft) =>
+      this.createGroupInDraft(actor, command.input, draft),
+    );
+  }
+  createGroupInDraft(actor, input, draft) {
+    this.#human(actor);
     requireCondition(
-      typeof input.name === "string" &&
-        input.name.trim().length > 0 &&
-        input.name.length <= 100 &&
-        Number.isSafeInteger(input.rounds ?? 1) &&
-        (input.rounds ?? 1) >= 1 &&
-        (input.rounds ?? 1) <= 3 &&
-        Number.isSafeInteger(input.maxRequests ?? 12) &&
-        (input.maxRequests ?? 12) >= 1 &&
-        (input.maxRequests ?? 12) <= 60,
+      plain(input) &&
+        Object.keys(input).every(key => ["name", "botIds", "coordinatorBotId", "rounds", "maxRequests"].includes(key)) &&
+        typeof input.name === "string" && input.name.trim().length > 0 && input.name.length <= 100 &&
+        Number.isSafeInteger(input.rounds ?? 1) && (input.rounds ?? 1) >= 1 && (input.rounds ?? 1) <= 3 &&
+        Number.isSafeInteger(input.maxRequests ?? 12) && (input.maxRequests ?? 12) >= 1 && (input.maxRequests ?? 12) <= 60,
       "invalid_group",
     );
-    return this.store.transact(this.policy.command(actor, command), (draft) => {
-      this.#members(input.botIds, input.coordinatorBotId, draft);
-      const groupId = `group_${randomUUID()}`;
-      const group = {
-        groupId,
-        name: input.name.trim(),
-        ownerBotId: input.coordinatorBotId,
-        coordinatorBotId: input.coordinatorBotId,
-        version: 1,
-        epoch: 1,
-        members: input.botIds.map((botId) => ({
-          botId,
-          active: true,
-          epoch: 1,
-        })),
-        messages: [],
-        rounds: {},
-        roundLimit: input.rounds ?? 1,
-        maxRequests: input.maxRequests ?? 12,
-      };
-      draft.groups[groupId] = group;
-      return group;
-    });
+    this.#members(input.botIds, input.coordinatorBotId, draft);
+    const groupId = `group_${randomUUID()}`;
+    const group = {
+      groupId, name: input.name.trim(), ownerBotId: input.coordinatorBotId,
+      coordinatorBotId: input.coordinatorBotId, version: 1, epoch: 1,
+      members: input.botIds.map(botId => ({botId, active: true, epoch: 1})),
+      messages: [], rounds: {}, roundLimit: input.rounds ?? 1, maxRequests: input.maxRequests ?? 12,
+    };
+    draft.groups[groupId] = group;
+    return group;
   }
   async post(actor, command) {
     requireCondition(!this.#closed, "disabled");
