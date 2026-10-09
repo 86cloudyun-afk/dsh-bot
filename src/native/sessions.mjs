@@ -87,9 +87,10 @@ export class SessionOwnership {
   #requireSettled(row,native,state=this.store.read()) {
     requireCondition(row?.state === "ready" && !this.adapter.isArchived(row.sessionId),"session_not_ready");
     const agent=this.adapter.context.agents.get(row.sessionId),resources=this.adapter.resources(row.sessionId);
+    requireCondition(resources.known,"resource_identity_unknown");
     requireCondition(agent?.status !== "running" && !agent?.inbox?.nextTurn?.length && !agent?.inbox?.nextStep?.length &&
       native.openTurn === null && !native.inbox["next-turn"].length && !native.inbox["next-step"].length &&
-      (!resources.known || resources.settled),"session_active");
+      resources.settled,"session_active");
     const jobs=this.adapter.context.get("jobs")?.list(row.sessionId) ?? [], terminals=this.adapter.context.get("terminals");
     requireCondition(!jobs.some(job=>job.owner === row.sessionId && ["running","stopping"].includes(job.status)) &&
       (!agent || !terminals?.hasOwnerActivity(agent)),"session_active");
@@ -177,9 +178,10 @@ export class SessionOwnership {
     const native=await this.adapter.inspectSession(input.sessionId,signal),boundary=input.atSeq ?? native.events.findLast(event=>event.type === "turn/end")?.seq;
     requireCondition(boundary !== undefined && native.events[boundary]?.seq === boundary && native.events.slice(0,boundary+1).every((event,index)=>event.seq === index),"fork_unavailable");
     this.policy.require(actor,"session.read",reference);this.policy.noteRead(actor,reference);
-    const config=await this.#contactConfig(input,{...source,presetId:native.presetId});
-    // Seeded preset-selection events must agree with new mounted composition; native select is locked after a historical turn.
-    requireCondition(config.presetId === native.presetId,"fork_preset_immutable");
+    const prefixPresetId=this.adapter.effectivePresetAt(native,boundary),
+      config=await this.#contactConfig(input,{...source,presetId:prefixPresetId});
+    // The chosen inherited prefix defines its native composition, including historical blank-session selections.
+    requireCondition(config.presetId === prefixPresetId,"fork_preset_immutable");
     const origins=[...new Map([...(source.origins ?? []),...this.policy.readDependencies(actor),reference].map(ref=>[digest(ref),ref])).values()];
     signal?.throwIfAborted();
     const intent=await this.store.transact(stamped,draft=>{
