@@ -96,7 +96,7 @@ export async function mountBotRoutes(ctx, { policy, service, isClosed }) {
                     error.code ??
                     (request.signal.aborted ? "cancelled" : "internal_error"),
                   message: error.message,
-                  details: {},
+                  details: error.details?.rejectedBeforeWrite === true ? {rejectedBeforeWrite:true} : {},
                 },
               };
             }
