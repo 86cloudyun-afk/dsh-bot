@@ -228,7 +228,7 @@ async function memoryAndMaterials(gui, botId) {
   assert.equal(page.value.endOffset,chunk.endOffset);
   assert.equal(page.value.contentHash,hit.contentHash);
   const reader=v11Card(gui,'V11_GUI_MATERIAL');
-  await waitFor(async()=>await reader.locator('pre').innerText()===hit.excerpt,'rendered exact citation');
+  await waitFor(async()=>await reader.locator('pre').textContent()===hit.excerpt,'rendered exact citation');
   gui.check('v11MaterialUploadSearchAndCitationUseExactUnicodeRangesLinesAndHash',true);
   await button(reader,'关闭正文').click();
 
@@ -482,7 +482,8 @@ export async function runV11UiChecks(gui) {
   assert.equal(state.pluginVersion,'1.1.0');
   assert.equal(state.clientProtocol,2);
   assert.equal(gui.app.ctx.dshBot.store.read().schema,2);
-  gui.report.v11Ui={realBrowser:true,apiWritesForV11Workflows:0,realTimer:true};
+  const originalChecks=Object.keys(gui.report.checks).length;
+  gui.report.v11Ui={realBrowser:true,apiWritesForV11Workflows:0,realTimer:true,originalChecksBeforeV11:originalChecks};
   const stage=name=>{gui.report.v11Ui.stage=name;console.log(JSON.stringify({v11Stage:name}));};
   stage('memory-materials-and-context');
   await memoryAndMaterials(gui,gui.botIds[0]);
@@ -497,5 +498,6 @@ export async function runV11UiChecks(gui) {
   stage('owned-session-configure-and-seeded-fork');
   await ownSessionControls(gui);
   gui.check('v11UiNoExternalModelRequests',gui.report.realModelRequests===0);
+  gui.report.v11Ui.checksAdded=Object.keys(gui.report.checks).length-originalChecks;
   await gui.save('v11-native-workbench');
 }
