@@ -224,9 +224,14 @@ async function memoryAndMaterials(gui, botId) {
   const materialText='# GUI 引用验收\r\n\r\n第一段记录 🧭 Unicode 边界。\r\n\r\n## CITATION_MARKER\r\n准确引用这段原文，保持行号与哈希。\r\n';
   const ingest=v11Card(gui,'收录资料');
   await ingest.getByLabel('UTF-8 文本或 Markdown 文件').setInputFiles({name:'v11-citations.md',mimeType:'text/markdown',buffer:Buffer.from(materialText)});
+  // File decoding updates the draft and remounts its form. A title entered
+  // before that real upload finishes would be replaced by the filename.
+  await waitFor(async()=>await ingest.getByLabel('正文',{exact:true}).inputValue()===materialText.replace(/\r\n?/g,'\n')&&
+    await ingest.getByLabel('资料标题',{exact:true}).inputValue()==='v11-citations.md','uploaded source and filename are rendered before editing its title');
   await ingest.getByLabel('资料标题').fill('V11_GUI_MATERIAL');
   const material=await uiRpc(gui,'material.ingest',()=>button(ingest,'保存不可变资料').click());
   receipt(gui,material);
+  assert.equal(material.value.title,'V11_GUI_MATERIAL');
   assert.equal(material.value.text,materialText);
   assert.equal(material.value.contentHash,hash(materialText));
   assert.equal(material.value.fileName,'v11-citations.md');
@@ -235,6 +240,7 @@ async function memoryAndMaterials(gui, botId) {
   const hits=await uiRpc(gui,'material.search',()=>button(search,'搜索资料').click());
   const hit=hits.value.find(row=>row.docId===material.value.docId);
   assert.ok(hit);
+  assert.equal(hit.title,'V11_GUI_MATERIAL');
   const chunk=material.value.chunks.find(row=>row.chunkId===hit.chunkId);
   assert.ok(chunk);
   assert.equal(hit.excerpt,materialText.slice(chunk.startOffset,chunk.endOffset));
@@ -377,6 +383,7 @@ async function templates(gui) {
   await gui.expand(gui.page,'从团队模板创建');
   const template=details(gui.page,'从团队模板创建');
   await template.getByLabel('模板',{exact:true}).selectOption('development-testing');
+  if(await button(template,'按最新工作台重新准备模板').count())await button(template,'按最新工作台重新准备模板').click();
   await template.locator('[name="developer.name"]').fill('V11_GUI_TEMPLATE_DEV');
   await template.locator('[name="tester.name"]').fill('V11_GUI_TEMPLATE_QA');
   for(const role of ['developer','tester'])await template.locator(`[name="${role}.model"]`).selectOption(JSON.stringify({provider:controlledProvider,model:'model-a'}));
@@ -516,10 +523,13 @@ export async function runV11UiChecks(gui) {
   const stage=name=>{gui.report.v11Ui.stage=name;console.log(JSON.stringify({v11Stage:name}));};
   stage('memory-materials-and-context');
   await memoryAndMaterials(gui,gui.botIds[0]);
-  stage('task-dependencies-and-handoff');
-  const task=await dependenciesAndHandoff(gui);
+  // The template editor deliberately freezes its starting store revision.
+  // Prepare it in the quiescent knowledge phase before native task/result
+  // delivery adds asynchronous receipts and notices to the store.
   stage('atomic-team-template');
   await templates(gui);
+  stage('task-dependencies-and-handoff');
+  const task=await dependenciesAndHandoff(gui);
   stage('real-timer-reminder-and-explicit-cleanup');
   await schedules(gui);
   stage('briefing-and-diagnostics');
