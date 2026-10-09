@@ -1,3 +1,4 @@
+import { buildForkSeed } from "@deepseek-ai/dsh-session";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import {
   childSessionMeta,
@@ -15,10 +16,10 @@ import {
 import { randomUUID } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { copy, plain, requireCondition } from "./store.mjs";
+import { copy, digest, plain, requireCondition } from "./store.mjs";
 
 const blockedNativeTools = new Set([
-  "subagent", "plugin_manager", "cordis_inspect", "session_manager",
+  "subagent", "plugin_manager",
 ]);
 const managedDelegationTools = new Set([
   "subagent", "subagent_fork", "subagent_codex", "subagent_claude_code",
@@ -46,6 +47,8 @@ export class NativeDshAdapter {
   #children;
   #activity = new Map();
   #botAdmissionFences = new Set();
+  #sessionAdmissionFences = new Set();
+  #ordinarySelections = new Map();
   constructor(ctx, { store, policy } = {}) {
     this.#ctx = ctx;
     this.#store = store;
@@ -66,7 +69,11 @@ export class NativeDshAdapter {
               binding?.botId &&
                 (!parentId ||
                   (binding.attemptId &&
-                    state.attempts[binding.attemptId]?.reservationHeld)),
+                    state.attempts[binding.attemptId]?.reservationHeld) ||
+                  (binding.purpose === "contact" && !binding.attemptId &&
+                    binding.source?.kind === "session" && binding.source.sessionId === parentId &&
+                    agent.session.header.isSeeded === true &&
+                    agent.session.inheritedEventCount === binding.source.eventSeq + 1)),
               "work_admission_required",
             );
           if (binding?.botId && this.#records.get(agent.id)?.agent !== agent) {
@@ -287,6 +294,11 @@ export class NativeDshAdapter {
       this.#botAdmissionFences.delete(botId);
     };
   }
+  fenceSessionAdmissions(sessionId) {
+    requireCondition(!this.#sessionAdmissionFences.has(sessionId), "operation_pending");
+    this.#sessionAdmissionFences.add(sessionId);
+    return () => this.#sessionAdmissionFences.delete(sessionId);
+  }
   #authorize(
     record,
     { ignoreModelIntent = false, state = this.#store.read() } = {},
@@ -298,6 +310,7 @@ export class NativeDshAdapter {
     const binding = state.sessions[record.agent.id],
       bot = state.bots[binding?.botId];
     requireCondition(!this.#botAdmissionFences.has(binding?.botId), "bot_deletion_pending");
+    requireCondition(!this.#sessionAdmissionFences.has(record.agent.id), "session_configuration_pending");
     requireCondition(
       this.#ctx.agents.get(record.agent.id) === record.agent &&
         binding?.epoch === record.binding.epoch &&
@@ -408,10 +421,12 @@ export class NativeDshAdapter {
             this.#authorize(record, {
               ignoreModelIntent: binding.purpose === "contact",
             });
-            if (binding.purpose === "contact")
+            if (binding.purpose === "contact") {
+              const current = this.#store.read().sessions[agent.id];
               record.model = await this.validateModel(
-                this.#store.read().bots[binding.botId].contact,
+                current.modelMode === "explicit" ? current.model : this.#store.read().bots[binding.botId].contact,
               );
+            }
             record.selection.current = Object.freeze(copy(record.model));
             record.assemblySignal = context.signal;
           }
@@ -467,6 +482,7 @@ export class NativeDshAdapter {
         const context = await this.#contextProvider(
           agent,
           this.#store.read().sessions[agent.id],
+          { messages: copy(decision.messages), turn: payload.turn, step: payload.step },
         );
         if (context === record.previousContext) return decision;
         record.previousContext = context;
@@ -605,12 +621,31 @@ export class NativeDshAdapter {
             const dto = await this.#service.dispatch(actor, args, exec.signal),
               receiptId = randomUUID();
             record.outputs.set(receiptId, dto);
+            if (args.action === "bot.update" && args.input?.botId === actor.botId &&
+                ["paused", "archived"].includes(args.input?.lifecycle)) {
+              const saved = this.#store.read().operations[args.operationId]?.result;
+              if (saved?.botId === actor.botId && saved.lifecycle === args.input.lifecycle)
+                record.lifecycleReceipt = { receiptId, botId: actor.botId, revision: saved.revision };
+            }
             return { receiptId };
           },
           finalizeContent: (_exec, result) => {
             record.outputs.delete(result.value?.receiptId);
+            const receipt = record.lifecycleReceipt;
+            delete record.lifecycleReceipt;
             try {
-              this.#authorize(record);
+              if (receipt?.receiptId === result.value?.receiptId) {
+                const state = this.#store.read(), current = state.bots[receipt.botId],
+                  actor = this.#policy.fromAgent(agent);
+                requireCondition(!this.#closed && !this.#closing && !record.closed &&
+                  this.#ctx.agents.get(agent.id) === agent &&
+                  state.sessions[agent.id]?.epoch === record.binding.epoch &&
+                  current?.revision === receipt.revision &&
+                  ["paused", "archived"].includes(current.lifecycle), "stale_agent");
+                this.#policy.require(actor, "bot.read", {kind:"bot",id:receipt.botId}, state);
+                for (const ref of [...(state.sessions[agent.id].origins ?? []), ...this.#policy.readDependencies(actor)])
+                  this.#policy.require(actor, `${ref.kind}.read`, ref, state);
+              } else this.#authorize(record);
               return result.content;
             } catch (error) {
               return [
@@ -701,6 +736,98 @@ export class NativeDshAdapter {
     const resolved = await this.#ctx.llm.resolveCallConfig(copy(input));
     return copy(resolved);
   }
+  async validatePreset(presetId) {
+    const presets = this.#ctx.get("agentPresets");
+    const id = presetId ?? presets?.defaultId ?? null;
+    requireCondition(id === null || typeof id === "string" && id.length > 0 && id.length <= 160, "invalid_preset");
+    requireCondition(id === null || presets, "preset_unavailable");
+    if (!presets) return null;
+    const preset = await presets.resolve(id ?? undefined);
+    requireCondition(!preset.broken, "preset_unavailable");
+    return preset.id;
+  }
+  async inspectSession(sessionId, signal) {
+    const live = this.#ctx.agents.get(sessionId);
+    if (live) await this.#ctx.sessions.flush(live.session);
+    const history = await this.readNative(sessionId, signal);
+    let openTurn = null, lastTurn = 0, presetId = history.header.agentPreset ?? null;
+    const inbox = {"next-turn": [], "next-step": []};
+    for (const event of history.events) {
+      if (event.type === "turn/start") { openTurn = event.data.turn; lastTurn = Math.max(lastTurn,event.data.turn); }
+      if (event.type === "turn/end" && event.data.turn === openTurn) openTurn = null;
+      if (event.type === "agent-preset/selected") presetId = event.data.agentPreset;
+      if (event.type === "agent/inbox/spliced") {
+        const data = event.data, queue = inbox[data.target];
+        if (queue) queue.splice(data.start,data.removedCount ?? 0,...(data.inserted ?? []));
+      }
+    }
+    return {...history, openTurn, lastTurn, inbox, presetId};
+  }
+  renameSession(session, name) {
+    const titles = this.#ctx.get("sessionTitle");
+    if (titles) return titles.rename(session, name);
+    // The public title event is valid even in minimal runtimes without the title service.
+    const event = session.append("session/title", {title:name.trim(),messageSeqs:[],source:{kind:"user"}});
+    return {title:name.trim(),eventSeq:event.seq};
+  }
+  async configureOwned(binding, config, signal) {
+    let agent = this.#ctx.agents.get(binding.sessionId);
+    if (!agent) {
+      if (binding.botId) agent = await this.resumeOwned({...binding,state:"ready"});
+      else {
+        const handle = await this.#ctx.agents.resume({resumeSessionId:binding.sessionId,signal,
+          ...(binding.model ? {agentOptions:copy(binding.model)} : {}),
+          setup:async (ctx)=>{const presets=this.#ctx.get("agentPresets");if(presets)await presets.mount(ctx,binding.presetId ?? undefined);}});
+        this.#handles.set(binding.sessionId,handle);agent=handle.agent;
+      }
+    }
+    requireCondition(agent.status === "idle" && !agent.inbox.nextTurn.length && !agent.inbox.nextStep.length,"session_active");
+    signal?.throwIfAborted();
+    const evidence = {};
+    try {
+    if (Object.hasOwn(config,"presetId") && config.presetId !== binding.presetId) {
+      const presets = this.#ctx.get("agentPresets");
+      requireCondition(presets, "preset_unavailable");
+      evidence.presetId = await presets.select(agent, config.presetId);
+      evidence.presetSeq = agent.session.seq - 1;
+    }
+    if (config.name !== undefined) {
+      const title = this.renameSession(agent.session, config.name);
+      evidence.name = title.title; evidence.titleSeq = title.eventSeq;
+    }
+    if (config.model !== undefined) {
+      let record = this.#records.get(binding.sessionId);
+      if (!binding.botId) {
+        record = this.#ordinarySelections.get(binding.sessionId);
+        if (record?.agent !== agent) {
+          record?.dispose();
+          record = {agent,selection:{current:undefined}};
+          const selectionDisposer = installModelSelection(agent.ctx,record.selection);
+          const requestDisposer = agent.ctx.on("agent/request",async (_payload,next)=>{
+            const result=await next(),selected=record.selection.assembled;
+            return selected ? {...result,...selected} : result;
+          },{prepend:true});
+          record.dispose=()=>{selectionDisposer();requestDisposer();};
+          this.#ordinarySelections.set(binding.sessionId,record);
+        }
+      }
+      requireCondition(record?.agent === agent, "resource_identity_unknown");
+      record.model = copy(config.model);
+      record.selection.current = Object.freeze(copy(config.model));
+      record.uiIntent = {provider:config.model.provider,model:config.model.model,
+        ...(config.model.reasoningEffort === undefined ? {} : {reasoningEffort:config.model.reasoningEffort})};
+      const event = agent.session.append("model/selection",copy(record.uiIntent));
+      evidence.modelSeq = event.seq;
+      evidence.model = copy(config.model);
+      evidence.effective = "next-step";
+    }
+    await this.#ctx.sessions.flush(agent.session);
+    return evidence;
+    } catch (error) {
+      error.details = {...error.details, nativeConfigEvidence:copy(evidence)};
+      throw error;
+    }
+  }
   async validateLocation(cwd) {
     requireCondition(typeof cwd === "string" && isAbsolute(cwd), "invalid_cwd");
     const path = await realpath(cwd);
@@ -755,12 +882,22 @@ export class NativeDshAdapter {
   async #createHandle(binding, setup, { parent, descriptor, signal } = {}) {
     const model = copy(binding.model),
       presets = this.#ctx.get("agentPresets");
+    let fork = {};
+    if (binding.purpose === "contact" && binding.source?.kind === "session") {
+      const source = await this.inspectSession(binding.source.sessionId, signal), boundary = binding.source.eventSeq;
+      requireCondition(source.events[boundary]?.seq === boundary &&
+        digest({header:source.header,events:source.events.slice(0,boundary+1)}) === binding.source.checksum, "fork_source_changed");
+      requireCondition(source.presetId === binding.presetId, "fork_preset_immutable");
+      fork = {seed:buildForkSeed(source.events,boundary),inheritedEventCount:boundary+1};
+    }
     return this.#ctx.agents.create({
       sessionId: binding.sessionId,
+      ...fork,
       ...(parent ? { parentAgent: parent } : {}),
       ...(signal ? { signal } : {}),
       meta: {
         cwd: binding.cwd,
+        ...(binding.purpose === "contact" && binding.source?.kind === "session" ? {parentSession:binding.source.sessionId,isSeeded:true} : {}),
         ...(binding.presetId ? { agentPreset: binding.presetId } : {}),
         ...(parent
           ? childSessionMeta(parent, resolveChildDepth(parent, 1), false)
@@ -793,6 +930,7 @@ export class NativeDshAdapter {
         if (presets)
           await presets.mount(agentCtx, binding.presetId ?? undefined);
         await this.bindAgent(agent, binding);
+        if (binding.name !== undefined) this.renameSession(agent.session,binding.name);
         await setup?.(agentCtx, agent);
       },
     });
@@ -808,6 +946,7 @@ export class NativeDshAdapter {
     if (live) return live;
     if (this.#creating.has(binding.sessionId))
       return (await this.#creating.get(binding.sessionId)).agent;
+    const native = await this.inspectSession(binding.sessionId);
     const pending = this.#ctx.agents.resume({
       resumeSessionId: binding.sessionId,
       agentOptions: {
@@ -817,7 +956,7 @@ export class NativeDshAdapter {
       setup: async (agentCtx, agent) => {
         const presets = this.#ctx.get("agentPresets");
         if (presets)
-          await presets.mount(agentCtx, binding.presetId ?? undefined);
+          await presets.mount(agentCtx, native.presetId ?? undefined);
         await this.bindAgent(agent, binding);
       },
     });
@@ -883,7 +1022,9 @@ export class NativeDshAdapter {
         agent?.status === "running",
       "stale_turn",
     );
-    requireCondition(!agent.session.header.parentSession, "task_stop_required");
+    requireCondition(!agent.session.header.parentSession ||
+      this.#store.read().sessions[sessionId]?.source?.kind === "session" &&
+      this.#store.read().sessions[sessionId]?.purpose === "contact", "task_stop_required");
     // Keep the native queue. Execution attempts use their separate resource stop.
     agent.cancel({ kind: "user" }, { keepInbox: true });
     return { sessionId, accepted: true, turn: activity.turn };
@@ -1059,6 +1200,8 @@ export class NativeDshAdapter {
       for (const dispose of record.disposers.splice(0).reverse())
         await dispose();
     }
+    for (const record of this.#ordinarySelections.values()) record.dispose();
+    this.#ordinarySelections.clear();
     for (const dispose of this.#disposers.splice(0).reverse()) await dispose();
   }
 }

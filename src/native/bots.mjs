@@ -3,6 +3,7 @@ import {copy, digest, plain, requireCondition, validId} from './store.mjs';
 import {defaultShare} from './policy.mjs';
 
 export class BotDirectory {
+  #validatedConfigs = new WeakMap();
   constructor(store,policy,adapter) {
     this.store=store;this.policy=policy;this.adapter=adapter;
     adapter.setContextProvider((agent,binding)=>this.context(policy.fromAgent(agent),binding,{maxChars:12000}));
@@ -25,31 +26,36 @@ export class BotDirectory {
     const execution=await this.adapter.validateModel(input.execution??(followsChangedContact?contact:current?.execution)??contact);
     requireCondition(executionMode!=='inherit'||execution.provider===contact.provider&&execution.model===contact.model,'execution_model_conflict');
     const lifecycle=input.lifecycle??current?.lifecycle??'active';requireCondition(['active','paused','archived'].includes(lifecycle),'invalid_lifecycle');
-    const presets=this.adapter.context.get('agentPresets'),presetId=Object.hasOwn(input,'presetId')
-      ? input.presetId??presets?.defaultId??null
-      : current?.presetId??presets?.defaultId??null;
-    requireCondition(presetId===null||typeof presetId==='string'&&presetId.length>0&&presetId.length<=160,'invalid_preset');
-    if(presets) {const preset=await presets.resolve(presetId);requireCondition(!preset.broken,'preset_unavailable');}
+    const presets=this.adapter.context.get('agentPresets'),presetId=await this.adapter.validatePreset(Object.hasOwn(input,'presetId')
+      ? input.presetId
+      : current?.presetId??presets?.defaultId??null);
     const capabilities=input.capabilities??current?.capabilities??[];
     requireCondition(Array.isArray(capabilities)&&capabilities.length<=64&&capabilities.every(name=>typeof name==='string'&&/^[A-Za-z0-9_.-]+$/.test(name)),'invalid_capabilities');
     return {name:name.trim(),role,cwd,presetId,contact,execution,executionMode,lifecycle,capabilities:[...new Set(capabilities)]};
+  }
+  async validateCreateConfig(input) {
+    const config=await this.#config(copy(input));
+    this.#validatedConfigs.set(config,digest(config));
+    return config;
+  }
+  createValidatedInDraft(actor,config,draft) {
+    requireCondition(this.#validatedConfigs.get(config)===digest(config),'invalid_validated_config');
+    this.policy.require(actor,'bot.create',{kind:'bot',id:'new'},draft);
+    const botId=`bot_${randomUUID()}`,bot={botId,...copy(config),revision:1,configRevision:1,epoch:1,memoryRevision:0,share:defaultShare(),createdAt:new Date().toISOString()};
+    draft.bots[botId]=bot;return bot;
   }
   async create(actor,command) {
     command=copy(command);
     this.policy.require(actor,'bot.create',{kind:'bot',id:'new'});
     const stamped=this.policy.command(actor,command);
     if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
-    const config=await this.#config(command.input);
-    return this.store.transact(stamped,draft=>{
-      this.policy.require(actor,'bot.create',{kind:'bot',id:'new'},draft);
-      const botId=`bot_${randomUUID()}`,bot={botId,...config,revision:1,configRevision:1,epoch:1,share:defaultShare(),createdAt:new Date().toISOString()};
-      draft.bots[botId]=bot;return bot;
-    });
+    const config=await this.validateCreateConfig(command.input);
+    return this.store.transact(stamped,draft=>this.createValidatedInDraft(actor,config,draft));
   }
   async update(actor,command) {
     command=copy(command);
     const stamped=this.policy.command(actor,command);
-    requireCondition(actor.kind==='human','access_denied');
+    requireCondition(actor.kind==='human'||actor.kind==='bot'&&actor.botId===command.input?.botId&&!this.store.read().bots[actor.botId]?.deletedAt,'access_denied');
     if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
     const input=command.input;this.policy.require(actor,'bot.update',{kind:'bot',id:input.botId});
     const current=this.store.read().bots[input.botId];requireCondition(current,'not_found');
@@ -88,7 +94,7 @@ export class BotDirectory {
       'bot_delivery_pending','Bot 仍有待投递或入队状态不明的原生消息；请先查回原始投递。');
     for(const sessionId of sessionIds) {
       const row=state.sessions[sessionId];
-      requireCondition(!['creating','UNKNOWN','archiving','restoring'].includes(row?.state),
+      requireCondition(!['creating','UNKNOWN','archiving','restoring','configuring'].includes(row?.state),
         'bot_contact_unsettled','Bot 的原生会话状态尚未结算；请先查回原始操作。');
       const agent=this.adapter.context.agents.get(sessionId),resources=this.adapter.resources(sessionId);
       requireCondition(agent?.status!=='running'&&!agent?.inbox?.nextTurn?.length&&!agent?.inbox?.nextStep?.length&&
