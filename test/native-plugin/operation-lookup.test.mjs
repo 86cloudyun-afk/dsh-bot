@@ -8,7 +8,7 @@ test('the running service exposes the exact package release and client protocol'
   const manifest=JSON.parse(await (await import('node:fs/promises')).readFile(new URL('../../package.json',import.meta.url),'utf8'));
   const snapshot=service.snapshot(f.human);
   assert.equal(snapshot.pluginVersion,manifest.version);
-  assert.equal(snapshot.clientProtocol,1);
+  assert.equal(snapshot.clientProtocol,2);
 });
 
 test('operator receipt lookup is read-only and verifies the exact retained request',async t=>{

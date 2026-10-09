@@ -260,6 +260,21 @@ export class PermissionPolicy {
   noteDependencies(actor, references = []) {
     for (const reference of references) this.noteRead(actor, reference);
   }
+  noteDerivedRead(actor, record, {sessionId} = {}) {
+    requireCondition(this.canReadDerived(actor,record),'access_denied');
+    const references=[...(record?.origins ?? [])];
+    if(sessionId)references.push({kind:'session',id:sessionId});
+    for(const source of [record?.lineage,record?.source,...(record?.contentSources ?? [])].flat().filter(Boolean)) {
+      if(source.sessionId)references.push({kind:'session',id:source.sessionId});
+      if(source.kind==='material'&&source.docId)references.push({kind:'material',id:source.docId});
+    }
+    this.noteDependencies(actor,references);
+    if(actor.kind!=='bot')return;
+    const refs=this.#reads.get(actor.agent) ?? new Map();
+    // Explicit source references also preserve same-Bot channel barriers.
+    for(const reference of references)if(reference.kind!=='session'||reference.id!==actor.sessionId)refs.set(canonical(reference),copy(reference));
+    this.#reads.set(actor.agent,refs);
+  }
   #checkActor(actor, state) {
     requireCondition(actor && this.#actors.has(actor), "access_denied");
     if (actor.kind === 'schedule') {

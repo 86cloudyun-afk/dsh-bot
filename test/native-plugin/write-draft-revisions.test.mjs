@@ -12,7 +12,8 @@ function pane(f,name) {
   const body=source.slice(start<0?source.indexOf(`        function ${name}(`):start,
     source.indexOf(({TasksPane:'        function SharingPane(',GroupsPane:'        function MeetingsPane(',SharingPane:'        function GroupsPane(',MeetingsPane:'        function SessionsPane('})[name]));
   const hooks=new Map(); let active='pane',index=0,view,tree;
-  const node=(type,props,...children)=>{
+  const node=(type,props={},...children)=>{
+    props ??= {};
     if(typeof type==='function') {
       const before=[active,index]; active=`${type.name}:${props.task?.taskId??props.group?.groupId??props.bot?.botId??props.meeting?.meetingId??''}`;index=0;
       const result=type(props); [active,index]=before;return result;
@@ -24,7 +25,9 @@ function pane(f,name) {
     if(!hooks.has(key))hooks.set(key,initial);
     return [hooks.get(key),value=>hooks.set(key,typeof value==='function'?value(hooks.get(key)):value)];
   };
-  const make=new Function('h','useState','useRef','useEffect','useView','resourceCard','advanced','form','field','button','stateName','botsOptions','command','openSession','card','check','botLabel',body+`; return ${name};`);
+  // These existing tests isolate revision-sensitive forms; new auxiliary
+  // panels are exercised separately through the installed native GUI.
+  const make=new Function('h','useState','useRef','useEffect','useView','resourceCard','advanced','form','field','button','stateName','botsOptions','command','openSession','card','check','botLabel','TaskRelations','TemplateCreator','SchedulePanel',body+`; return ${name};`);
   const render=make(node,useState,()=>({current:null}),()=>{},()=>view,
     (_key,title,...children)=>node('card',{title},...children),
     (title,...children)=>node('advanced',{title},...children),
@@ -34,7 +37,7 @@ function pane(f,name) {
     ()=>view.snapshot.bots.map(bot=>({value:bot.botId,label:bot.name})),
     (action,input)=>f.service.dispatch(f.human,{operationId:crypto.randomUUID(),action,input}),()=>{},
     (title,...children)=>node('card',{title},...children),
-    (name,label,checked)=>node('check',{name,label,checked}),bot=>bot?.name??'Bot');
+    (name,label,checked)=>node('check',{name,label,checked}),bot=>bot?.name??'Bot',()=>null,()=>null,()=>null);
   const find=(item,predicate)=>{
     if(!item)return null;
     if(predicate(item))return item;
