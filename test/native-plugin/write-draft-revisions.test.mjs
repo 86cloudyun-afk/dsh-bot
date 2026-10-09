@@ -46,6 +46,8 @@ function pane(f,name) {
   return {
     refresh() {view={snapshot:f.service.snapshot(f.human),busy:false};active='pane';index=0;tree=render();},
     submit(label,data,title) {const scope=title?find(tree,item=>item.type==='card'&&item.props.title===title):tree;const form=find(scope,item=>item.type==='form'&&item.props.label===label);assert.ok(form);return form.props.submit(data);},
+    changeReceiver(title,botId,checked) {const scope=find(tree,item=>item.type==='card'&&item.props.title===title);const input=find(scope,item=>item.type==='input'&&item.props.name==='receiver'&&item.props.value===botId);assert.ok(input);input.props.onChange({target:{checked}});},
+    receivers(title) {const scope=find(tree,item=>item.type==='card'&&item.props.title===title),values=[];find(scope,item=>{if(item.type==='input'&&item.props.name==='receiver'&&item.props.checked)values.push(item.props.value);return false;});return values;},
     click(label) {const button=find(tree,item=>item.type==='button'&&item.props.label===label);assert.ok(button);return button.props.onClick();},
   };
 }
@@ -105,6 +107,20 @@ test('an old sharing draft cannot restore permissions revoked on another page',a
   ui.click('重新载入最新共享范围');ui.refresh();
   await ui.submit('保存共享上限',data,'A 的共享范围');
   assert.equal(f.store.read().bots[a.botId].share.enabled,true);
+  assert.equal(f.requests.length,0);
+});
+
+test('batched sharing recipient edits preserve every explicit selection change',async t=>{
+  const f=await taskFixture(t),a=await f.bot('Owner'),b=await f.bot('B'),c=await f.bot('C');
+  const ui=pane(f,'SharingPane'),title='Owner 的共享范围';ui.refresh();
+  // Two DOM events can run before React commits another render. Exercise both
+  // callbacks from that render, then let the next snapshot reveal the draft.
+  ui.changeReceiver(title,b.botId,false);ui.changeReceiver(title,c.botId,false);ui.refresh();
+  assert.deepEqual(ui.receivers(title),[]);
+  ui.changeReceiver(title,b.botId,true);ui.changeReceiver(title,c.botId,true);ui.refresh();
+  assert.deepEqual(ui.receivers(title).sort(),[b.botId,c.botId].sort());
+  const saved=await ui.submit('保存共享上限',{getAll:()=>ui.receivers(title),get:()=> 'on'},title);
+  assert.deepEqual(saved.receivers.sort(),[b.botId,c.botId].sort());
   assert.equal(f.requests.length,0);
 });
 
