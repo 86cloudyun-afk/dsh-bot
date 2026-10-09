@@ -68,7 +68,7 @@
 
 ## Final local evidence
 
-- Unit suite: 178/178, syntax/entry closure and diff whitespace checks passed.
+- Unit suite: 180/180, syntax/entry closure and diff whitespace checks passed.
 - Frozen artifact: SHA256 `e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd`; all 25 allowlisted source files match and MIT is present.
 - Stock Linux x64 GUI: 64/64; upgrade in a fresh host process: 4/4. Full GUI uses a controlled provider; recovery and upgrade checks issue zero model requests.
 - Independent write-flow review identified stale task/acceptance/group/sharing/meeting drafts and preset/model configuration defects; each has a regression test.
@@ -76,3 +76,4 @@
 - Authorization CAS fields remain optional for existing direct callers; the workbench always supplies its original draft version. A full new host process is required for an upgrade because same-process shutdown retains the native module cache.
 - Initial exact-head CI passed all four unit matrices, distribution and Linux GUI/upgrade, but the macOS push run failed a recipient-draft assertion. Batched sharing callbacks reproduced a lost update RED; a functional state updater preserves all explicit recipient changes GREEN. The distribution was refrozen and the final package must pass full fresh qualification again before merge.
 - Refrozen runtime commit `b74121df7ef725b0e46c2c113d256a49215e9bbd` passed complete push CI `37909824120`: all four unit matrices, source/distribution verification and both platforms' 64 GUI + 4 upgrade checks. PR #2 contains the fix; remaining work is latest-head verification, authorized merge and immutable release publication.
+- Additional CI investigation reproduced a test locator race with the same frozen product: a roster refresh shifts Locator.all()'s dynamic nth(i) targets and skips an old Bot. Independent bundled React/Chromium proof was RED 3/3 then stable-ID GREEN 3/3. The test now waits for the seed roster and selects by Bot ID, preserving both strict assertions. Two actual finally-block tests also prove a teardown exception previously lost the report; reports now persist before cleanup and cleanup failure cannot report success. Local full GUI 64/64 and live-polling UI 8/8 passed; total regression count is 180/180. These harness changes leave all package bytes unchanged.
