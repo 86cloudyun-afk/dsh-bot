@@ -16,8 +16,8 @@ const defaultSnapshot=()=>({storeId:'profile',revision:1,pluginVersion:'1.1.0',c
 const catalog={providers:[{id:'official',name:'Official',models:[{id:'chat'},{id:'work'}]}],presets:[{id:'default',name:'Default'}],defaultModel:{provider:'official',model:'chat'},defaultCwd:'/workspace'};
 function data(values={}) {return {get:key=>values[key]??'',getAll:key=>Array.isArray(values[key])?values[key]:values[key]?[values[key]]:[]};}
 function browser(snapshot=defaultSnapshot(),route=()=>({})) {
-  const registrations=[],lifecycle=[],calls=[],hooks=new Map(),effects=new Map(),cache=new Map(),copied=[],downloads=[],blobs=[];
-  let module,active='root',index=0,tree;
+  const registrations=[],lifecycle=[],calls=[],hooks=new Map(),effects=new Map(),cache=new Map(),copied=[],downloads=[],blobs=[],pendingRpc=new Set(),idleWaiters=new Set();
+  let module,active='root',index=0,tree,currentView,unsubscribeView;
   const hookKey=()=>`${active}:${index++}`;
   function render(component,props={},key='root') {const before=[active,index];active=key;index=0;const result=component(props);[active,index]=before;return result;}
   const react={
@@ -25,7 +25,11 @@ function browser(snapshot=defaultSnapshot(),route=()=>({})) {
     useState(initial) {const key=hookKey();if(!hooks.has(key))hooks.set(key,initial);return [hooks.get(key),next=>hooks.set(key,typeof next==='function'?next(hooks.get(key)):next)];},
     useRef(initial) {const key=hookKey();if(!hooks.has(key))hooks.set(key,{current:initial});return hooks.get(key);},
     useEffect(effect,deps) {const key=hookKey(),prior=effects.get(key);if(prior&&deps?.every((item,i)=>Object.is(item,prior.deps[i])))return;prior?.cleanup?.();effects.set(key,{deps:deps??[],cleanup:effect()});},
-    useSyncExternalStore(_subscribe,get) {return get();},
+    useSyncExternalStore(subscribe,get) {
+      currentView=get();
+      unsubscribeView??=subscribe(()=>{currentView=get();if(!currentView.busy){for(const resolve of idleWaiters)resolve();idleWaiters.clear();}});
+      return currentView;
+    },
   };
   vm.runInNewContext(source,{window:{__ModuleLoader__:{load:value=>module=value}},AbortController,AbortSignal,crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,Blob,
     localStorage:{getItem:key=>cache.get(key)??null,setItem:(key,value)=>cache.set(key,value)},
@@ -34,21 +38,35 @@ function browser(snapshot=defaultSnapshot(),route=()=>({})) {
     setInterval:()=>1,clearInterval:()=>{},setTimeout:fn=>{fn();return 1;}});
   const ctx={locale:{register:()=>()=>{},bind:()=>key=>key},effect:fn=>lifecycle.push(fn),
     slots:{inject:(_name,fn)=>fn(),register:(options,component)=>{registrations.push({options,component});return()=>{};}},
-    connection:{rpc:{async call(_path,method,payload){calls.push(structuredClone({method,payload}));if(method==='dsh.bot/snapshot')return {ok:true,value:structuredClone(snapshot)};if(method==='dsh.bot/catalog')return {ok:true,value:structuredClone(catalog)};const result=await route(payload.action,payload.input,payload);return {ok:true,value:structuredClone(result)};}}},
+    connection:{rpc:{call(_path,method,payload){
+      const operation=(async()=>{calls.push(structuredClone({method,payload}));if(method==='dsh.bot/snapshot')return {ok:true,value:structuredClone(snapshot)};if(method==='dsh.bot/catalog')return {ok:true,value:structuredClone(catalog)};const result=await route(payload.action,payload.input,payload);return {ok:true,value:structuredClone(result)};})();
+      pendingRpc.add(operation);
+      operation.then(()=>pendingRpc.delete(operation),()=>pendingRpc.delete(operation));
+      return operation;
+    }}},
     sessions:{refresh:async()=>{}},uiWorkspace:{openSession(){}},layout:{selectPanel(){}}};
   module.factory(()=>react).apply(ctx);
   const disposers=lifecycle.map(fn=>fn());
   const walk=(node,predicate)=>{if(!node||typeof node!=='object')return null;if(predicate(node))return node;for(const child of node.children??[]){const found=walk(child,predicate);if(found)return found;}return null;};
   const text=node=>typeof node==='string'?node:(node?.children??[]).map(text).join('');
   const find=(predicate)=>walk(tree,predicate);
+  const drainRpc=async()=>{while(pendingRpc.size)await Promise.allSettled([...pendingRpc]);};
+  const waitIdle=()=>currentView?.busy?new Promise(resolve=>idleWaiters.add(resolve)):Promise.resolve();
   return {snapshot,calls,copied,downloads,blobs,registrations,
     async ready(){await tick();this.render();await tick();this.render();},
     render(slot='main',props={}) {const component=registrations.find(row=>row.options.name===slot)?.component;assert.ok(component);tree=render(component,props,slot);return tree;},
     find,text,
+    async settle(){
+      // The native form does not return the submit promise. Follow its real RPCs
+      // and the store's busy=false publication instead of counting event-loop turns.
+      await drainRpc();await waitIdle();await tick();this.render();
+      await drainRpc();this.render();
+      assert.equal(currentView?.busy,false,'UI must publish idle after its RPC completes');
+    },
     async click(label){const node=find(row=>row.type==='button'&&text(row)===label);assert.ok(node,`missing button ${label}`);await node.props.onClick({currentTarget:{}});this.render();await tick();this.render();},
     async submit(label,values){const node=find(row=>row.type==='form'&&row.children.some(child=>child?.type==='button'&&text(child)===label));assert.ok(node,`missing form ${label}`);node.props.onSubmit({preventDefault(){},currentTarget:data(values)});await tick();this.render();await tick();this.render();},
     async change(label,value){const node=find(row=>row.props?.['aria-label']===label);assert.ok(node,`missing field ${label}`);await node.props.onChange({target:{value,files:value?[value]:[]},currentTarget:{value,files:value?[value]:[]}});this.render();await tick();this.render();},
-    dispose(){for(const fn of disposers)fn?.();for(const value of effects.values())value.cleanup?.();},
+    dispose(){unsubscribeView?.();for(const fn of disposers)fn?.();for(const value of effects.values())value.cleanup?.();},
   };
 }
 
@@ -149,16 +167,17 @@ test('context preview renders frozen bounded summaries instead of newer snapshot
   assert.ok(ui.find(row=>row.type==='p'&&ui.text(row)==='Frozen preview text'));assert.equal(ui.calls.some(row=>['task.start','session.create'].includes(row.payload.action)),false);ui.dispose();
 });
 
-async function backendBrowser(t) {
+async function backendBrowser(t,{beforeDispatch}={}) {
   const f=await businessFixture(t);await f.bot('LifecycleOwner');
   const knowledge=new KnowledgeController(f),memory=new MemoryController({...f,knowledge}),assistant=new AssistantController({...f,tasks:{}}),service=new BotService({...f,knowledge,memory,assistant});
   f.beforeClose.push(()=>assistant.close());
   const snapshot=service.snapshot(f.human),ui=browser(snapshot,async(action,_input,request)=>{
     if(action==='template.list')return [];
     if(action==='session.list')return {items:[],nextCursor:null};
+    await beforeDispatch?.(action);
     const result=await service.dispatch(f.human,structuredClone(request));Object.assign(snapshot,service.snapshot(f.human));return result;
   });t.after(()=>ui.dispose());
-  const settle=async()=>{for(let attempts=0;attempts<200;attempts++){await tick();ui.render();const buttons=ui.find(row=>row.type==='button'&&row.props.type==='submit');if(buttons&&!buttons.props.disabled)return;}assert.fail('UI write did not settle');};
+  const settle=()=>ui.settle();
   return {...f,ui,settle,knowledge};
 }
 
@@ -222,4 +241,20 @@ test('UTF-8 material upload accepts exactly 64 KiB and refuses larger files befo
   const doc=Object.values(f.store.read().materials)[0];assert.equal(doc.text,text);assert.equal(doc.contentHash,hashText(text));let read=false;
   await f.ui.change('UTF-8 文本或 Markdown 文件',{name:'oversize.txt',size:65537,arrayBuffer:async()=>{read=true;throw Error('Oversize file must never be read');}});
   assert.equal(read,false);assert.equal(f.ui.calls.filter(row=>row.payload.action==='material.ingest').length,1);assert.equal(Object.keys(f.store.read().materials).length,1);assert.equal(f.requests.length,0);
+});
+
+
+test('backend UI settlement waits for the accepted RPC barrier and published idle state',async t=>{
+  let enter,release;
+  const entered=new Promise(resolve=>enter=resolve),gate=new Promise(resolve=>release=resolve);
+  t.after(()=>release());
+  const f=await backendBrowser(t,{beforeDispatch:async action=>{if(action==='memory.write'){enter();await gate;}}});
+  await f.ui.ready();await f.ui.click('记忆');await f.ui.submit('保存到所选 Bot',{text:'Held until backend release',category:'fact'});await entered;
+  let settled=false;const completion=f.settle().then(()=>settled=true);
+  await tick();
+  assert.equal(settled,false);assert.equal(Object.keys(f.store.read().memories).length,0);
+  assert.ok(f.ui.find(row=>row.type==='button'&&row.props.type==='submit'&&row.props.disabled));
+  release();await completion;
+  assert.equal(settled,true);assert.equal(Object.values(f.store.read().memories)[0].text,'Held until backend release');
+  assert.ok(f.ui.find(row=>row.type==='button'&&row.props.type==='submit'&&!row.props.disabled));assert.equal(f.requests.length,0);
 });
