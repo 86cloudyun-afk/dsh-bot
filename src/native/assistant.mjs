@@ -206,12 +206,44 @@ export class AssistantController {
     await this.#reconcile(recovery);
     for(const s of Object.values(this.store.read().schedules)) {
       if(this.#closed)return;if(!s.enabled||s.archived)continue;
-      const pending=Object.values(this.store.read().occurrences).filter(o=>o.scheduleId===s.scheduleId&&UNSETTLED.has(o.state));
+      let pending=Object.values(this.store.read().occurrences).filter(o=>o.scheduleId===s.scheduleId&&UNSETTLED.has(o.state));
       if(pending.some(o=>['claimed','running','UNKNOWN'].includes(o.state)))continue;
+      if(recovery&&pending.length&&s.kind==='task'&&s.missedPolicy==='latest') {
+        await this.#observePendingRecovery(s.scheduleId,at);
+        pending=Object.values(this.store.read().occurrences).filter(o=>o.scheduleId===s.scheduleId&&UNSETTLED.has(o.state));
+        if(pending.some(o=>['claimed','running','UNKNOWN'].includes(o.state)))continue;
+      }
       if(pending.length) {for(const o of pending)if(['planned','blocked'].includes(o.state))await this.#admit(o.occurrenceId);continue;}
       if(!s.nextDueAt||Date.parse(s.nextDueAt)>at)continue;
       const ids=await this.#materialize(s.scheduleId,at,recovery);for(const id of ids)await this.#admit(id);
     }
+  }
+  #provedUnadmitted(occurrence,state) {
+    return ['planned','blocked'].includes(occurrence.state)&&
+      (occurrence.state==='planned'||SAFE_BLOCK.has(occurrence.errorCode)||PAUSE_CODES.has(occurrence.errorCode)||occurrence.errorCode==='disabled')&&
+      !occurrence.attemptId&&!state.operations[occurrence.startOperationId]&&
+      (!occurrence.taskId||!Object.values(state.attempts).some(attempt=>attempt.taskId===occurrence.taskId));
+  }
+  async #observePendingRecovery(scheduleId,at) {
+    return this.#internal('schedule.observeRecovery',{scheduleId,observedAt:nowISO(at)},draft=>{
+      const schedule=draft.schedules[scheduleId];
+      if(!schedule?.enabled||schedule.archived||schedule.kind!=='task'||schedule.missedPolicy!=='latest')return false;
+      const pending=Object.values(draft.occurrences).filter(o=>o.scheduleId===scheduleId&&UNSETTLED.has(o.state));
+      if(pending.some(o=>['claimed','running','UNKNOWN'].includes(o.state)))return false;
+      const latest=latestTrigger(schedule.rule,at);if(!latest)return false;
+      for(const occurrence of pending) {
+        if(occurrence.consentVersion!==schedule.consentVersion||Date.parse(occurrence.dueAt)>at)continue;
+        // A saved blocked label alone cannot prove that native admission did not occur.
+        if(!this.#provedUnadmitted(occurrence,draft)) {occurrence.state='UNKNOWN';occurrence.errorCode='admission_unknown';occurrence.version++;continue;}
+        if(Date.parse(latest.dueAt)>Date.parse(occurrence.dueAt)) {
+          occurrence.state='missed';occurrence.version++;this.#missedNotice(draft,schedule,occurrence,at);
+          schedule.missedRange={fromDueAt:occurrence.dueAt,throughDueAt:latest.dueAt,reason:'late_wakeup',observedAt:nowISO(at)};
+        } else if(latest.dueAt===occurrence.dueAt&&!occurrence.recoveryObservedAt&&at>Date.parse(occurrence.dueAt)+60000) {
+          occurrence.recoveryObservedAt=nowISO(at);occurrence.version++;
+        }
+      }
+      return true;
+    });
   }
   async #reconcile(recovery) {
     const rows=Object.values(this.store.read().occurrences).filter(o=>['claimed','running','UNKNOWN'].includes(o.state));if(!rows.length)return;
@@ -240,7 +272,7 @@ export class AssistantController {
         draft.occurrences[occurrenceId]=o;
         if(missed)this.#missedNotice(draft,s,o,at);else if(s.kind==='reminder'){o.state='settled';this.#noticeInDraft(draft,{kind:'reminder',occurrenceId,scheduleId,botId:s.ownerBotId,message:s.message,dueAt:o.dueAt,late:at>Date.parse(o.dueAt),source:s.source,origins:s.origins??[]});}else ids.push(occurrenceId);
       }
-      if(latest&&latest.dueAt!==first.dueAt)s.missedRange={fromDueAt:first.dueAt,throughDueAt:latest.dueAt,reason:'late_wakeup',observedAt:nowISO(at)};
+      if(latest&&latest.dueAt!==first.dueAt)s.missedRange={fromDueAt:s.missedRange?.observedAt===nowISO(at)?s.missedRange.fromDueAt:first.dueAt,throughDueAt:latest.dueAt,reason:'late_wakeup',observedAt:nowISO(at)};
       const next=nextTrigger(s.rule,Math.max(at,Date.parse(first.dueAt)));s.nextDueAt=next?.dueAt??null;s.nextTriggerKey=next?.triggerKey??null;s.version++;
       if(next?.skipReason)s.lastSkippedLocalTimes={reason:next.skipReason,count:next.skippedLocalTimes};return ids;
     });
