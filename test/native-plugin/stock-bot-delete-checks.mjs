@@ -6,7 +6,7 @@ export async function runBotDeleteChecks(gui) {
   const editor=gui.card('创建具名 Bot');await editor.getByLabel('名称',{exact:true}).fill('删除验证Bot');
   await editor.getByRole('button',{name:'创建 Bot',exact:true}).click();
   const bot=(await gui.until(s=>s.bots.some(row=>row.name==='删除验证Bot'),'delete fixture Bot')).bots.find(row=>row.name==='删除验证Bot');
-  await gui.workbench('记忆');await gui.page.getByLabel('Bot',{exact:true}).selectOption(bot.botId);
+  await gui.workbench('记忆');await gui.page.getByLabel('所属 Bot',{exact:true}).selectOption(bot.botId);
   await gui.page.getByLabel('内容',{exact:true}).fill('删除与恢复应保留这条记忆');
   await gui.page.getByRole('button',{name:'保存到所选 Bot',exact:true}).click();
   const memory=(await gui.until(s=>s.memories.some(row=>row.botId===bot.botId),'delete fixture memory')).memories.find(row=>row.botId===bot.botId);

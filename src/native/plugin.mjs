@@ -12,16 +12,20 @@ import {ConversationBroker} from './broker.mjs';
 import {GroupMeetingController} from './collaboration.mjs';
 import {randomUUID} from 'node:crypto';
 import {mountBotRoutes} from './api.mjs';
+import {KnowledgeController} from './knowledge.mjs';
+import {MemoryController} from './memory.mjs';
+import {TemplateController} from './templates.mjs';
+import {AssistantController} from './assistant.mjs';
 
 export const name='dsh-bot';
-export const inject=['connection','webServer','profileContext','storage',storageBackendServiceKey('json'),'agents','sessions','sessionPersistence','llm','tools','subagents'];
+export const inject=['connection','webServer','profileContext','storage',storageBackendServiceKey('json'),'agents','sessions','sessionProjections','sessionPersistence','llm','tools','subagents'];
 export async function apply(ctx) {
   await ctx.effect(async()=>{
     const scope=await openProfileScope(ctx);let store;
     try{store=await PluginStore.open(ctx.storage.backend.get('json').kv,{namespace:scope.namespace});}catch(error){await scope.close();throw error;}
-    let adapter,service,tasks,broker,collaboration,unprovide,unrpc,closed=false;
+    let adapter,service,tasks,broker,collaboration,assistant,unprovide,unrpc,closed=false;
     const dispose=async()=>{
-      closed=true;service?.close();await unrpc?.();await unprovide?.();
+      closed=true;const serviceDrain=service?.close();await assistant?.close();await serviceDrain;await unrpc?.();await unprovide?.();
       try{await collaboration?.close();await broker?.close();await tasks?.close();await adapter?.close();}finally{try{await store.close();}finally{await scope.close();}}
     };
     try {
@@ -30,8 +34,14 @@ export async function apply(ctx) {
       const bots=new BotDirectory(store,policy,adapter),sessions=new SessionOwnership(store,policy,adapter);
       tasks=new TaskController({store,policy,adapter});broker=new ConversationBroker({store,policy,adapter});tasks.setResultSink(broker);const recovery=new Reconciler({store,policy,adapter,tasks,broker});
       collaboration=new GroupMeetingController({store,policy,adapter,tasks});
-      service=new BotService({store,policy,adapter,bots,sessions,tasks,broker,collaboration,recovery});adapter.setService(service);
+      const knowledge=new KnowledgeController({store,policy,adapter}),memory=new MemoryController({store,policy,adapter,knowledge});
+      bots.setMemoryController(memory);
+      adapter.setContextProvider((agent,binding,options={})=>memory.context(policy.fromAgent(agent),binding,{maxChars:12000,...options}));
+      const templates=new TemplateController({store,policy,bots,collaboration});
+      assistant=new AssistantController({store,policy,adapter,tasks});broker.setNoticeSink(assistant);
+      service=new BotService({store,policy,adapter,bots,sessions,tasks,broker,collaboration,recovery,knowledge,memory,templates,assistant});adapter.setService(service);
       await recovery.reconcile(policy.fromPeer(ctx.connection.operator),{operationId:randomUUID(),action:'recovery.reconcile',input:{}});
+      await assistant.start();
       unprovide=ctx.provide('dshBot',service);
       unrpc=await mountBotRoutes(ctx,{policy,service,isClosed:()=>closed});
       return dispose;

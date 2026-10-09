@@ -1,7 +1,9 @@
 import { clientRequestSchema } from "@deepseek-ai/dsh-client-connection";
 import { requireCondition } from "./store.mjs";
 
-const MAX_BODY_BYTES = 128 * 1024;
+// A <=4 MiB UTF-8 import file is carried as a JSON string, which may be escaped.
+// Domain limits remain independent; Connection authenticates this carrier.
+const MAX_BODY_BYTES = 9 * 1024 * 1024;
 
 async function readEnvelope(request) {
   const declared = Number(request.headers.get("content-length"));
@@ -89,13 +91,13 @@ export async function mountBotRoutes(ctx, { policy, service, isClosed }) {
                 value: await service.dispatch(actor, command, request.signal),
               };
             } catch (error) {
+              const publicCode=typeof error.code==='string'&&(/^[a-z][a-z0-9_]{0,79}$/.test(error.code)||['agent-preset/locked','agent-preset/not-found','agent-preset/invalid'].includes(error.code))
+                ? error.code : request.signal.aborted ? "cancelled" : "internal_error";
               result = {
                 ok: false,
                 error: {
-                  code:
-                    error.code ??
-                    (request.signal.aborted ? "cancelled" : "internal_error"),
-                  message: error.message,
+                  code: publicCode,
+                  message: "操作未完成，请根据错误代码检查输入或保留原始操作并查回。",
                   details: error.details?.rejectedBeforeWrite === true ? {rejectedBeforeWrite:true} : {},
                 },
               };

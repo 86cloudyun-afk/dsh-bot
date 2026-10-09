@@ -23,11 +23,11 @@ dsh web
 
 ## 2. 获取并验证插件包
 
-在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.0.2) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/dsh-bot-1.0.2.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
+在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.0) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.0/dist/dsh-bot-1.1.0.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.0/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/dsh-bot-1.0.2.tgz
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.0.2/dist/SHA256SUMS
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.0/dist/dsh-bot-1.1.0.tgz
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.0/dist/SHA256SUMS
 ```
 
 Linux：
@@ -49,7 +49,7 @@ shasum -a 256 -c SHA256SUMS
 以下命令使用官方 `web` profile。使用其他现有 Web profile 时，将 `web` 替换为你实际使用的名称。
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.0.2.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.1.0.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -69,7 +69,7 @@ dsh web
 
 需要定制时展开 **更多设置**：工作目录、执行模型、思考程度、回复长度与原生会话配置都在这里。工作目录默认沿用 DSH。执行模型选择“与聊天模型相同”时自动跟随聊天模型；明确选择某个模型时保持该选择，即使两者暂时相同。新建 Bot 默认沿用当前 DSH 的模型与思考设置；两种会话的回复长度仍可分别设置。远程 DSH 的自定义工作目录应填写远程机器上存在的绝对目录。
 
-Bot 配置由人类在工作台修改，`bot.update` 不向 Bot 开放。修改工作目录或 preset 后，为新配置新建会话或任务尝试；已运行的原生会话不会热切换 preset 或工作目录。
+工作台操作者可修改 Bot 配置，Bot 也可通过 `bot.update` 管理自己的配置。修改工作目录或 preset 后，为新配置新建会话或任务尝试；已有原生会话的目录固定，带历史的 preset 遵守官方锁定规则。
 
 工作台常用导航只有 **Bots、任务、记忆、协作、管理**。内部群与会议在“协作”；共享与授权、会话管理、结果与投递在“管理”。
 
@@ -93,12 +93,12 @@ Bot 配置由人类在工作台修改，`bot.update` 不向 Bot 开放。修改�
 
 ```bash
 dsh plugin --profile web remove dsh-bot --config.ignore-scripts=true
-dsh plugin --profile web add ./dsh-bot-1.0.2.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.1.0.tgz --ignore-scripts --strict-peer-dependencies
 ```
 
 重新启动或启用插件后，Bot ID、记忆、会话和任务读取原持久数据。卸载只移除插件依赖与入口；手动删除 DSH 存储不属于卸载步骤。
 
-从 v1.0.0、v1.0.1 或早期同名候选包升级到 v1.0.2 时，请完全退出原 DSH 进程后执行上述命令，再启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.0.2 / 服务 1.0.2**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
+从 v1.0.0、v1.0.1 或 v1.0.2 升级到 v1.1.0 时，请先备份原 DSH profile 并完全退出进程，再执行上述命令，启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.1.0 / 服务 1.1.0**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
 
 浏览器中已有的原始操作 ID 继续保留。在“待查回的原始操作”先点 **查回原始操作**：它只读持久回执，不执行任务，也不调用模型。找到回执后刷新原对象；没有回执时保留“未确认”。**用原 ID 接续**是单独的显式提交，并先检查原回执；已提交操作不会重复创建。不要修改原 ID 的内容或将旧操作改用于新动作。
 
@@ -117,7 +117,7 @@ dsh plugin --profile web add ./dsh-bot-1.0.2.tgz --ignore-scripts --strict-peer-
 | 模型目录变化 | 原模型会显示“当前不可用”；显式选择替代模型后保存，插件不会在改名时自动换模型。 |
 | 任务、共享、群或会议草稿冲突 | 原草稿保留在开始编辑时的版本／会议世代。先阅读最新内容，再点对应“重新载入最新…”重新编辑；旧共享草稿不能恢复已撤销的共享。 |
 | `access_denied` | 在“共享与授权”核对接收 Bot、共享上限、具体会话／任务范围和有效权限。 |
-| Bot 找不到 Bash／把业务动作当作全部工具 | 让 Bot 调用 `tools.list` 或读取 `help.toolCatalog`，核对当前会话实际挂载的工具及限制；需要其他 preset 时由人类修改配置并新建会话。 |
+| Bot 找不到 Bash／把业务动作当作全部工具 | 让 Bot 调用 `tools.list` 或读取 `help.toolCatalog`，核对当前会话实际挂载的工具及限制；需要其他 preset 时修改自身配置或在 `session.create` 指定新会话配置。 |
 | 删除 Bot 被阻止 | 先处理活动任务、原生回复和待处理输入，查回 `UNKNOWN` 工作及待投递结果；停止被接受后仍须等待真实结算。 |
 | 恢复 Bot 后“开始聊天”不可用 | 恢复保留原 ID 并回到暂停状态；在“状态管理”中单独点击“启用”。 |
 | 停止已接受，但还未结算 | 等待模型、工具、作业、终端或子工作的真实终止证据；占用会在结算后释放。 |
@@ -126,3 +126,7 @@ dsh plugin --profile web add ./dsh-bot-1.0.2.tgz --ignore-scripts --strict-peer-
 | 存储损坏／版本不兼容 | 保留原 profile 和日志，读取诊断；插件会拒绝覆盖坏数据。 |
 
 [旧独立软件版及其安装器已作废](history/standalone-void.md)。它们不作为本插件的安装步骤或依赖。
+
+### v1.1 存储升级
+
+从 v1.0.0／v1.0.1／v1.0.2 升级时，schema 2 在原 profile 的同一记录原子迁移，保留原始身份、回执和校验过的 schema 1 备份。旧 Bot 与旧持续授权的新增资料范围为关闭。升级后不要直接在同一份 schema 2 存储上降级旧插件；回退需使用升级前独立备份和对应旧插件包。迁移失败或未来格式不会覆盖原记录。

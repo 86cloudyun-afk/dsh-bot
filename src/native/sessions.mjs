@@ -9,102 +9,194 @@ export class SessionOwnership {
     this.policy = policy;
     this.adapter = adapter;
   }
+  #configuring = new Map();
+  async #contactConfig(input, defaults) {
+    const config = {
+      model: await this.adapter.validateModel(input.model ?? defaults.model ?? defaults.contact),
+      modelMode: input.model ? "explicit" : defaults.modelMode ?? "inherit",
+      cwd: await this.adapter.validateLocation(input.cwd ?? defaults.cwd),
+      presetId: await this.adapter.validatePreset(Object.hasOwn(input,"presetId") ? input.presetId : defaults.presetId),
+    };
+    const name = input.name ?? defaults.name;
+    if (name !== undefined) {
+      requireCondition(typeof name === "string" && name.trim().length > 0 && name.trim().length <= 100,"invalid_name");
+      config.name = name.trim();
+    }
+    return config;
+  }
   async create(actor, command) {
     command = copy(command);
     const input = command.input;
-    requireCondition(
-      plain(input) &&
-        Object.keys(input).every((key) => ["botId", "purpose"].includes(key)),
-      "invalid_input",
-    );
-    requireCondition(
-      (input.purpose ?? "contact") === "contact",
-      "invalid_purpose",
-    );
-    const stamped = this.policy.command(actor, command);
-    const intent = await this.store.transact(stamped, (draft) => {
-      const bot = draft.bots[input.botId];
-      requireCondition(bot, "not_found");
-      requireCondition(!bot.deletedAt, "bot_deleted");
-      requireCondition(bot.lifecycle === "active", "bot_not_active");
-      const sessionId = randomUUID(),
-        purpose = input.purpose ?? "contact";
-      const binding = {
-        sessionId,
-        botId: bot.botId,
-        purpose,
-        model: copy(purpose === "execution" ? bot.execution : bot.contact),
-        cwd: bot.cwd,
-        presetId: bot.presetId,
-        configRevision: bot.configRevision,
-        epoch: 1,
-        state: "creating",
-        ownerRuntimeId: this.adapter.runtimeId,
-        archived: false,
-        operationId: command.operationId,
-        statusOperationId: randomUUID(),
-      };
-      draft.sessions[sessionId] = binding;
-      this.policy.require(
-        actor,
-        "session.create",
-        { kind: "session", id: sessionId },
-        draft,
-      );
-      return binding;
-    });
-    const current = this.store.read().sessions[intent.sessionId];
+    requireCondition(plain(input) && Object.keys(input).every(key=>["botId","purpose","name","model","presetId","cwd"].includes(key)) && validId(input.botId),"invalid_input");
+    requireCondition((input.purpose ?? "contact") === "contact","invalid_purpose");
+    const stamped = this.policy.command(actor,command);
+    let intent;
+    if (Object.hasOwn(this.store.read().operations,command.operationId)) intent = await this.store.transact(stamped,()=>null);
+    else {
+      const bot = this.store.read().bots[input.botId]; requireCondition(bot,"not_found");
+      // Check target authority before expensive validation and before any native work.
+      const prospect = {sessionId:"new",botId:bot.botId,purpose:"contact"};
+      const prospective = this.store.read(); prospective.sessions.new = prospect;
+      this.policy.require(actor,"session.create",{kind:"session",id:"new"},prospective);
+      const config = await this.#contactConfig(input,bot);
+      intent = await this.store.transact(stamped,draft=>{
+        const current = draft.bots[input.botId];
+        requireCondition(current && !current.deletedAt,"bot_deleted");
+        requireCondition(current.lifecycle === "active","bot_not_active");
+        requireCondition(current.configRevision === bot.configRevision,"revision_conflict");
+        const sessionId=randomUUID(),binding={sessionId,botId:bot.botId,purpose:"contact",...config,
+          configRevision:bot.configRevision,revision:1,epoch:1,state:"creating",ownerRuntimeId:this.adapter.runtimeId,
+          archived:false,operationId:command.operationId,statusOperationId:randomUUID()};
+        draft.sessions[sessionId]=binding;
+        this.policy.require(actor,"session.create",{kind:"session",id:sessionId},draft);
+        return binding;
+      });
+    }
+    return this.#finishCreate(actor,intent,"session.create");
+  }
+  async #finishCreate(actor,intent,action) {
+    const current=this.store.read().sessions[intent.sessionId];
+    requireCondition(current,"session_outcome_unknown");
+    this.policy.require(actor,action,{kind:"session",id:action === "session.fork" ? current.source.sessionId : current.sessionId});
+    const receipt=this.store.read().operations[intent.statusOperationId]?.result;
+    if (receipt) return receipt;
     if (current.state === "ready") return current;
-    requireCondition(current.state === "creating", "session_outcome_unknown");
-    if (this.#opening.has(intent.sessionId))
-      return this.#opening.get(intent.sessionId);
-    const opening = (async () => {
+    requireCondition(current.state === "creating","session_outcome_unknown");
+    // An intent surviving a runtime restart is never automatically re-created.
+    requireCondition(current.ownerRuntimeId === this.adapter.runtimeId,"session_outcome_unknown");
+    if (this.#opening.has(current.sessionId)) return this.#opening.get(current.sessionId);
+    const opening=(async()=>{
       try {
         await this.adapter.createOwned(current);
-        const ready = await this.store.transact(
-          {
-            operationId: current.statusOperationId,
-            action: "session.ready",
-            input: { sessionId: current.sessionId },
-          },
-          (draft) => {
-            this.policy.require(
-              actor,
-              "session.create",
-              { kind: "session", id: current.sessionId },
-              draft,
-            );
-            const binding = draft.sessions[current.sessionId];
-            binding.state = "ready";
-            return binding;
-          },
-        );
-        return ready;
-      } catch (error) {
-        await this.store
-          .transact(
-            {
-              operationId: `unknown-${current.statusOperationId}`,
-              action: "session.unknown",
-              input: { sessionId: current.sessionId },
-            },
-            (draft) => {
-              const row = draft.sessions[current.sessionId];
-              row.state = "UNKNOWN";
-              row.error = error.code ?? error.name;
-              return null;
-            },
-          )
-          .catch(() => {});
+        return await this.store.transact({operationId:current.statusOperationId,action:"session.ready",input:{sessionId:current.sessionId}},draft=>{
+          this.policy.require(actor,action,{kind:"session",id:action === "session.fork" ? current.source.sessionId : current.sessionId},draft);
+          const row=draft.sessions[current.sessionId]; requireCondition(row.state === "creating","stale_operation");
+          for (const reference of row.origins ?? []) this.policy.require(actor,`${reference.kind}.read`,reference,draft);
+          row.state="ready";return row;
+        });
+      } catch(error) {
+        await this.store.transact({operationId:`unknown-${current.statusOperationId}`,action:"session.unknown",input:{sessionId:current.sessionId}},draft=>{
+          const row=draft.sessions[current.sessionId];row.state="UNKNOWN";row.error=error.code ?? error.name;return null;
+        }).catch(()=>{});
         throw error;
       }
     })();
-    this.#opening.set(current.sessionId, opening);
-    try {
-      return await opening;
-    } finally {
-      this.#opening.delete(current.sessionId);
+    this.#opening.set(current.sessionId,opening);
+    try {return await opening;} finally {this.#opening.delete(current.sessionId);}
+  }
+  #requireSettled(row,native,state=this.store.read()) {
+    requireCondition(row?.state === "ready" && !this.adapter.isArchived(row.sessionId),"session_not_ready");
+    const agent=this.adapter.context.agents.get(row.sessionId),resources=this.adapter.resources(row.sessionId);
+    requireCondition(resources.known,"resource_identity_unknown");
+    requireCondition(agent?.status !== "running" && !agent?.inbox?.nextTurn?.length && !agent?.inbox?.nextStep?.length &&
+      native.openTurn === null && !native.inbox["next-turn"].length && !native.inbox["next-step"].length &&
+      resources.settled,"session_active");
+    const jobs=this.adapter.context.get("jobs")?.list(row.sessionId) ?? [], terminals=this.adapter.context.get("terminals");
+    requireCondition(!jobs.some(job=>job.owner === row.sessionId && ["running","stopping"].includes(job.status)) &&
+      (!agent || !terminals?.hasOwnerActivity(agent)),"session_active");
+    requireCondition(!row.attemptId || !state.attempts[row.attemptId]?.reservationHeld,"attempt_unsettled");
+    requireCondition(!Object.values(state.outbox).some(out=>out.sessionId === row.sessionId &&
+      (["queued","admitting","UNKNOWN"].includes(out.state) || out.state === "blocked" && out.nativeAdmission !== false)),"session_delivery_pending");
+  }
+  async configure(actor,command,signal) {
+    command=copy(command);const input=command.input;
+    requireCondition(plain(input) && Object.keys(input).every(key=>["sessionId","expectedVersion","name","model","presetId","cwd"].includes(key)) &&
+      validId(input.sessionId) && Number.isSafeInteger(input.expectedVersion) && input.expectedVersion >= 1 &&
+      ["name","model","presetId","cwd"].some(key=>Object.hasOwn(input,key)),"invalid_input");
+    const reference={kind:"session",id:input.sessionId};this.policy.require(actor,"session.configure",reference);
+    const stamped=this.policy.command(actor,command),fingerprint=digest(stamped),pending=this.#configuring.get(command.operationId);
+    if (pending) {requireCondition(pending.fingerprint === fingerprint,"operation_conflict");return pending.promise;}
+    if (Object.hasOwn(this.store.read().operations,command.operationId)) {
+      const intent=await this.store.transact(stamped,()=>null),receipt=this.store.read().operations[intent.statusOperationId]?.result;
+      requireCondition(receipt,"session_outcome_unknown");return receipt;
     }
+    const operation=(async()=>{
+      const saved=this.store.read().sessions[input.sessionId];
+      requireCondition((saved?.revision ?? 1) === input.expectedVersion,"revision_conflict");
+      const native=await this.adapter.inspectSession(input.sessionId,signal);
+      const row=saved ?? {sessionId:input.sessionId,botId:null,purpose:"ordinary",epoch:0,revision:1,state:"ready",archived:false,
+        ...(native.header.cwd ? {cwd:native.header.cwd} : {}),presetId:native.presetId};
+      if (!row.botId && !this.adapter.context.agents.get(row.sessionId)) {
+        const selection=native.events.findLast(event=>event.type === "model/selection")?.data ?? native.events.findLast(event=>event.type === "request/header")?.data.header.config;
+        if(selection)row.model=await this.adapter.validateModel(Object.fromEntries(Object.entries(selection).filter(([key])=>["provider","model","reasoningEffort","maxTokens","temperature"].includes(key))));
+      }
+      this.policy.require(actor,"session.configure",reference);
+      this.#requireSettled(row,native);
+      requireCondition(["contact","ordinary"].includes(row.purpose) || !Object.hasOwn(input,"model") && !Object.hasOwn(input,"presetId"),"task_adjust_required");
+      if (Object.hasOwn(input,"cwd")) {
+        const cwd=await this.adapter.validateLocation(input.cwd);requireCondition(cwd === native.header.cwd,"cwd_immutable");
+      }
+      const config={};
+      if (Object.hasOwn(input,"name")) {requireCondition(typeof input.name === "string" && input.name.trim().length > 0 && input.name.trim().length <= 100,"invalid_name");config.name=input.name.trim();}
+      if (Object.hasOwn(input,"model")) config.model=await this.adapter.validateModel(input.model);
+      if (Object.hasOwn(input,"presetId")) {
+        config.presetId=await this.adapter.validatePreset(input.presetId);
+        if(config.presetId !== native.presetId)requireCondition(native.lastTurn === 0 && native.openTurn === null,"agent-preset/locked");
+      }
+      signal?.throwIfAborted();const release=this.adapter.fenceSessionAdmissions(row.sessionId);let intent;
+      try {
+        intent=await this.store.transact(stamped,draft=>{
+          this.policy.require(actor,"session.configure",reference,draft);
+          const current=draft.sessions[row.sessionId] ?? copy(row);
+          requireCondition((current.revision ?? 1) === input.expectedVersion,"revision_conflict");
+          draft.sessions[row.sessionId]=current;
+          this.#requireSettled(current,native,draft);
+          const value={sessionId:row.sessionId,statusOperationId:randomUUID(),config,previous:copy(current)};
+          current.state="configuring";current.configureOperationId=command.operationId;current.configureStatusId=value.statusOperationId;return value;
+        });
+        this.policy.require(actor,"session.configure",reference);signal?.throwIfAborted();
+        const evidence=await this.adapter.configureOwned(intent.previous,intent.config,signal);
+        return await this.store.transact({operationId:intent.statusOperationId,action:"session.configured",input:{sessionId:row.sessionId,operationId:command.operationId}},draft=>{
+          this.policy.require(actor,"session.configure",reference,draft);
+          const current=draft.sessions[row.sessionId];requireCondition(current.configureOperationId === command.operationId && current.state === "configuring","stale_operation");
+          Object.assign(current,config,evidence,{state:"ready",revision:input.expectedVersion+1});
+          if(config.model)current.modelMode="explicit";
+          current.nativeConfigEvidence=copy(evidence);
+          return current;
+        });
+      } catch(error) {
+        if(intent) await this.store.transact({operationId:`unknown-${intent.statusOperationId}`,action:"session.configure-unknown",input:{sessionId:row.sessionId}},draft=>{
+          const current=draft.sessions[row.sessionId];if(current.configureOperationId === command.operationId){current.state="UNKNOWN";current.error=error.code ?? error.name;current.nativeConfigEvidence=copy(error.details?.nativeConfigEvidence ?? {});}return null;
+        }).catch(()=>{});
+        throw error;
+      } finally {release();}
+    })();
+    this.#configuring.set(command.operationId,{fingerprint,promise:operation});
+    try{return await operation;}finally{this.#configuring.delete(command.operationId);}
+  }
+  async fork(actor,command,signal) {
+    command=copy(command);const input=command.input;
+    requireCondition(plain(input) && Object.keys(input).every(key=>["sessionId","expectedVersion","atSeq","name","model","presetId","cwd"].includes(key)) && validId(input.sessionId) &&
+      (input.expectedVersion === undefined || Number.isSafeInteger(input.expectedVersion) && input.expectedVersion >= 1) &&
+      (input.atSeq === undefined || Number.isSafeInteger(input.atSeq) && input.atSeq >= 0),"invalid_input");
+    const reference={kind:"session",id:input.sessionId};this.policy.require(actor,"session.fork",reference);this.policy.require(actor,"session.read",reference);
+    const stamped=this.policy.command(actor,command);
+    if(Object.hasOwn(this.store.read().operations,command.operationId))return this.#finishCreate(actor,await this.store.transact(stamped,()=>null),"session.fork");
+    const source=this.store.read().sessions[input.sessionId];requireCondition(source?.botId && source.purpose === "contact" && !source.lineage && !source.attemptId,"task_adjust_required");
+    requireCondition(source.state === "ready","session_not_ready");
+    if(input.expectedVersion !== undefined)requireCondition((source.revision ?? 1) === input.expectedVersion,"revision_conflict");
+    const native=await this.adapter.inspectSession(input.sessionId,signal),boundary=input.atSeq ?? native.events.findLast(event=>event.type === "turn/end")?.seq;
+    requireCondition(boundary !== undefined && native.events[boundary]?.seq === boundary && native.events.slice(0,boundary+1).every((event,index)=>event.seq === index),"fork_unavailable");
+    this.policy.require(actor,"session.read",reference);this.policy.noteRead(actor,reference);
+    const prefixPresetId=this.adapter.effectivePresetAt(native,boundary),
+      config=await this.#contactConfig(input,{...source,presetId:prefixPresetId});
+    // The chosen inherited prefix defines its native composition, including historical blank-session selections.
+    requireCondition(config.presetId === prefixPresetId,"fork_preset_immutable");
+    const origins=[...new Map([...(source.origins ?? []),...this.policy.readDependencies(actor),reference].map(ref=>[digest(ref),ref])).values()];
+    signal?.throwIfAborted();
+    const intent=await this.store.transact(stamped,draft=>{
+      this.policy.require(actor,"session.fork",reference,draft);this.policy.require(actor,"session.read",reference,draft);
+      const current=draft.sessions[source.sessionId],bot=draft.bots[source.botId];
+      requireCondition(current.state === "ready" && (current.revision ?? 1) === (source.revision ?? 1),"revision_conflict");
+      requireCondition(bot && !bot.deletedAt && bot.lifecycle === "active","bot_not_active");
+      for(const ref of origins)this.policy.require(actor,`${ref.kind}.read`,ref,draft);
+      const sessionId=randomUUID(),binding={sessionId,botId:source.botId,purpose:"contact",...config,
+        source:{kind:"session",sessionId:source.sessionId,eventSeq:boundary,checksum:digest({header:native.header,events:native.events.slice(0,boundary+1)})},origins,
+        configRevision:source.configRevision,revision:1,epoch:1,state:"creating",ownerRuntimeId:this.adapter.runtimeId,
+        archived:false,operationId:command.operationId,statusOperationId:randomUUID()};
+      draft.sessions[sessionId]=binding;return binding;
+    });
+    return this.#finishCreate(actor,intent,"session.fork");
   }
   async page(actor, input, signal) {
     const reference = { kind: "session", id: input.sessionId };
