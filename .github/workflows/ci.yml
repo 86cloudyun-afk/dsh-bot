@@ -87,9 +87,35 @@ jobs:
         run: |
           mkdir -p qualification/upgrade-v102
           node test/native-plugin/stock-upgrade-run.mjs qualification/package/*.tgz > qualification/stock-upgrade-v102-private.log 2>&1
+      - name: Upgrade an existing v1.1.0 schema-two stock profile
+        shell: bash
+        env:
+          DSH_BOT_GUI_OUTPUT: qualification/upgrade-v110
+          DSH_BOT_UPGRADE_FROM: '1.1.0'
+        run: |
+          mkdir -p qualification/upgrade-v110
+          node test/native-plugin/stock-upgrade-run.mjs qualification/package/*.tgz > qualification/stock-upgrade-v110-private.log 2>&1
+      - name: Require all five stock qualification reports
+        if: always()
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {readFileSync,appendFileSync,existsSync} from 'node:fs';
+          const sources=['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110'];
+          const rows=sources.map(source=>{
+            const path=`qualification/${source}/stock-gui-report.json`;
+            const report=existsSync(path)?JSON.parse(readFileSync(path,'utf8')):{};
+            const checks=Object.entries(report.checks??{});
+            return {source,passed:report.passed===true&&report.teardownComplete===true&&checks.length>0&&checks.every(([,value])=>value===true),checks:checks.length};
+          });
+          const summary=['## Official stock qualification', '', '| Profile | Result | Checks |', '| --- | --- | --- |', ...rows.map(row=>`| ${row.source} | ${row.passed?'Passed':'Failed or missing'} | ${row.checks} |`), ''].join('\n');
+          console.log(summary);appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary);
+          assert.ok(rows.every(row=>row.passed),'Every GUI and immutable upgrade source must pass with completed teardown');
+          JS
       - name: Sanitized GUI qualification report
         if: always()
-        run: node -e 'const fs=require("fs");for(const p of ["qualification/gui/stock-gui-report.json","qualification/upgrade/stock-gui-report.json","qualification/upgrade-v101/stock-gui-report.json","qualification/upgrade-v102/stock-gui-report.json"])if(fs.existsSync(p))console.log(fs.readFileSync(p,"utf8"));'
+        run: node -e 'const fs=require("fs");for(const p of ["qualification/gui/stock-gui-report.json","qualification/upgrade/stock-gui-report.json","qualification/upgrade-v101/stock-gui-report.json","qualification/upgrade-v102/stock-gui-report.json","qualification/upgrade-v110/stock-gui-report.json"])if(fs.existsSync(p))console.log(fs.readFileSync(p,"utf8"));'
       - name: Publish readable qualification check
         if: always() && github.event_name == 'push'
         uses: actions/github-script@v7
@@ -112,7 +138,11 @@ jobs:
             const v102 = fs.existsSync(v102Path) ? JSON.parse(fs.readFileSync(v102Path, 'utf8')) : {passed:false,error:'v1.0.2 upgrade qualification did not run'};
             const {requests: v102Requests, ...v102Summary} = v102;
             report.upgradeV102 = {...v102Summary, controlledRequests:v102Requests?.length??0};
-            report.passed = !!report.passed && !!upgrade.passed && !!v101.passed && !!v102.passed;
+            const v110Path = 'qualification/upgrade-v110/stock-gui-report.json';
+            const v110 = fs.existsSync(v110Path) ? JSON.parse(fs.readFileSync(v110Path, 'utf8')) : {passed:false,error:'v1.1.0 schema-two upgrade qualification did not run'};
+            const {requests: v110Requests, ...v110Summary} = v110;
+            report.upgradeV110 = {...v110Summary, controlledRequests:v110Requests?.length??0};
+            report.passed = !!report.passed && !!upgrade.passed && !!v101.passed && !!v102.passed && !!v110.passed;
             const {requests, ...summary} = report;
             summary.controlledRequests = requests?.length ?? 0;
             const text = '```json\n' + JSON.stringify(summary, null, 2) + '\n```';
@@ -133,3 +163,4 @@ jobs:
             qualification/upgrade/stock-gui-report.json
             qualification/upgrade-v101/stock-gui-report.json
             qualification/upgrade-v102/stock-gui-report.json
+            qualification/upgrade-v110/stock-gui-report.json

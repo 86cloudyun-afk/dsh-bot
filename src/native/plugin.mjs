@@ -25,8 +25,13 @@ export async function apply(ctx) {
     try{store=await PluginStore.open(ctx.storage.backend.get('json').kv,{namespace:scope.namespace});}catch(error){await scope.close();throw error;}
     let adapter,service,tasks,broker,collaboration,assistant,unprovide,unrpc,closed=false;
     const dispose=async()=>{
-      closed=true;const serviceDrain=service?.close();await assistant?.close();await serviceDrain;await unrpc?.();await unprovide?.();
-      try{await collaboration?.close();await broker?.close();await tasks?.close();await adapter?.close();}finally{try{await store.close();}finally{await scope.close();}}
+      closed=true;const failures=[];
+      const cleanup=async close=>{try{await close();}catch(error){failures.push(error);}};
+      const serviceDrain=cleanup(()=>service?.close());await cleanup(()=>assistant?.close());await serviceDrain;
+      await cleanup(()=>unrpc?.());await cleanup(()=>unprovide?.());
+      await cleanup(()=>collaboration?.close());await cleanup(()=>broker?.close());await cleanup(()=>tasks?.close());await cleanup(()=>adapter?.close());
+      await cleanup(()=>store.close());await cleanup(()=>scope.close());
+      if(failures.length)throw failures[0];
     };
     try {
       const policy=new PermissionPolicy(store,{agents:ctx.agents,operatorPeer:ctx.connection.operator});

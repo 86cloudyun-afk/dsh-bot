@@ -159,10 +159,10 @@ export class KnowledgeController {
   async download(actor,input) {
     this.policy.actorKey(actor);requireCondition(actor.kind==='human','access_denied');strictObject(input,['docId']);const doc=this.#read(actor,input.docId),source=await this.#sourceStatus(actor,doc);this.#read(actor,input.docId);this.policy.noteRead(actor,{kind:'material',id:doc.docId});return {docId:doc.docId,text:doc.text,contentHash:doc.contentHash,mediaType:doc.mediaType,fileName:doc.fileName??`${doc.docId}.${doc.mediaType==='text/markdown'?'md':'txt'}`,source};
   }
-  metadata(actor,input={}) {
-    this.policy.actorKey(actor);strictObject(input,['botId','cursor','limit']);const limit=input.limit??100;requireCondition(Number.isSafeInteger(limit)&&limit>=1&&limit<=500&&(input.cursor===undefined||validId(input.cursor)),'invalid_limit');
-    const state=this.store.read(),rows=Object.values(state.materials??{}).filter(doc=>(!input.botId||doc.botId===input.botId)&&(!input.cursor||doc.docId>input.cursor)&&this.policy.canRead(actor,{kind:'material',id:doc.docId},undefined,state)).sort((a,b)=>binary(a.docId,b.docId)).slice(0,limit);
-    return rows.map(doc=>{this.policy.noteRead(actor,{kind:'material',id:doc.docId});const {text,chunks,...metadata}=doc;return copy(metadata);});
+  metadata(actor,input={},state=this.store.read()) {
+    this.policy.actorKey(actor,state);strictObject(input,['botId','cursor','limit']);const limit=input.limit??100;requireCondition(Number.isSafeInteger(limit)&&limit>=1&&limit<=500&&(input.cursor===undefined||validId(input.cursor)),'invalid_limit');
+    const rows=Object.values(state.materials??{}).filter(doc=>(!input.botId||doc.botId===input.botId)&&(!input.cursor||doc.docId>input.cursor)&&this.policy.canRead(actor,{kind:'material',id:doc.docId},undefined,state)).sort((a,b)=>binary(a.docId,b.docId)).slice(0,limit);
+    return rows.map(doc=>{this.policy.noteRead(actor,{kind:'material',id:doc.docId},state);const {text,chunks,...metadata}=doc;return copy(metadata);});
   }
   async resolveSource(actor,input,state=this.store.read()) {
     strictObject(input,['docId','chunkId']);const doc=this.#read(actor,input.docId,state),chunk=doc.chunks.find(c=>c.chunkId===input.chunkId);requireCondition(chunk,'chunk_not_found');

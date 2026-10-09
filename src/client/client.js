@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind("dsh.bot"),
           listeners = new Set(),
           lifetime = new AbortController();
-        const pluginVersion = "1.1.0", clientProtocol = 2;
+        const pluginVersion = "1.1.1", clientProtocol = 2;
         let interval,
           refreshing,
           pendingLoaded = false,
@@ -234,9 +234,9 @@ window.__ModuleLoader__.load({
             publish({ busy: false });
           }
         }
-        async function query(action, input = {}) {
+        async function query(action, input = {}, isActive = () => true) {
           try { return await rpc("command", {action, input}); }
-          catch (error) { if (!lifetime.signal.aborted) publish({error: `${error.code ?? "connection"}：${error.message}`}); }
+          catch (error) { if (!lifetime.signal.aborted && isActive()) publish({error: `${error.code ?? "connection"}：${error.message}`}); }
         }
         function downloadText(text, name, type = "text/plain;charset=utf-8") {
           const url = URL.createObjectURL(new Blob([text], {type})), link = document.createElement("a");
@@ -659,7 +659,8 @@ window.__ModuleLoader__.load({
           ));
         }
         function MaterialsPane({botId}) {
-          const view=useView(),[hits,setHits]=useState(null),[opened,setOpened]=useState(null),[draft,setDraft]=useState({text:"",fileName:"",mediaType:"text/plain"}),[epoch,setEpoch]=useState(0);
+          const view=useView(),[hits,setHits]=useState(null),[opened,setOpened]=useState(null),[draft,setDraft]=useState({text:"",fileName:"",mediaType:"text/plain"}),[epoch,setEpoch]=useState(0),[loading,setLoading]=useState(false),draftGeneration=useRef(0);
+          useEffect(()=>()=>{draftGeneration.current++;},[]);
           const rows=(view.snapshot.materials??[]).filter(row=>row.botId===botId);
           return h("div",{className:"grid"},card("资料检索",
             form("搜索资料",async data=>{const result=await query("material.search",{botId,query:data.get("query"),limit:20});if(result)setHits(result);},field("关键词","query",{maxLength:500})),
@@ -667,16 +668,18 @@ window.__ModuleLoader__.load({
               h("h3",null,row.title),row.excerpt&&h("pre",null,row.excerpt),
               h("small",null,row.chunkId?`行 ${row.startLine??row.lineStart}–${row.endLine??row.lineEnd} · ${row.contentHash}`:`${row.archived?"已归档 · ":""}更新 ${updatedName(row.updatedAt??row.createdAt)}`),
               button(row.chunkId?"打开此引用":"打开正文",()=>setOpened({docId:row.docId,chunkId:row.chunkId})),
-              !row.chunkId&&button("修订这份资料",async()=>{const result=await query("material.download",{docId:row.docId});if(result){setDraft({text:result.text,fileName:row.fileName??"",mediaType:row.mediaType??"text/plain",title:row.title,replacesDocId:row.docId});setEpoch(n=>n+1);}}),
+              !row.chunkId&&button("修订这份资料",async()=>{const generation=++draftGeneration.current,isActive=()=>generation===draftGeneration.current;setLoading(true);try{const result=await query("material.download",{docId:row.docId},isActive);if(result&&isActive()){setDraft({text:result.text,fileName:row.fileName??"",mediaType:row.mediaType??"text/plain",title:row.title,replacesDocId:row.docId});setEpoch(n=>n+1);}}finally{if(isActive())setLoading(false);}},{disabled:view.busy||loading}),
               !row.chunkId&&!row.archived&&button("归档资料",()=>command("material.archive",{docId:row.docId,expectedVersion:row.version})),
             )),hits&&button("显示全部资料",()=>setHits(null))),
             card("收录资料",
-              field("UTF-8 文本或 Markdown 文件","materialFile",{type:"file",required:false,accept:".txt,.md,text/plain,text/markdown",onChange:async event=>{const file=event.target.files?.[0];if(!file)return;try{if(!/\.(txt|md)$/i.test(file.name))throw Error("请选择 .txt 或 .md 文件。");const text=await readUtf8(file,65536);setDraft({text,fileName:file.name,mediaType:/\.md$/i.test(file.name)?"text/markdown":"text/plain"});setEpoch(n=>n+1);}catch(error){publish({error:error.message});}}}),
-              h("div",{key:epoch},form("保存不可变资料",async data=>{
-                const enteredText=String(data.get("text")??""),displayText=text=>text.replace(/\r\n?/g,"\n");
+              field("UTF-8 文本或 Markdown 文件","materialFile",{type:"file",required:false,accept:".txt,.md,text/plain,text/markdown",onChange:async event=>{const generation=++draftGeneration.current,file=event.target.files?.[0];if(!file){setLoading(false);return;}setLoading(true);try{if(!/\.(txt|md)$/i.test(file.name))throw Error("请选择 .txt 或 .md 文件。");const text=await readUtf8(file,65536);if(generation!==draftGeneration.current)return;setDraft({text,fileName:file.name,mediaType:/\.md$/i.test(file.name)?"text/markdown":"text/plain"});setEpoch(n=>n+1);}catch(error){if(generation===draftGeneration.current)publish({error:error.message});}finally{if(generation===draftGeneration.current)setLoading(false);}}}),
+              loading&&h("p",{role:"status"},"正在读取资料，完成后可编辑标题和正文并保存。"),
+              h("fieldset",{disabled:loading,style:{border:0,padding:0,margin:0,minWidth:0}},h("div",{key:epoch},form("保存不可变资料",async data=>{
+                if(loading)return;
+                const generation=draftGeneration.current,enteredText=String(data.get("text")??""),displayText=text=>text.replace(/\r\n?/g,"\n");
                 // Textareas normalize line endings; an untouched upload retains its original bytes.
                 const text=displayText(enteredText)===displayText(draft.text)?draft.text:enteredText;
-                const result=await command("material.ingest",{botId,title:data.get("title"),text,mediaType:draft.mediaType,...(draft.replacesDocId?{replacesDocId:draft.replacesDocId}:{}),...(draft.fileName?{fileName:draft.fileName}:{})});if(result){setDraft({text:"",fileName:"",mediaType:"text/plain"});setEpoch(n=>n+1);}},field("资料标题","title",{value:draft.title??draft.fileName,maxLength:200}),field("正文","text",{value:draft.text,textarea:true}),h("small",null,draft.replacesDocId?"正在修订所选资料：保存形成新资料，旧正文、来源和引用保留。":"每份最多 64 KiB。修订形成新资料，引用保留原文。"),draft.replacesDocId&&button("改为收录新资料",()=>{setDraft({...draft,replacesDocId:undefined});}))),
+                const result=await command("material.ingest",{botId,title:data.get("title"),text,mediaType:draft.mediaType,...(draft.replacesDocId?{replacesDocId:draft.replacesDocId}:{}),...(draft.fileName?{fileName:draft.fileName}:{})});if(result&&generation===draftGeneration.current){draftGeneration.current++;setDraft({text:"",fileName:"",mediaType:"text/plain"});setEpoch(n=>n+1);}},field("资料标题","title",{value:draft.title??draft.fileName,maxLength:200}),field("正文","text",{value:draft.text,textarea:true}),h("small",null,draft.replacesDocId?"正在修订所选资料：保存形成新资料，旧正文、来源和引用保留。":"每份最多 64 KiB。修订形成新资料，引用保留原文。"),draft.replacesDocId&&button("改为收录新资料",()=>{draftGeneration.current++;setDraft({...draft,replacesDocId:undefined});})))),
               advanced("从原生会话摘录",form("收录真实会话片段",data=>command("material.ingest",{botId,title:data.get("title"),source:{sessionId:data.get("sessionId"),eventSeq:Number(data.get("eventSeq")),partIndex:Number(data.get("partIndex")),startOffset:Number(data.get("startOffset")),endOffset:Number(data.get("endOffset"))}}),field("标题","title"),field("来源会话","sessionId",{options:view.snapshot.sessions.map(row=>({value:row.sessionId,label:`${view.snapshot.bots.find(bot=>bot.botId===row.botId)?.name??"会话"} · ${row.sessionId}`}))}),field("事件序号","eventSeq",{type:"number",min:0}),field("文本部分序号","partIndex",{type:"number",min:0,value:0}),field("文本开始位置","startOffset",{type:"number",min:0,value:0}),field("文本结束位置","endOffset",{type:"number",min:1}),h("small",null,"范围由真实原生日志核对；不会用粘贴文字替代该来源。")))
             ),opened&&h(MaterialReader,{...opened,onClose:()=>setOpened(null),key:`${opened.docId}:${opened.chunkId??""}`}));
         }
@@ -691,15 +694,16 @@ window.__ModuleLoader__.load({
               advanced("未带入原因",...(preview.omitted??[]).map(row=>h("p",{key:row.memoryId},`${view.snapshot.memories.find(memory=>memory.memoryId===row.memoryId)?.text.slice(0,40)??"记忆"} · ${{forgotten:"已遗忘",inactive:"来源待验证",inaccessible:"来源暂不可读",budget:"本轮预算不足",relevance_or_recency:"按相关性与最近更新选择其他记忆"}[row.reason]??"本轮未选择"}`)))));
         }
         function MemoryPane() {
-          const view=useView(),[id,setId]=useState(""),[section,setSection]=useState("memory"),[editing,setEditing]=useState(null),[hits,setHits]=useState(null),[sourceRef,setSourceRef]=useState(null),[creationEpoch,setCreationEpoch]=useState(0);
+          const view=useView(),[id,setId]=useState(""),[section,setSection]=useState("memory"),[editing,setEditing]=useState(null),[hits,setHits]=useState(null),[sourceRef,setSourceRef]=useState(null),[creationEpoch,setCreationEpoch]=useState(0),searchGeneration=useRef(0);
           const botId=id||view.snapshot.bots.find(bot=>!bot.deletedAt)?.botId, rows=(hits?hits.map(hit=>view.snapshot.memories.find(row=>row.memoryId===hit.memoryId)).filter(Boolean):view.snapshot.memories).filter(row=>row.botId===botId&&!row.forgotten),selected=view.snapshot.memories.find(row=>row.memoryId===editing&&row.botId===botId&&!row.forgotten);
+          useEffect(()=>()=>{searchGeneration.current++;},[botId,section]);
           return h("div",null,
-            h("label",null,"所属 Bot",h("select",{"aria-label":"所属 Bot",value:botId??"",onChange:event=>{setId(event.target.value);setEditing(null);setHits(null);setSourceRef(null);}},botsOptions().map(row=>option(row.value,row.label)))),
-            h("nav",{"aria-label":"记忆与资料"},button("长期记忆",()=>setSection("memory"),{"aria-selected":section==="memory"}),button("资料",()=>setSection("materials"),{"aria-selected":section==="materials"})),
+            h("label",null,"所属 Bot",h("select",{"aria-label":"所属 Bot",value:botId??"",onChange:event=>{searchGeneration.current++;setId(event.target.value);setEditing(null);setHits(null);setSourceRef(null);}},botsOptions().map(row=>option(row.value,row.label)))),
+            h("nav",{"aria-label":"记忆与资料"},button("长期记忆",()=>{if(section!=="memory")searchGeneration.current++;setSection("memory");},{"aria-selected":section==="memory"}),button("资料",()=>{if(section!=="materials")searchGeneration.current++;setSection("materials");},{"aria-selected":section==="materials"})),
             !botId?h("p",null,"请先创建 Bot。") : section==="materials"?h(MaterialsPane,{botId,key:botId}):h("div",{className:"grid"},card("长期记忆",
-              form("搜索记忆",async data=>{const result=await query("memory.search",{botId,query:data.get("query"),...(data.get("category")?{category:data.get("category")}:{})});if(result)setHits(result);},field("内容关键词","query",{required:false,maxLength:500}),field("分类筛选","category",{required:false,options:[{value:"",label:"全部分类"},...categories,...[...new Set(rows.map(row=>row.category))].filter(value=>!categories.some(row=>row.value===value)).map(value=>({value,label:categoryName(value)}))]})),
+              form("搜索记忆",async data=>{const generation=++searchGeneration.current,isActive=()=>generation===searchGeneration.current;const result=await query("memory.search",{botId,query:data.get("query"),...(data.get("category")?{category:data.get("category")}:{})},isActive);if(result&&isActive())setHits(result);},field("内容关键词","query",{required:false,maxLength:500}),field("分类筛选","category",{required:false,options:[{value:"",label:"全部分类"},...categories,...[...new Set(rows.map(row=>row.category))].filter(value=>!categories.some(row=>row.value===value)).map(value=>({value,label:categoryName(value)}))]})),
               ...[...rows].sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||String(b.updatedAt).localeCompare(String(a.updatedAt))).map(row=>h("article",{className:"card",key:row.memoryId},h("p",null,row.text),h("small",null,`${categoryName(row.category)} · ${row.pinned?"已固定 · ":""}更新 ${updatedName(row.updatedAt)}${row.inactive?" · 来源待验证，不可用":""}`),h("div",{className:"actions"},button("编辑记忆",()=>setEditing(row.memoryId)),button(row.pinned?"取消固定":"固定",()=>command("memory.pin",{memoryId:row.memoryId,expectedVersion:row.version,pinned:!row.pinned})),row.source?.kind==="material"?button("查看资料来源",()=>setSourceRef({docId:row.source.docId,chunkId:row.source.chunkId})):row.source?.sessionId&&button("查看来源",()=>openSession(row.source.sessionId)),button("遗忘此记忆",()=>command("memory.forget",{memoryId:row.memoryId,expectedVersion:row.version}))))),
-              hits&&button("显示全部记忆",()=>setHits(null)),button("添加另一条记忆",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(MemoryTransfer,{botId,key:botId}),h(ContextPreview,{botId,key:`context:${botId}`})),
+              hits&&button("显示全部记忆",()=>{searchGeneration.current++;setHits(null);}),button("添加另一条记忆",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(MemoryTransfer,{botId,key:botId}),h(ContextPreview,{botId,key:`context:${botId}`})),
               h(MemoryEditor,{memory:selected,botId,onSaved:saved=>setEditing(saved.memoryId),key:selected?.memoryId??`new:${botId}:${creationEpoch}`})),sourceRef&&h(MaterialReader,{...sourceRef,onClose:()=>setSourceRef(null),key:`source:${sourceRef.docId}:${sourceRef.chunkId}`}));
         }
         function TaskRelations({task:latestTask}) {
@@ -788,13 +792,13 @@ window.__ModuleLoader__.load({
         function ScheduleHistory({scheduleId}) {
           const view=useView(),[rows,setRows]=useState([]),[selected,setSelected]=useState([]),[confirm,setConfirm]=useState(false),[pruneDraft,setPruneDraft]=useState(null);
           const load=async()=>{const value=await query("occurrence.list",{scheduleId,limit:100});if(value)setRows(Array.isArray(value)?value:value.items??[]);};
-          useEffect(()=>{let active=true;query("occurrence.list",{scheduleId,limit:100}).then(value=>{if(active&&value)setRows(Array.isArray(value)?value:value.items??[]);});return()=>{active=false;};},[scheduleId,view.snapshot.revision]);
+          useEffect(()=>{let active=true;query("occurrence.list",{scheduleId,limit:100},()=>active).then(value=>{if(active&&value)setRows(Array.isArray(value)?value:value.items??[]);});return()=>{active=false;};},[scheduleId,view.snapshot.revision]);
           return advanced("触发历史",...rows.map(row=>h("article",{key:row.occurrenceId},h("p",null,`${updatedName(row.dueAt)} · ${stateName(row.state)}`),row.taskId&&h("small",null,`任务 ${row.taskId}`),["settled","missed"].includes(row.state)&&h("label",{className:"check"},h("input",{type:"checkbox",checked:selected.includes(row.occurrenceId),onChange:event=>{setConfirm(false);setPruneDraft(null);setSelected(ids=>event.target.checked?[...ids,row.occurrenceId]:ids.filter(id=>id!==row.occurrenceId));}}),"选择清理此已结算触发记录"))),
             selected.length>0&&h("div",null,button("清理所选历史",()=>{setPruneDraft({occurrenceIds:[...selected],expectedVersions:Object.fromEntries(rows.filter(row=>selected.includes(row.occurrenceId)).map(row=>[row.occurrenceId,row.version]))});setConfirm(true);}),confirm&&h("div",null,h("p",null,`确认清理 ${pruneDraft?.occurrenceIds.length??0} 条已结算触发记录？原任务和操作回执保留。`),button("确认清理所选记录",async()=>{const result=await command("occurrence.prune",{...pruneDraft,confirm:true});if(result){setSelected([]);setConfirm(false);setPruneDraft(null);await load();}}),button("取消清理",()=>{setConfirm(false);setPruneDraft(null);}))));
         }
         function SchedulesPane() {
           const view=useView(),[rows,setRows]=useState([]),[editing,setEditing]=useState(null),[notices,setNotices]=useState([]),[creationEpoch,setCreationEpoch]=useState(0);
-          useEffect(()=>{let active=true;Promise.all([query("schedule.list"),query("notice.list")]).then(([s,n])=>{if(active){if(s)setRows(Array.isArray(s)?s:s.items??[]);if(n)setNotices(Array.isArray(n)?n:n.notices??[]);}});return()=>{active=false;};},[view.snapshot.revision]);
+          useEffect(()=>{let active=true;Promise.all([query("schedule.list",{},()=>active),query("notice.list",{},()=>active)]).then(([s,n])=>{if(active){if(s)setRows(Array.isArray(s)?s:s.items??[]);if(n)setNotices(Array.isArray(n)?n:n.notices??[]);}});return()=>{active=false;};},[view.snapshot.revision]);
           const selected=rows.find(row=>row.scheduleId===editing);
           return advanced("提醒与定时",h(NoticeList,{notices}),...rows.map(row=>h("article",{className:"card",key:row.scheduleId},h("h3",null,row.kind==="task"?row.recipe?.title:row.message),h("p",null,`${view.snapshot.bots.find(bot=>bot.botId===row.ownerBotId)?.name??"Bot"} · ${row.archived?"已归档":row.enabled?"已启用":"已暂停"} · ${row.rule.timezone} · 下次 ${updatedName(row.nextDueAt)}`),button("编辑并重新确认",()=>setEditing(row.scheduleId)),!row.archived&&button(row.enabled?"暂停安排":"启用安排",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:!row.enabled})),!row.archived&&button("归档安排",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:false,archived:true})),row.archived&&button("恢复安排（保持暂停）",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:false,archived:false})),h(ScheduleHistory,{scheduleId:row.scheduleId}))),
             editing&&button("创建新的安排",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(ScheduleEditor,{schedule:selected,onSaved:saved=>{setRows(previous=>[...previous.filter(row=>row.scheduleId!==saved.scheduleId),saved]);setEditing(saved.scheduleId);},key:selected?.scheduleId??`new-schedule:${creationEpoch}`}));

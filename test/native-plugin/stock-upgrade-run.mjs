@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {readFile,writeFile,readdir} from 'node:fs/promises';
+import {readFile,writeFile,readdir,mkdir} from 'node:fs/promises';
 import {openSync,closeSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve,join} from 'node:path';
 import {stockGui,textReply,controlledProvider,waitFor} from './stock-gui-runtime.mjs';
-import {finishStockGui} from './stock-report.mjs';
+import {finishStockGui,recordStockError} from './stock-report.mjs';
 
 let gui;
 const canonical=value=>Array.isArray(value)?`[${value.map(canonical).join(',')}]`:value&&typeof value==='object'?`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`:JSON.stringify(value);
@@ -13,7 +13,7 @@ const stateChecksum=value=>createHash('sha256').update(canonical(value)).digest(
 try {
   const previousVersion=process.env.DSH_BOT_UPGRADE_FROM??'1.0.0',
     targetVersion=JSON.parse(await readFile('package.json','utf8')).version,
-    previousHashes={'1.0.0':'1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724','1.0.1':'e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd','1.0.2':'c0e72fe808dddd31d74ad4907dcfb30f7736a7782a83bb307a6d4ca6587de822'};
+    previousHashes={'1.0.0':'1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724','1.0.1':'e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd','1.0.2':'c0e72fe808dddd31d74ad4907dcfb30f7736a7782a83bb307a6d4ca6587de822','1.1.0':'5ca1ebde0a3d59869f180e2fe692dcfb70b32aadb885f5d1d624093c425e85e1'};
   assert.ok(Object.hasOwn(previousHashes,previousVersion),'Upgrade source must be an immutable previous release');
   const patch=resolve(process.argv[2]),previous=resolve(`dist/dsh-bot-${previousVersion}.tgz`);
   assert.equal(createHash('sha256').update(await readFile(previous)).digest('hex'),previousHashes[previousVersion]);
@@ -38,8 +38,26 @@ try {
     events=await gui.original(contact.sessionId);
     return events.some(event=>event.type==='user/message'&&event.data.id===attempt.resultMessageId);
   },'legacy native result message is durably visible before migration snapshot');
+  let v11Proof;
+  if(previousVersion==='1.1.0') {
+    const pinned=await service.dispatch(actor,{operationId:'upgrade-v11-memory-pin',action:'memory.pin',input:{memoryId:memory.memoryId,expectedVersion:memory.version,pinned:true}});
+    const material=await service.dispatch(actor,{operationId:'upgrade-v11-material',action:'material.ingest',input:{botId:bot.botId,title:'V110 retained immutable material',text:'\uFEFF# Retained material\r\nExact native upgrade bytes 🧭\n',fileName:'retained-v110.md',mediaType:'text/markdown'}});
+    const future=Date.now()+3600000,iso=new Date(future).toISOString();
+    const schedule=await service.dispatch(actor,{operationId:'upgrade-v11-disabled-schedule',action:'schedule.create',input:{ownerBotId:bot.botId,kind:'task',enabled:false,recipe:{botId:bot.botId,title:'Retained disabled future task',goal:'Must never start during upgrade',criteria:[],originSessionId:contact.sessionId},rule:{kind:'once',timezone:'UTC',date:iso.slice(0,10),time:iso.slice(11,16)}}});
+    const assistant=service.assistant,originalNow=assistant.clock.now,due=Math.ceil(Date.now()/60000)*60000+60000,dueISO=new Date(due).toISOString();
+    let reminder,notice;
+    try {
+      reminder=await service.dispatch(actor,{operationId:'upgrade-v11-reminder',action:'schedule.create',input:{ownerBotId:bot.botId,kind:'reminder',message:'Retained acknowledged notice',rule:{kind:'once',timezone:'UTC',date:dueISO.slice(0,10),time:dueISO.slice(11,16)}}});
+      assistant.clock.now=()=>due;await assistant.runDue();
+      notice=Object.values(service.store.read().notices).find(row=>row.scheduleId===reminder.scheduleId);assert.ok(notice);
+      await service.dispatch(actor,{operationId:'upgrade-v11-notice-ack',action:'notice.ack',input:{noticeId:notice.noticeId,expectedVersion:notice.version}});
+      const current=service.store.read().schedules[reminder.scheduleId];
+      await service.dispatch(actor,{operationId:'upgrade-v11-reminder-pause',action:'schedule.state',input:{scheduleId:reminder.scheduleId,expectedVersion:current.version,enabled:false}});
+    } finally {assistant.clock.now=originalNow;await assistant.runDue();}
+    v11Proof={memoryId:pinned.memoryId,docId:material.docId,scheduleId:schedule.scheduleId,reminderId:reminder.scheduleId,noticeId:notice.noticeId,occurrenceId:notice.occurrenceId};
+  }
   const eventProof=events.map(event=>({seq:event.seq,type:event.type,checksum:stateChecksum(event)}));
-  await writeFile(join(gui.root,'upgrade-original.json'),JSON.stringify({request,bot,contact,memory,task,completed,attempt,eventProof,legacyControlledRequests:gui.report.requests.length}),{mode:0o600});
+  await writeFile(join(gui.root,'upgrade-original.json'),JSON.stringify({request,bot,contact,memory,task,completed,attempt,eventProof,v11Proof,legacyControlledRequests:gui.report.requests.length}),{mode:0o600});
   await service.store.drain();
   const originalStoreId=service.store.read().storeId,jsonRoot=gui.app.ctx.storage.backend.get('json').root;
   await gui.shutdown();
@@ -53,7 +71,7 @@ try {
   assert.equal(documents.length,1,'One closed official plugin KV document must retain the original store');
   assert.equal(documents[0].unit.version,1);
   const legacyState=documents[0].tables.state.current;
-  assert.equal(legacyState.schema,1);
+  assert.equal(legacyState.schema,previousVersion==='1.1.0'?2:1);
   await writeFile(join(gui.root,'upgrade-legacy-state.json'),JSON.stringify(legacyState),{mode:0o600});
   await writeFile(join(gui.root,'upgrade-closed-kv-document.json'),JSON.stringify(documents[0]),{mode:0o600});
   gui.uninstall();gui.reinstall(patch);
@@ -70,7 +88,7 @@ try {
   } else {
   await gui.boot();
   const service=gui.app.ctx.dshBot,actor=service.policy.fromPeer(gui.app.ctx.connection.operator);
-  const {request,bot,contact,memory,task,completed,attempt,eventProof,legacyControlledRequests}=JSON.parse(await readFile(join(gui.root,'upgrade-original.json'),'utf8'));
+  const {request,bot,contact,memory,task,completed,attempt,eventProof,v11Proof,legacyControlledRequests}=JSON.parse(await readFile(join(gui.root,'upgrade-original.json'),'utf8'));
   gui.report.previousArtifactSha256=createHash('sha256').update(await readFile(previous)).digest('hex');
   gui.report.upgradeArtifactSha256=createHash('sha256').update(await readFile(patch)).digest('hex');
   gui.report.freshHostProcessAfterUpgrade=true;
@@ -79,6 +97,23 @@ try {
   assert.equal(migrated.schema,2);
   assert.equal(snapshot.clientProtocol,2);
   assert.equal(migrated.storeId,legacyState.storeId);
+  if(previousVersion==='1.1.0') {
+    assert.equal(legacyState.schema,2);
+    assert.deepEqual(migrated.migrationBackup,legacyState.migrationBackup,'Retain the existing backup or its absence exactly; schema two needs no migration');
+    for(const table of ['bots','sessions','memories','grants','tasks','attempts','groups','meetings','operations','outbox','materials','schedules','occurrences','notices','taskInputs']) {
+      for(const id of Object.keys(legacyState[table]))assert.ok(Object.hasOwn(migrated[table],id),`${table} original identity must survive schema-two upgrade`);
+    }
+    for(const [id,operation] of Object.entries(legacyState.operations))assert.deepEqual(migrated.operations[id],operation,'Every original receipt retains its fingerprint and result');
+    for(const table of ['memories','materials','schedules','occurrences','notices','taskInputs'])assert.deepEqual(migrated[table],legacyState[table],`${table} exact real v1.1.0 rows survive restart`);
+    assert.ok(v11Proof);assert.equal(migrated.memories[v11Proof.memoryId].pinned,true);
+    assert.equal(migrated.materials[v11Proof.docId].contentHash,createHash('sha256').update(migrated.materials[v11Proof.docId].text).digest('hex'));
+    assert.equal(migrated.schedules[v11Proof.scheduleId].enabled,false);
+    assert.equal(migrated.notices[v11Proof.noticeId].read,true);
+    assert.equal(migrated.occurrences[v11Proof.occurrenceId].state,'settled');
+    gui.report.upgradeSchemaTwo={fromSchema:2,toSchema:2,existingMigrationBackupRetained:true,backupWasPresent:Object.hasOwn(legacyState,'migrationBackup'),allOriginalReceiptIdentitiesPreserved:true,exactV11RowsRetained:true,sourceSnapshotReadFromClosedOfficialKv:true};
+    gui.check('upgradeV110SchemaTwoFullHostRestartRetainsExistingBackupExactly',true);
+    gui.check('upgradeV110PreservesEveryOriginalIdentityReceiptAndExactV11Rows',true);
+  } else {
   assert.equal(migrated.migrationBackup.schema,1);
   assert.deepEqual(migrated.migrationBackup.payload,legacyState);
   assert.equal(migrated.migrationBackup.checksum,stateChecksum(legacyState));
@@ -93,6 +128,7 @@ try {
   gui.report.migration={fromSchema:1,toSchema:2,backupChecksum:migrated.migrationBackup.checksum,backupPayloadMatchesOriginal:true,allOriginalReceiptIdentitiesPreserved:true,legacySnapshotReadFromClosedOfficialKv:true};
   gui.check('upgradeSchemaTwoAndVerifiedExactSchemaOneBackup',true);
   gui.check('upgradePreservesEveryOriginalIdentityAndReceipt',true);
+  }
   const retained=migrated.attempts[attempt.attemptId],outbox=Object.values(migrated.outbox).find(row=>row.attemptId===attempt.attemptId);
   assert.equal(migrated.tasks[completed.taskId].currentAttemptId,attempt.attemptId);
   assert.equal(migrated.tasks[completed.taskId].state,legacyState.tasks[completed.taskId].state);
@@ -138,7 +174,13 @@ try {
   }
 } catch(error) {
   process.exitCode=1;
-  if(gui){gui.report.passed=false;gui.report.error??=String(error.stack).replace(/https?:\/\/\S+/g,'[URL omitted]');}
+  if(gui){gui.report.passed=false;await recordStockError(gui.report,error,{evidence:gui.evidence});}
+  else {
+    const evidence=resolve(process.env.DSH_BOT_GUI_OUTPUT??'qualification/upgrade');await mkdir(evidence,{recursive:true});
+    const report={passed:false,testsPassed:false,teardownComplete:false,stage:'upgrade-initialization',checks:{}};
+    await recordStockError(report,error,{evidence});
+    await writeFile(join(evidence,'stock-gui-report.json'),JSON.stringify(report,null,2),{mode:0o600});console.log(JSON.stringify(report));
+  }
 } finally {
-  if(gui){if(!await finishStockGui(gui))process.exitCode=1;console.log(JSON.stringify({passed:gui.report.passed,checks:gui.report.checks,error:gui.report.error?.split('\n')[0],evidence:gui.evidence}));}
+  if(gui){if(!await finishStockGui(gui))process.exitCode=1;console.log(JSON.stringify({passed:gui.report.passed,checks:gui.report.checks,error:gui.report.error}));}
 }

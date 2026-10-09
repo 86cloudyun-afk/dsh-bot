@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createOfficialFixture,deferred} from './official-fixture.mjs';
+import {PluginStore} from '../../src/native/store.mjs';
+import {PermissionPolicy} from '../../src/native/policy.mjs';
+import {NativeDshAdapter} from '../../src/native/adapter.mjs';
+import {BotDirectory} from '../../src/native/bots.mjs';
+import {SessionOwnership} from '../../src/native/sessions.mjs';
+import {TaskController} from '../../src/native/tasks.mjs';
+import {AssistantController} from '../../src/native/assistant.mjs';
+
+for(const [label,at] of [['within admission window','2026-10-09T00:01:10Z'],['after admission window','2026-10-09T00:02:01Z']])test(`a real KV-queued old claim cannot mutate unsafe evidence or pause reconfirmation ${label}`,async t=>{
+  const native=await createOfficialFixture(),entered=deferred(),release=deferred(),queued=deferred();
+  let hold=false,watchClaim=false,now=Date.parse('2026-10-09T00:00:00Z');
+  const kv={async open(descriptor){const unit=await native.ctx.storage.backend.get('json').kv.open(descriptor);return {loadAll:unit.loadAll.bind(unit),close:unit.close.bind(unit),async putRecord(...args){if(hold){hold=false;entered.resolve();await release.promise;}return unit.putRecord(...args);}};}};
+  const store=await PluginStore.open(kv),operator={},policy=new PermissionPolicy(store,{agents:native.ctx.agents,operatorPeer:operator}),human=policy.fromPeer(operator),adapter=new NativeDshAdapter(native.ctx,{store,policy});
+  const bots=new BotDirectory(store,policy,adapter),sessions=new SessionOwnership(store,policy,adapter),tasks=new TaskController({store,policy,adapter}),assistant=new AssistantController({store,policy,adapter,tasks,clock:{now:()=>now,setTimeout(){return 1},clearTimeout(){}}});
+  t.after(async()=>{release.resolve();await assistant.close();await tasks.close();await adapter.close();await store.close();await native.close();});
+  const transact=store.transact.bind(store);store.transact=(command,mutate)=>{const result=transact(command,mutate);if(watchClaim&&command.action==='schedule.claim')queued.resolve();return result;};
+  const bot=await bots.create(human,{operationId:'bot',action:'bot.create',input:{name:'Worker',role:'Test',cwd:native.dir,contact:{provider:'controlled',model:'model-a'}}});
+  const session=await sessions.create(human,{operationId:'contact',action:'session.create',input:{botId:bot.botId}});
+  const schedule=await assistant.createSchedule(human,{operationId:'schedule',action:'schedule.create',input:{ownerBotId:bot.botId,kind:'task',recipe:{botId:bot.botId,title:'Original',goal:'One response',criteria:[],originSessionId:session.sessionId},rule:{kind:'once',timezone:'UTC',date:'2026-10-09',time:'00:01'}}});
+  await store.transact({operationId:'fill-capacity',action:'test.capacity'},draft=>{for(let i=0;i<15;i++)draft.attempts[`held-${i}`]={attemptId:`held-${i}`,botId:bot.botId,taskId:`held-task-${i}`,state:'UNKNOWN',reservationHeld:true};return true;});
+  now=Date.parse('2026-10-09T00:01:00Z');await assistant.runDue();
+  const old=Object.values(store.read().occurrences)[0];assert.equal(old.state,'blocked');assert.equal(old.errorCode,'capacity_exhausted');assert.ok(old.taskId);assert.equal(old.attemptId,undefined);
+  await store.transact({operationId:'unsafe-evidence',action:'test.evidence'},draft=>{
+    draft.operations[old.startOperationId]={action:'task.start',fingerprint:'original-UNKNOWN-start',result:{state:'UNKNOWN',occurrenceId:old.occurrenceId,taskId:old.taskId}};
+    draft.outbox['original-result']={outboxId:'original-result',taskId:old.taskId,occurrenceId:old.occurrenceId,state:'UNKNOWN',operationId:'original-delivery',message:{id:'original-native-message'}};
+    return true;
+  });
+  const before=store.read();now=Date.parse(at);hold=true;
+  const confirmation=assistant.updateSchedule(human,{operationId:'confirm',action:'schedule.update',input:{scheduleId:schedule.scheduleId,expectedVersion:before.schedules[schedule.scheduleId].version,enabled:true,rule:{kind:'once',timezone:'UTC',date:'2026-10-09',time:'00:16'}}});
+  await entered.promise;assert.equal(store.read().schedules[schedule.scheduleId].consentVersion,1);
+  watchClaim=true;const pass=assistant.runDue();await queued.promise;release.resolve();
+  await confirmation;await pass;
+  const after=store.read();assert.equal(after.schedules[schedule.scheduleId].enabled,true);assert.equal(after.schedules[schedule.scheduleId].pauseReason,undefined);assert.equal(after.schedules[schedule.scheduleId].consentVersion,2);
+  assert.deepEqual(after.occurrences[old.occurrenceId],before.occurrences[old.occurrenceId]);assert.deepEqual(after.tasks,before.tasks);assert.deepEqual(after.attempts,before.attempts);assert.deepEqual(after.outbox,before.outbox);
+  for(const id of [old.createOperationId,old.startOperationId])assert.deepEqual(after.operations[id],before.operations[id]);
+  now=Date.parse('2026-10-09T00:16:00Z');await assistant.runDue();
+  assert.deepEqual(store.read().occurrences[old.occurrenceId],before.occurrences[old.occurrenceId]);assert.equal(Object.keys(store.read().occurrences).length,1);assert.equal(native.requests.length,0);
+});
