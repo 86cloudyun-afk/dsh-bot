@@ -129,3 +129,49 @@ test('v1.1 create/fork replay retains original committed receipt after a later c
  const f=await businessFixture(t),bot=await f.bot(),create=cmd('session.create',{botId:bot.botId}),original=await f.sessions.create(f.human,create);await f.sessions.configure(f.human,cmd('session.configure',{sessionId:original.sessionId,expectedVersion:1,name:'Later title'}));assert.deepEqual(await f.sessions.create(f.human,create),original);
  await reply(f,original);const fork=cmd('session.fork',{sessionId:original.sessionId}),forked=await f.sessions.fork(f.human,fork);await f.sessions.configure(f.human,cmd('session.configure',{sessionId:forked.sessionId,expectedVersion:1,name:'Later fork title'}));assert.deepEqual(await f.sessions.fork(f.human,fork),forked);
 });
+
+function nativeBarrierTool(f,t,entered,release,name='owned-review-resource') {
+ t.after(f.ctx.tools.register({name,description:'Controlled native resource barrier',parameters:{type:'object',properties:{},additionalProperties:false},output:{schema:{type:'boolean'},render:()=>[{type:'text',text:'done'}]},execute:async()=>{entered.resolve();await release.promise;return true;}}));
+}
+async function ordinary(f,id) {const handle=await f.ctx.agents.create({sessionId:id,meta:{cwd:f.dir},agentOptions:{provider:'controlled',model:'model-a'}});f.beforeClose.push(()=>handle.dispose());await f.ctx.sessions.flush(handle.agent.session);return handle.agent;}
+const nativeTool=(f,agent,name)=>f.ctx.tools.execute({callId:crypto.randomUUID(),name,agent,signal:new AbortController().signal,arguments:{}});
+
+test('review P1: ordinary active native tool blocks configure before writing even when Agent is idle',async t=>{
+ const entered=deferred(),release=deferred();t.after(()=>release.resolve());const f=await businessFixture(t),agent=await ordinary(f,'ordinary-active-native-tool');nativeBarrierTool(f,t,entered,release);
+ const running=nativeTool(f,agent,'owned-review-resource');await entered.promise;assert.equal(agent.status,'idle');const before=f.store.read();
+ await assert.rejects(f.sessions.configure(f.human,cmd('session.configure',{sessionId:agent.id,expectedVersion:1,name:'Must wait'})),{code:'session_active'});assert.deepEqual(f.store.read(),before);
+ release.resolve();assert.equal((await running).isError,false);assert.equal(f.requests.length,0);
+});
+
+test('review P1: ordinary configuration intent fences new native tools and model work',async t=>{
+ const entered=deferred(),release=deferred();t.after(()=>release.resolve());const f=await businessFixture(t),agent=await ordinary(f,'ordinary-fenced-native-tool'),apply=f.adapter.configureOwned.bind(f.adapter);let calls=0;
+ t.after(f.ctx.tools.register({name:'owned-review-quick-tool',description:'Count a harmless native call',parameters:{type:'object',properties:{},additionalProperties:false},output:{schema:{type:'boolean'},render:()=>[{type:'text',text:'done'}]},execute:async()=>{calls++;return true;}}));
+ f.adapter.configureOwned=async(...args)=>{entered.resolve();await release.promise;return apply(...args);};
+ const pending=f.sessions.configure(f.human,cmd('session.configure',{sessionId:agent.id,expectedVersion:1,name:'Fenced configure'}));await entered.promise;assert.equal(f.store.read().sessions[agent.id].state,'configuring');
+ const result=await nativeTool(f,agent,'owned-review-quick-tool');assert.equal(result.isError,true);assert.equal(calls,0);
+ agent.followup(message('Fenced native model request'));await agent.whenIdle();assert.equal(f.requests.length,0);release.resolve();assert.equal((await pending).state,'ready');
+});
+
+test('review P2: fork exact historical prefix retains the prefix effective native preset across cold resume',async t=>{
+ const f=await businessFixture(t);await presets(f);const bot=await f.bot(),source=await contact(f,bot),beta=await f.sessions.configure(f.human,cmd('session.configure',{sessionId:source.sessionId,expectedVersion:1,presetId:'beta'}));
+ const cut=beta.nativeConfigEvidence.presetSeq;await f.sessions.configure(f.human,cmd('session.configure',{sessionId:source.sessionId,expectedVersion:2,presetId:'alpha'}));
+ const history=await f.adapter.readNative(source.sessionId),row=await f.sessions.fork(f.human,cmd('session.fork',{sessionId:source.sessionId,atSeq:cut}));assert.equal(row.presetId,'beta');
+ assert.equal(f.ctx.agentPresets.composedPreset(f.ctx.agents.get(row.sessionId).ctx),'beta');assert.equal(f.ctx.sessionProjections.stateOf(f.ctx.agents.get(row.sessionId).session,'agentPreset'),'beta');assert.deepEqual((await f.adapter.readNative(row.sessionId)).events.slice(0,cut+1),history.events.slice(0,cut+1));
+ await f.adapter.disposeOwned(row.sessionId);await f.adapter.resumeOwned(row);assert.equal(f.ctx.agentPresets.composedPreset(f.ctx.agents.get(row.sessionId).ctx),'beta');assert.equal(f.requests.length,0);
+});
+
+test('review P2: configure applies against actual externally selected native preset for live and cold targets',async t=>{
+ for(const cold of [false,true]) {
+  const f=await businessFixture(t);await presets(f);const bot=await f.bot(cold?'ColdNativePreset':'LiveNativePreset'),row=await contact(f,bot),agent=f.ctx.agents.get(row.sessionId);
+  await f.ctx.agentPresets.select(agent,'beta');await f.ctx.sessions.flush(agent.session);assert.equal(f.store.read().sessions[row.sessionId].presetId,'alpha');if(cold)await f.adapter.disposeOwned(row.sessionId);
+  const configured=await f.sessions.configure(f.human,cmd('session.configure',{sessionId:row.sessionId,expectedVersion:1,presetId:'alpha'}));assert.equal(configured.presetId,'alpha');assert.equal(configured.nativeConfigEvidence.presetId,'alpha');
+  assert.equal(f.ctx.agentPresets.composedPreset(f.ctx.agents.get(row.sessionId).ctx),'alpha');assert.equal(f.ctx.sessionProjections.stateOf(f.ctx.agents.get(row.sessionId).session,'agentPreset'),'alpha');assert.equal(f.requests.length,0);
+ }
+});
+
+test('review P1: native tool waiting on a public admission gate remains a live resource',async t=>{
+ const entered=deferred(),release=deferred();t.after(()=>release.resolve());const f=await businessFixture(t),agent=await ordinary(f,'ordinary-native-gate');let calls=0;
+ t.after(f.ctx.tools.register({name:'owned-review-gated-tool',description:'Harmless native gated tool',parameters:{type:'object',properties:{},additionalProperties:false},output:{schema:{type:'boolean'},render:()=>[{type:'text',text:'done'}]},execute:async()=>{calls++;return true;}}));
+ t.after(f.ctx.on('tools/pre-execute',async(exec,next)=>{if(exec.name==='owned-review-gated-tool'){entered.resolve();await release.promise;}return next();},{global:true}));
+ const pending=nativeTool(f,agent,'owned-review-gated-tool');await entered.promise;const before=f.store.read();await assert.rejects(f.sessions.configure(f.human,cmd('session.configure',{sessionId:agent.id,expectedVersion:1,name:'Must await native gate'})),{code:'session_active'});assert.deepEqual(f.store.read(),before);release.resolve();assert.equal((await pending).isError,false);assert.equal(calls,1);assert.equal(f.adapter.resources(agent.id).settled,true);
+});

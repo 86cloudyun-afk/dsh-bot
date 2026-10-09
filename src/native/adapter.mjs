@@ -49,14 +49,48 @@ export class NativeDshAdapter {
   #botAdmissionFences = new Set();
   #sessionAdmissionFences = new Set();
   #ordinarySelections = new Map();
+  #nativeActivities = new Map();
+  #nativeToolActivities = new Map();
   constructor(ctx, { store, policy } = {}) {
     this.#ctx = ctx;
     this.#store = store;
     this.#policy = policy;
+    // A plugin cannot retrospectively prove that an already-live native tool is idle.
+    // New/resumed agents are observed before the factory releases queued input.
+    for (const agent of ctx.agents.list()) this.#nativeActivity(agent);
+    this.#disposers.push(
+      ctx.tools.guard(exec => this.#sessionAdmissionFences.has(exec.agent?.id)
+        ? "session_configuration_pending" : undefined),
+      ctx.on("tools/pre-execute",async (exec,next)=>{
+        requireCondition(!this.#sessionAdmissionFences.has(exec.agent?.id),"session_configuration_pending");
+        if (exec.agent) {
+          const activity=this.#nativeActivity(exec.agent);
+          activity.tools.add(exec.token);this.#nativeToolActivities.set(exec.token,activity);
+        }
+        return next();
+      },{global:true,prepend:true}),
+      ctx.on("tools/execute",async (exec,next)=>{
+        requireCondition(!this.#sessionAdmissionFences.has(exec.agent?.id),"session_configuration_pending");
+        if (exec.agent && !this.#nativeToolActivities.has(exec.token)) {
+          const activity=this.#nativeActivity(exec.agent);
+          activity.tools.add(exec.token);this.#nativeToolActivities.set(exec.token,activity);
+        }
+        return next();
+      },{global:true,prepend:true}),
+      ctx.on("tools/result",exec=>{
+        const activity=this.#nativeToolActivities.get(exec.token);
+        activity?.tools.delete(exec.token);this.#nativeToolActivities.delete(exec.token);
+      },{global:true}),
+      ctx.on("agent/pre-step",async (payload,next)=>{
+        requireCondition(!this.#sessionAdmissionFences.has(payload.agent.id),"session_configuration_pending");
+        return next();
+      },{global:true,prepend:true}),
+    );
     this.#disposers.push(
       ctx.on(
         "agent/created",
         async ({ agent, source }) => {
+          this.#nativeActivity(agent,true);
           const state = this.#store?.read(),
             binding = state?.sessions[agent.id],
             initiator = ctx.agents.currentInitiator(),
@@ -142,7 +176,11 @@ export class NativeDshAdapter {
         async function* (options, next) {
           const binding = adapter.#store?.read().sessions[options.sessionId];
           if (!binding?.botId) {
-            yield* next();
+            requireCondition(!adapter.#sessionAdmissionFences.has(options.sessionId),"session_configuration_pending");
+            const agent=adapter.#ctx.agents.get(options.sessionId),
+              activity=agent ? adapter.#nativeActivity(agent) : null, request={};
+            activity?.models.add(request);
+            try { yield* next(); } finally { activity?.models.delete(request); }
             return;
           }
           const record = adapter.#records.get(options.sessionId);
@@ -268,6 +306,18 @@ export class NativeDshAdapter {
         }
       });
     }
+  }
+  #nativeActivity(agent, published = false) {
+    let activity=this.#nativeActivities.get(agent.id);
+    if (!activity) {
+      activity={agent,known:published,models:new Set(),tools:new Set()};
+      this.#nativeActivities.set(agent.id,activity);
+    } else if (activity.agent !== agent) {
+      // Retain still-running callbacks from a previous exact identity.
+      activity.agent=agent;
+      activity.known=published && activity.known;
+    }
+    return activity;
   }
   get context() {
     return this.#ctx;
@@ -746,6 +796,14 @@ export class NativeDshAdapter {
     requireCondition(!preset.broken, "preset_unavailable");
     return preset.id;
   }
+  effectivePresetAt(history, boundary = history.events.at(-1)?.seq) {
+    let presetId=history.header.agentPreset ?? null;
+    for (const event of history.events) {
+      if (boundary === undefined || event.seq > boundary) break;
+      if (event.type === "agent-preset/selected") presetId=event.data.agentPreset;
+    }
+    return presetId;
+  }
   async inspectSession(sessionId, signal) {
     const live = this.#ctx.agents.get(sessionId);
     if (live) await this.#ctx.sessions.flush(live.session);
@@ -775,9 +833,10 @@ export class NativeDshAdapter {
     if (!agent) {
       if (binding.botId) agent = await this.resumeOwned({...binding,state:"ready"});
       else {
+        const native = await this.inspectSession(binding.sessionId,signal);
         const handle = await this.#ctx.agents.resume({resumeSessionId:binding.sessionId,signal,
           ...(binding.model ? {agentOptions:copy(binding.model)} : {}),
-          setup:async (ctx)=>{const presets=this.#ctx.get("agentPresets");if(presets)await presets.mount(ctx,binding.presetId ?? undefined);}});
+          setup:async (ctx)=>{const presets=this.#ctx.get("agentPresets");if(presets)await presets.mount(ctx,native.presetId ?? undefined);}});
         this.#handles.set(binding.sessionId,handle);agent=handle.agent;
       }
     }
@@ -785,12 +844,16 @@ export class NativeDshAdapter {
     signal?.throwIfAborted();
     const evidence = {};
     try {
-    if (Object.hasOwn(config,"presetId") && config.presetId !== binding.presetId) {
-      const presets = this.#ctx.get("agentPresets");
+    const presets = this.#ctx.get("agentPresets"),
+      effective = () => this.#ctx.sessionProjections.stateOf(agent.session,"agentPreset") ?? agent.session.header.agentPreset ?? null;
+    if (Object.hasOwn(config,"presetId") && config.presetId !== effective()) {
       requireCondition(presets, "preset_unavailable");
-      evidence.presetId = await presets.select(agent, config.presetId);
+      await presets.select(agent, config.presetId);
       evidence.presetSeq = agent.session.seq - 1;
     }
+    evidence.presetId=effective();
+    if (Object.hasOwn(config,"presetId")) requireCondition(evidence.presetId === config.presetId &&
+      (!presets || presets.composedPreset(agent.ctx) === config.presetId),"native_preset_mismatch");
     if (config.name !== undefined) {
       const title = this.renameSession(agent.session, config.name);
       evidence.name = title.title; evidence.titleSeq = title.eventSeq;
@@ -887,7 +950,7 @@ export class NativeDshAdapter {
       const source = await this.inspectSession(binding.source.sessionId, signal), boundary = binding.source.eventSeq;
       requireCondition(source.events[boundary]?.seq === boundary &&
         digest({header:source.header,events:source.events.slice(0,boundary+1)}) === binding.source.checksum, "fork_source_changed");
-      requireCondition(source.presetId === binding.presetId, "fork_preset_immutable");
+      requireCondition(this.effectivePresetAt(source,boundary) === binding.presetId, "fork_preset_immutable");
       fork = {seed:buildForkSeed(source.events,boundary),inheritedEventCount:boundary+1};
     }
     return this.#ctx.agents.create({
@@ -1130,7 +1193,20 @@ export class NativeDshAdapter {
   }
   resources(sessionId) {
     const record = this.#records.get(sessionId);
-    if (!record) return { known: false, settled: false };
+    if (!record) {
+      const binding=this.#store?.read().sessions[sessionId];
+      if(binding?.botId && binding.purpose !== "contact") return {known:false,settled:false};
+      const agent=this.#ctx.agents.get(sessionId),activity=this.#nativeActivities.get(sessionId),
+        known=activity ? activity.known : !agent,
+        jobs=this.#ctx.get("jobs")?.list(sessionId).filter(job=>job.owner === sessionId) ?? [],
+        terminals=this.#ctx.get("terminals"),terminalActive=!!(agent && terminals?.hasOwnerActivity(agent));
+      return {known,settled:known && agent?.status !== "running" &&
+        !(activity?.models.size || activity?.tools.size) && !terminalActive &&
+        !jobs.some(job=>["running","stopping"].includes(job.status)),
+        models:activity?.models.size ?? 0,tools:activity?.tools.size ?? 0,jobs:copy(jobs),terminalActive};
+    }
+    const native=this.#nativeActivities.get(sessionId),
+      activeTools=new Set([...record.tools,...(native?.tools ?? [])]);
     const jobs =
       this.#ctx
         .get("jobs")
@@ -1143,12 +1219,12 @@ export class NativeDshAdapter {
         (record.disposed || record.agent.status === "idle") &&
         !record.stopPending &&
         record.models.size === 0 &&
-        record.tools.size === 0 &&
+        activeTools.size === 0 &&
         !jobs.some((row) => ["running", "stopping"].includes(row.status)) &&
         !terminals?.hasOwnerActivity(record.agent) &&
         !record.resourceFaults?.length,
       models: record.models.size,
-      tools: record.tools.size,
+      tools: activeTools.size,
       jobs: copy(jobs),
       requests: copy(record.requests),
       terminalActive: !!terminals?.hasOwnerActivity(record.agent),
