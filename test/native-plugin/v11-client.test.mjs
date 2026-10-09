@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-import {webcrypto} from 'node:crypto';
+import {webcrypto,createHash} from 'node:crypto';
 import {businessFixture} from './business-fixture.mjs';
 import {KnowledgeController} from '../../src/native/knowledge.mjs';
 import {MemoryController} from '../../src/native/memory.mjs';
@@ -159,7 +159,7 @@ async function backendBrowser(t) {
     const result=await service.dispatch(f.human,structuredClone(request));Object.assign(snapshot,service.snapshot(f.human));return result;
   });t.after(()=>ui.dispose());
   const settle=async()=>{for(let attempts=0;attempts<200;attempts++){await tick();ui.render();const buttons=ui.find(row=>row.type==='button'&&row.props.type==='submit');if(buttons&&!buttons.props.disabled)return;}assert.fail('UI write did not settle');};
-  return {...f,ui,settle};
+  return {...f,ui,settle,knowledge};
 }
 
 test('adding another memory after create persists a new backend identity and preserves the first text',async t=>{
@@ -182,4 +182,44 @@ test('creating another reminder persists a distinct backend schedule and retains
   await f.ui.click('创建新的安排');await f.ui.submit('确认创建安排',{...values,message:'Second reminder'});await f.settle();
   const records=Object.values(f.store.read().schedules);assert.equal(records.length,2);assert.equal(f.store.read().schedules[first.scheduleId].message,'First reminder');const second=records.find(row=>row.scheduleId!==first.scheduleId);assert.ok(second);assert.equal(second.message,'Second reminder');assert.equal(second.version,1);
   const writes=f.ui.calls.filter(row=>['schedule.create','schedule.update'].includes(row.payload.action));assert.deepEqual(writes.map(row=>row.payload.action),['schedule.create','schedule.create']);assert.equal(writes[1].payload.input.scheduleId,undefined);assert.equal(writes[1].payload.input.expectedVersion,undefined);assert.equal(f.requests.length,0);
+});
+
+const hashText=text=>createHash('sha256').update(text,'utf8').digest('hex');
+const uploadText='# GUI 引用验收\r\n\r\n第一段记录 🧭 Unicode 边界。\r\n\r\n## CITATION_MARKER\r\n准确引用这段原文，保持行号与哈希。\r\n';
+for(const [name,original,submitted] of [
+  ['textarea LF normalization',uploadText,uploadText.replace(/\r\n/g,'\n')],
+  ['FormData CRLF normalization','# Mixed\r\n\r正文 🧭\nCITATION_MARKER\r', '# Mixed\r\n\r\n正文 🧭\r\nCITATION_MARKER\r\n'],
+  ['BOM plus mixed CR/LF preservation','\uFEFF# BOM\r\n\rCITATION_MARKER 🧭\nEnd\r','\uFEFF# BOM\n\nCITATION_MARKER 🧭\nEnd\n'],
+])test(`untouched uploaded UTF-8 material preserves exact bytes and backend citation offsets through ${name}`,async t=>{
+  const f=await backendBrowser(t),bytes=new TextEncoder().encode(original);await f.ui.ready();await f.ui.click('记忆');await f.ui.click('资料');
+  await f.ui.change('UTF-8 文本或 Markdown 文件',{name:'v11-citations.md',size:bytes.length,arrayBuffer:async()=>bytes.buffer});
+  await f.ui.submit('保存不可变资料',{title:'Exact uploaded material',text:submitted});await f.settle();
+  const doc=Object.values(f.store.read().materials)[0];assert.ok(doc);assert.equal(doc.text,original);assert.equal(doc.contentHash,hashText(original));assert.equal(doc.fileName,'v11-citations.md');assert.equal(doc.mediaType,'text/markdown');
+  const request=f.ui.calls.find(row=>row.payload.action==='material.ingest').payload;assert.equal(request.input.text,original);
+  const hits=f.knowledge.search(f.human,{botId:doc.botId,query:'CITATION_MARKER'});assert.ok(hits.length);for(const hit of hits){assert.equal(hit.contentHash,hashText(original));assert.equal(hit.excerpt,original.slice(hit.startOffset,hit.endOffset));}
+  assert.equal(f.requests.length,0);
+});
+
+test('genuine uploaded-material edits persist edited text and a new backend hash while retaining filename',async t=>{
+  const f=await backendBrowser(t),bytes=new TextEncoder().encode(uploadText),edited=uploadText.replace(/\r\n/g,'\n').replace('准确引用这段原文','用户已改写此正文')+'Edited final line\n';
+  await f.ui.ready();await f.ui.click('记忆');await f.ui.click('资料');await f.ui.change('UTF-8 文本或 Markdown 文件',{name:'v11-citations.md',size:bytes.length,arrayBuffer:async()=>bytes.buffer});
+  await f.ui.submit('保存不可变资料',{title:'Edited upload',text:edited});await f.settle();
+  const doc=Object.values(f.store.read().materials)[0];assert.ok(doc);assert.equal(doc.text,edited);assert.equal(doc.contentHash,hashText(edited));assert.notEqual(doc.contentHash,hashText(uploadText));assert.equal(doc.fileName,'v11-citations.md');
+  const request=f.ui.calls.find(row=>row.payload.action==='material.ingest').payload;assert.equal(request.input.text,edited);assert.equal(f.requests.length,0);
+});
+
+
+test('memory import previews the original BOM-prefixed UTF-8 file digest and rejects unsupported BOM JSON',async t=>{
+  const f=await backendBrowser(t),fileText='\uFEFF'+JSON.stringify({format:'dsh-bot-memory',formatVersion:1,storeId:'external',botName:'Imported',entries:[{text:'one',category:'fact',pinned:false,provenance:{storeId:'external',protected:false}}]}),bytes=new TextEncoder().encode(fileText);
+  await f.ui.ready();await f.ui.click('记忆');await f.ui.change('导入 JSON 文件',{name:'bom-memory.json',size:bytes.length,arrayBuffer:async()=>bytes.buffer});
+  const preview=f.ui.calls.find(row=>row.payload.action==='memory.import.preview');assert.ok(preview);assert.equal(preview.payload.input.fileText,fileText);assert.equal(preview.payload.input.fileDigest,createHash('sha256').update(bytes).digest('hex'));
+  assert.equal(f.ui.find(row=>row.type==='button'&&f.ui.text(row)==='确认整批追加'),null);assert.equal(Object.keys(f.store.read().memories).length,0);assert.equal(f.requests.length,0);
+});
+
+test('UTF-8 material upload accepts exactly 64 KiB and refuses larger files before reading bytes',async t=>{
+  const f=await backendBrowser(t),text='x'.repeat(65536),bytes=new TextEncoder().encode(text);await f.ui.ready();await f.ui.click('记忆');await f.ui.click('资料');
+  await f.ui.change('UTF-8 文本或 Markdown 文件',{name:'boundary.txt',size:bytes.length,arrayBuffer:async()=>bytes.buffer});await f.ui.submit('保存不可变资料',{title:'64 KiB boundary',text});await f.settle();
+  const doc=Object.values(f.store.read().materials)[0];assert.equal(doc.text,text);assert.equal(doc.contentHash,hashText(text));let read=false;
+  await f.ui.change('UTF-8 文本或 Markdown 文件',{name:'oversize.txt',size:65537,arrayBuffer:async()=>{read=true;throw Error('Oversize file must never be read');}});
+  assert.equal(read,false);assert.equal(f.ui.calls.filter(row=>row.payload.action==='material.ingest').length,1);assert.equal(Object.keys(f.store.read().materials).length,1);assert.equal(f.requests.length,0);
 });
