@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
+import {businessFixture} from './business-fixture.mjs';
+import {KnowledgeController} from '../../src/native/knowledge.mjs';
+import {MemoryController} from '../../src/native/memory.mjs';
+import {AssistantController} from '../../src/native/assistant.mjs';
+import {BotService} from '../../src/native/service.mjs';
 
 const source=await readFile(new URL('../../src/client/client.js',import.meta.url),'utf8');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -142,4 +147,39 @@ test('context preview renders frozen bounded summaries instead of newer snapshot
   await ui.ready();await ui.click('记忆');await ui.submit('查看上下文预览',{});
   snapshot.memories[0].text='Newer snapshot text';snapshot.revision++;await ui.click('refresh');
   assert.ok(ui.find(row=>row.type==='p'&&ui.text(row)==='Frozen preview text'));assert.equal(ui.calls.some(row=>['task.start','session.create'].includes(row.payload.action)),false);ui.dispose();
+});
+
+async function backendBrowser(t) {
+  const f=await businessFixture(t);await f.bot('LifecycleOwner');
+  const knowledge=new KnowledgeController(f),memory=new MemoryController({...f,knowledge}),assistant=new AssistantController({...f,tasks:{}}),service=new BotService({...f,knowledge,memory,assistant});
+  f.beforeClose.push(()=>assistant.close());
+  const snapshot=service.snapshot(f.human),ui=browser(snapshot,async(action,_input,request)=>{
+    if(action==='template.list')return [];
+    if(action==='session.list')return {items:[],nextCursor:null};
+    const result=await service.dispatch(f.human,structuredClone(request));Object.assign(snapshot,service.snapshot(f.human));return result;
+  });t.after(()=>ui.dispose());
+  const settle=async()=>{for(let attempts=0;attempts<200;attempts++){await tick();ui.render();const buttons=ui.find(row=>row.type==='button'&&row.props.type==='submit');if(buttons&&!buttons.props.disabled)return;}assert.fail('UI write did not settle');};
+  return {...f,ui,settle};
+}
+
+test('adding another memory after create persists a new backend identity and preserves the first text',async t=>{
+  const f=await backendBrowser(t);await f.ui.ready();await f.ui.click('记忆');
+  await f.ui.submit('保存到所选 Bot',{text:'First independent memory',category:'fact'});await f.settle();
+  const first=Object.values(f.store.read().memories)[0];assert.ok(first);
+  await f.ui.click('添加另一条记忆');
+  assert.ok(f.ui.find(row=>row.type==='form'&&row.children.some(child=>child?.type==='button'&&f.ui.text(child)==='保存到所选 Bot')),'add-another must open a fresh creation draft');
+  await f.ui.submit('保存到所选 Bot',{text:'Second independent memory',category:'preference'});await f.settle();
+  const records=Object.values(f.store.read().memories);assert.equal(records.length,2);assert.equal(f.store.read().memories[first.memoryId].text,'First independent memory');
+  const second=records.find(row=>row.memoryId!==first.memoryId);assert.ok(second);assert.equal(second.text,'Second independent memory');assert.equal(second.category,'preference');assert.equal(second.version,1);
+  const writes=f.ui.calls.filter(row=>row.payload.action==='memory.write');assert.equal(writes.length,2);assert.equal(writes[1].payload.input.memoryId,undefined);assert.equal(writes[1].payload.input.expectedVersion,undefined);assert.equal(f.requests.length,0);
+});
+
+test('creating another reminder persists a distinct backend schedule and retains the first reminder',async t=>{
+  const f=await backendBrowser(t);await f.ui.ready();await f.ui.click('任务');
+  const values={ownerBotId:Object.keys(f.store.read().bots)[0],kind:'reminder',ruleKind:'once',timezone:'UTC',date:'2099-10-10',time:'09:00',message:'First reminder',missedPolicy:'skip'};
+  await f.ui.submit('确认创建安排',values);await f.settle();const first=Object.values(f.store.read().schedules)[0];assert.ok(first);
+  assert.ok(f.ui.find(row=>row.type==='button'&&f.ui.text(row)==='创建新的安排'),'saved schedule must offer a separate new-creation action');
+  await f.ui.click('创建新的安排');await f.ui.submit('确认创建安排',{...values,message:'Second reminder'});await f.settle();
+  const records=Object.values(f.store.read().schedules);assert.equal(records.length,2);assert.equal(f.store.read().schedules[first.scheduleId].message,'First reminder');const second=records.find(row=>row.scheduleId!==first.scheduleId);assert.ok(second);assert.equal(second.message,'Second reminder');assert.equal(second.version,1);
+  const writes=f.ui.calls.filter(row=>['schedule.create','schedule.update'].includes(row.payload.action));assert.deepEqual(writes.map(row=>row.payload.action),['schedule.create','schedule.create']);assert.equal(writes[1].payload.input.scheduleId,undefined);assert.equal(writes[1].payload.input.expectedVersion,undefined);assert.equal(f.requests.length,0);
 });

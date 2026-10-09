@@ -612,14 +612,14 @@ window.__ModuleLoader__.load({
         const categories = [{value:"fact",label:"事实"},{value:"preference",label:"偏好"},{value:"decision",label:"决定"},{value:"responsibility",label:"职责"}];
         const categoryName = value => categories.find(row=>row.value===value)?.label ?? `其他（${value ?? "未分类"}）`;
         const updatedName = value => value ? new Date(value).toLocaleString() : "未知";
-        function MemoryEditor({memory:latestMemory,botId}) {
+        function MemoryEditor({memory:latestMemory,botId,onSaved}) {
           const [base,setBase]=useState(latestMemory),[epoch,setEpoch]=useState(0);
           const choices = base && !categories.some(row=>row.value===base.category) ? [...categories,{value:base.category,label:categoryName(base.category)}] : categories;
           return card(base?"编辑记忆":"添加记忆",
             latestMemory && latestMemory.version!==base.version && h("div",null,h("p",{role:"status"},"记忆已在其他页面更新。草稿保留，保存会检查开始编辑时的版本。"),button("重新载入最新记忆",()=>{setBase(latestMemory);setEpoch(n=>n+1);})),
             h("div",{key:epoch},form(base?"保存记忆修改":"保存到所选 Bot",async data=>{
               const saved=await command("memory.write",{botId,text:data.get("text"),category:data.get("category"),pinned:data.get("pinned")==="on",...(base?{memoryId:base.memoryId,expectedVersion:base.version}:{})});
-              if(saved){setBase(saved);setEpoch(n=>n+1);}
+              if(saved){setBase(saved);setEpoch(n=>n+1);onSaved?.(saved);}
             },field("内容","text",{value:base?.text,textarea:true,maxLength:8192}),field("分类","category",{value:base?.category??"fact",options:choices}),check("pinned","固定重要记忆（每 Bot 最多 8 条）",base?.pinned??false))),
             h("small",null,"长期记忆随对话按预算带入；编辑与遗忘保留真实来源。"));
         }
@@ -687,7 +687,7 @@ window.__ModuleLoader__.load({
               advanced("未带入原因",...(preview.omitted??[]).map(row=>h("p",{key:row.memoryId},`${view.snapshot.memories.find(memory=>memory.memoryId===row.memoryId)?.text.slice(0,40)??"记忆"} · ${{forgotten:"已遗忘",inactive:"来源待验证",inaccessible:"来源暂不可读",budget:"本轮预算不足",relevance_or_recency:"按相关性与最近更新选择其他记忆"}[row.reason]??"本轮未选择"}`)))));
         }
         function MemoryPane() {
-          const view=useView(),[id,setId]=useState(""),[section,setSection]=useState("memory"),[editing,setEditing]=useState(null),[hits,setHits]=useState(null),[sourceRef,setSourceRef]=useState(null);
+          const view=useView(),[id,setId]=useState(""),[section,setSection]=useState("memory"),[editing,setEditing]=useState(null),[hits,setHits]=useState(null),[sourceRef,setSourceRef]=useState(null),[creationEpoch,setCreationEpoch]=useState(0);
           const botId=id||view.snapshot.bots.find(bot=>!bot.deletedAt)?.botId, rows=(hits?hits.map(hit=>view.snapshot.memories.find(row=>row.memoryId===hit.memoryId)).filter(Boolean):view.snapshot.memories).filter(row=>row.botId===botId&&!row.forgotten),selected=view.snapshot.memories.find(row=>row.memoryId===editing&&row.botId===botId&&!row.forgotten);
           return h("div",null,
             h("label",null,"所属 Bot",h("select",{"aria-label":"所属 Bot",value:botId??"",onChange:event=>{setId(event.target.value);setEditing(null);setHits(null);setSourceRef(null);}},botsOptions().map(row=>option(row.value,row.label)))),
@@ -695,15 +695,15 @@ window.__ModuleLoader__.load({
             !botId?h("p",null,"请先创建 Bot。") : section==="materials"?h(MaterialsPane,{botId,key:botId}):h("div",{className:"grid"},card("长期记忆",
               form("搜索记忆",async data=>{const result=await query("memory.search",{botId,query:data.get("query"),...(data.get("category")?{category:data.get("category")}:{})});if(result)setHits(result);},field("内容关键词","query",{required:false,maxLength:500}),field("分类筛选","category",{required:false,options:[{value:"",label:"全部分类"},...categories,...[...new Set(rows.map(row=>row.category))].filter(value=>!categories.some(row=>row.value===value)).map(value=>({value,label:categoryName(value)}))]})),
               ...[...rows].sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||String(b.updatedAt).localeCompare(String(a.updatedAt))).map(row=>h("article",{className:"card",key:row.memoryId},h("p",null,row.text),h("small",null,`${categoryName(row.category)} · ${row.pinned?"已固定 · ":""}更新 ${updatedName(row.updatedAt)}${row.inactive?" · 来源待验证，不可用":""}`),h("div",{className:"actions"},button("编辑记忆",()=>setEditing(row.memoryId)),button(row.pinned?"取消固定":"固定",()=>command("memory.pin",{memoryId:row.memoryId,expectedVersion:row.version,pinned:!row.pinned})),row.source?.kind==="material"?button("查看资料来源",()=>setSourceRef({docId:row.source.docId,chunkId:row.source.chunkId})):row.source?.sessionId&&button("查看来源",()=>openSession(row.source.sessionId)),button("遗忘此记忆",()=>command("memory.forget",{memoryId:row.memoryId,expectedVersion:row.version}))))),
-              hits&&button("显示全部记忆",()=>setHits(null)),button("添加另一条记忆",()=>setEditing(null)),h(MemoryTransfer,{botId,key:botId}),h(ContextPreview,{botId,key:`context:${botId}`})),
-              h(MemoryEditor,{memory:selected,botId,key:selected?.memoryId??`new:${botId}`})),sourceRef&&h(MaterialReader,{...sourceRef,onClose:()=>setSourceRef(null),key:`source:${sourceRef.docId}:${sourceRef.chunkId}`}));
+              hits&&button("显示全部记忆",()=>setHits(null)),button("添加另一条记忆",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(MemoryTransfer,{botId,key:botId}),h(ContextPreview,{botId,key:`context:${botId}`})),
+              h(MemoryEditor,{memory:selected,botId,onSaved:saved=>setEditing(saved.memoryId),key:selected?.memoryId??`new:${botId}:${creationEpoch}`})),sourceRef&&h(MaterialReader,{...sourceRef,onClose:()=>setSourceRef(null),key:`source:${sourceRef.docId}:${sourceRef.chunkId}`}));
         }
         function TaskRelations({task:latestTask}) {
           const view=useView(),[task,setBase]=useState(latestTask),[epoch,setEpoch]=useState(0);
           return advanced("前置任务与责任交接",
             latestTask.version!==task.version&&h("div",null,h("p",{role:"status"},"任务已更新。当前关系草稿保留，提交将检查原版本。"),button("重新载入任务关系",()=>{setBase(latestTask);setEpoch(n=>n+1);})),
             h("div",{key:epoch},form("保存前置任务",async data=>{const saved=await command("task.dependencies.set",{taskId:task.taskId,expectedVersion:task.version,dependsOn:data.getAll("dependsOn")});if(saved){setBase(saved);setEpoch(n=>n+1);}},field("前置任务（可多选，全部有效验收后可开始）","dependsOn",{options:view.snapshot.tasks.filter(row=>row.taskId!==task.taskId).map(row=>({value:row.taskId,label:`${row.title} · ${stateName(row.acceptance)}`})),value:task.dependsOn??[],multiple:true,required:false}))),
-            form("确认交给所选 Bot",data=>command("task.handoff",{taskId:task.taskId,expectedVersion:task.version,toBotId:data.get("toBotId"),note:data.get("note")}),field("接手 Bot","toBotId",{options:botsOptions().filter(row=>row.value!==task.botId)}),field("交接说明","note",{textarea:true,maxLength:8192}),h("small",null,"交接需等待工作结算。旧运行记录保留原负责人，下一次开始由新负责人执行。")));
+            form("确认交给所选 Bot",data=>command("task.handoff",{taskId:task.taskId,expectedVersion:task.version,toBotId:data.get("toBotId"),note:data.get("note")}),field("接手 Bot","toBotId",{options:botsOptions().filter(row=>row.value!==task.botId)}),field("交接说明","note",{textarea:true,maxLength:2000}),h("small",null,"交接需等待工作结算。旧运行记录保留原负责人，下一次开始由新负责人执行。")));
         }
         function TaskAdjustment({task:latestTask}) {
           const [task,setBase]=useState(latestTask),[formEpoch,setFormEpoch]=useState(0);
@@ -767,7 +767,7 @@ window.__ModuleLoader__.load({
             if(input.kind==="reminder")input.message=data.get("message");
             else input.recipe={botId:ownerBotId,title:data.get("title"),goal:data.get("goal"),criteria:String(data.get("criteria")??"").split("\n").filter(Boolean),dependsOn:data.getAll("dependsOn"),...(data.get("originSessionId")?{originSessionId:data.get("originSessionId")}:{})};
             const saved=await command(base?"schedule.update":"schedule.create",{...input,...(base?{scheduleId:base.scheduleId,expectedVersion:base.version}:{})});
-            if(saved){setBase(saved);onSaved?.();}
+            if(saved){setBase(saved);onSaved?.(saved);}
           };
           return h("div",null,
             latestSchedule&&latestSchedule.version!==base.version&&h("div",null,h("p",{role:"status"},"定时安排已更新。草稿保留，保存将检查原版本。"),button("重新载入最新安排",()=>{setBase(latestSchedule);setKind(latestSchedule.kind);setRuleKind(latestSchedule.rule.kind);setOwner(latestSchedule.ownerBotId);setEpoch(n=>n+1);})),
@@ -789,11 +789,11 @@ window.__ModuleLoader__.load({
             selected.length>0&&h("div",null,button("清理所选历史",()=>{setPruneDraft({occurrenceIds:[...selected],expectedVersions:Object.fromEntries(rows.filter(row=>selected.includes(row.occurrenceId)).map(row=>[row.occurrenceId,row.version]))});setConfirm(true);}),confirm&&h("div",null,h("p",null,`确认清理 ${pruneDraft?.occurrenceIds.length??0} 条已结算触发记录？原任务和操作回执保留。`),button("确认清理所选记录",async()=>{const result=await command("occurrence.prune",{...pruneDraft,confirm:true});if(result){setSelected([]);setConfirm(false);setPruneDraft(null);await load();}}),button("取消清理",()=>{setConfirm(false);setPruneDraft(null);}))));
         }
         function SchedulesPane() {
-          const view=useView(),[rows,setRows]=useState([]),[editing,setEditing]=useState(null),[notices,setNotices]=useState([]);
+          const view=useView(),[rows,setRows]=useState([]),[editing,setEditing]=useState(null),[notices,setNotices]=useState([]),[creationEpoch,setCreationEpoch]=useState(0);
           useEffect(()=>{let active=true;Promise.all([query("schedule.list"),query("notice.list")]).then(([s,n])=>{if(active){if(s)setRows(Array.isArray(s)?s:s.items??[]);if(n)setNotices(Array.isArray(n)?n:n.notices??[]);}});return()=>{active=false;};},[view.snapshot.revision]);
           const selected=rows.find(row=>row.scheduleId===editing);
           return advanced("提醒与定时",h(NoticeList,{notices}),...rows.map(row=>h("article",{className:"card",key:row.scheduleId},h("h3",null,row.kind==="task"?row.recipe?.title:row.message),h("p",null,`${view.snapshot.bots.find(bot=>bot.botId===row.ownerBotId)?.name??"Bot"} · ${row.archived?"已归档":row.enabled?"已启用":"已暂停"} · ${row.rule.timezone} · 下次 ${updatedName(row.nextDueAt)}`),button("编辑并重新确认",()=>setEditing(row.scheduleId)),!row.archived&&button(row.enabled?"暂停安排":"启用安排",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:!row.enabled})),!row.archived&&button("归档安排",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:false,archived:true})),row.archived&&button("恢复安排（保持暂停）",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:false,archived:false})),h(ScheduleHistory,{scheduleId:row.scheduleId}))),
-            editing&&button("创建新的安排",()=>setEditing(null)),h(ScheduleEditor,{schedule:selected,key:selected?.scheduleId??"new-schedule"}));
+            editing&&button("创建新的安排",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(ScheduleEditor,{schedule:selected,onSaved:saved=>{setRows(previous=>[...previous.filter(row=>row.scheduleId!==saved.scheduleId),saved]);setEditing(saved.scheduleId);},key:selected?.scheduleId??`new-schedule:${creationEpoch}`}));
         }
         function TasksPane() {
           const view = useView();
