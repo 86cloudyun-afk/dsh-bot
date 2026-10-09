@@ -1,29 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { brokerFixture } from './broker-fixture.mjs';
-import { digest } from '../../src/native/store.mjs';
+import { AssistantController } from '../../src/native/assistant.mjs';
 import { eventually } from './official-fixture.mjs';
 
 async function scheduled(f,bot,dependsOn=[]) {
   const receiver=await f.contact(bot,'schedule-receiver');
   const recipe={botId:bot.botId,title:'Scheduled work',goal:'One actual response',criteria:['Actual persisted result'],dependsOn,originSessionId:receiver.sessionId};
-  const occurrenceId='occurrence-fixed',scheduleId='schedule-fixed';
-  await f.store.transact({operationId:'schedule-seed',action:'seed',input:{}},draft=>{
-    draft.schedules[scheduleId]={scheduleId,ownerBotId:bot.botId,enabled:true,archived:false,consentVersion:1,recipe,executionConsent:{configRevision:bot.configRevision}};
-    draft.occurrences[occurrenceId]={occurrenceId,scheduleId,consentVersion:1,state:'claimed',recipe,recipeHash:digest(recipe),configRevision:bot.configRevision,createOperationId:'scheduled-create',startOperationId:'scheduled-start',taskId:null,attemptId:null};return null;
+  const at=Date.parse('2026-10-09T00:00:00Z'),assistant=new AssistantController({...f,clock:{now:()=>at}});
+  f.beforeClose.push(()=>assistant.close());
+  const schedule=await assistant.createSchedule(f.human,{operationId:'schedule-consent',action:'schedule.create',input:{ownerBotId:bot.botId,kind:'task',recipe,rule:{kind:'once',timezone:'UTC',date:'2026-10-09',time:'00:00'}}});
+  const occurrenceId='occurrence-fixed',scheduleId=schedule.scheduleId;
+  await f.store.transact({operationId:'schedule-claim',action:'seed',input:{}},draft=>{
+    draft.occurrences[occurrenceId]={occurrenceId,scheduleId,consentVersion:1,state:'claimed',recipe:schedule.recipe,recipeHash:schedule.recipeHash,configRevision:bot.configRevision,dueAt:schedule.nextDueAt,origins:schedule.origins,createOperationId:'scheduled-create',startOperationId:'scheduled-start',taskId:null,attemptId:null};return null;
   });
-  f.policy.registerScheduleAuthority((id,state)=>{
-    assert.equal(id,occurrenceId);
-    const row=state.occurrences[id];return {...row,botId:bot.botId,sessionId:receiver.sessionId,origins:[]};
-  });
-  return {actor:f.policy.fromScheduleOccurrence(occurrenceId),create:{operationId:'scheduled-create',action:'task.create',input:{occurrenceId}},start:{operationId:'scheduled-start',action:'task.start',input:{occurrenceId}},occurrenceId};
+  return {actor:f.policy.fromScheduleOccurrence(occurrenceId),create:{operationId:'scheduled-create',action:'task.create',input:{occurrenceId}},start:{operationId:'scheduled-start',action:'task.start',input:{occurrenceId}},occurrenceId,scheduleId};
 }
 
 test('scheduled task create/start persist occurrence identities atomically, retain fixed receipts and use actual broker result',async t=>{
   const f=await brokerFixture(t),bot=await f.bot(),s=await scheduled(f,bot);
   const task=await f.tasks.createScheduled(s.actor,s.create);
   assert.equal(f.store.read().occurrences[s.occurrenceId].taskId,task.taskId);
-  assert.deepEqual(task.createdBy,{kind:'schedule',occurrenceId:s.occurrenceId,scheduleId:'schedule-fixed'});
+  assert.deepEqual(task.createdBy,{kind:'schedule',occurrenceId:s.occurrenceId,scheduleId:s.scheduleId});
   assert.equal(task.source.kind,'schedule');assert.deepEqual(await f.tasks.createScheduled(s.actor,s.create),task);
   const attempt=await f.tasks.startScheduled(s.actor,s.start);
   assert.equal(f.store.read().occurrences[s.occurrenceId].attemptId,attempt.attemptId);
