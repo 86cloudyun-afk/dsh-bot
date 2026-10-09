@@ -1,3 +1,4 @@
+import manifest from '../../package.json' with {type:'json'};
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -12,7 +13,7 @@ import {BotService} from '../../src/native/service.mjs';
 const source=await readFile(new URL('../../src/client/client.js',import.meta.url),'utf8');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const bot={botId:'bot_own',name:'Named identity',role:'Own role',revision:1,memoryRevision:7,lifecycle:'active',contact:{provider:'official',model:'chat'},execution:{provider:'official',model:'work'},executionMode:'inherit',share:{enabled:true,receivers:['*'],scope:{sessions:['*'],tasks:['*'],memories:['*'],materials:[]}}};
-const defaultSnapshot=()=>({storeId:'profile',revision:1,pluginVersion:'1.1.0',clientProtocol:2,bots:[structuredClone(bot)],tasks:[],sessions:[],memories:[],materials:[],grants:[],groups:[],meetings:[],outbox:[],attempts:[],notices:[]});
+const defaultSnapshot=()=>({storeId:'profile',revision:1,pluginVersion:manifest.version,clientProtocol:2,bots:[structuredClone(bot)],tasks:[],sessions:[],memories:[],materials:[],grants:[],groups:[],meetings:[],outbox:[],attempts:[],notices:[]});
 const catalog={providers:[{id:'official',name:'Official',models:[{id:'chat'},{id:'work'}]}],presets:[{id:'default',name:'Default'}],defaultModel:{provider:'official',model:'chat'},defaultCwd:'/workspace'};
 function data(values={}) {return {get:key=>values[key]??'',getAll:key=>Array.isArray(values[key])?values[key]:values[key]?[values[key]]:[]};}
 function browser(snapshot=defaultSnapshot(),route=()=>({})) {
@@ -123,7 +124,7 @@ test('chat briefing reads whole Bot scope without replaying tasks, and five prim
 });
 
 test('diagnostic copy exactly matches the reviewed allowlist response',async()=>{
-  const safe={pluginVersion:'1.1.0',counts:{bots:1},operationIds:[]};
+  const safe={pluginVersion:manifest.version,counts:{bots:1},operationIds:[]};
   const ui=browser(defaultSnapshot(),action=>action==='diagnostics.read'?safe:undefined);await ui.ready();await ui.click('管理');await ui.click('结果与投递');await ui.click('预览诊断');await ui.click('复制以上诊断');
   assert.equal(ui.copied[0],JSON.stringify(safe,null,2));assert.equal(ui.calls.some(row=>row.payload.action==='session.create'),false);ui.dispose();
 });

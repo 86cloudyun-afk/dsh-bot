@@ -977,7 +977,8 @@ export class TaskController {
       )
       .catch(() => {});
     const pending = [];
-    for (const row of Object.values(this.store.read().attempts))
+    // Shutdown uses the last published ownership ledger even when storage is fenced.
+    for (const row of Object.values(this.store.read({diagnostic:true}).attempts))
       if (row.runtimeId === this.runtimeId && row.reservationHeld) {
         pending.push(this.adapter.stopResources(row.sessionId));
         this.#watch(row.attemptId);

@@ -1,3 +1,4 @@
+import manifest from '../../package.json' with {type:'json'};
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -21,7 +22,7 @@ test('authenticated service routes immutable material citations without placing 
   const page=await f.service.dispatch(f.human,{action:'material.page',input:{docId:record.docId,chunkId:matches[0].chunkId}});
   assert.equal(page.text,matches[0].excerpt);
   const snapshot=f.service.snapshot(f.human);
-  assert.equal(snapshot.pluginVersion,'1.1.0');assert.equal(snapshot.clientProtocol,2);
+  assert.equal(snapshot.pluginVersion,manifest.version);assert.equal(snapshot.clientProtocol,2);
   assert.equal(snapshot.materials[0].docId,record.docId);
   assert.equal(Object.hasOwn(snapshot.materials[0],'text'),false);
   assert.equal(Object.hasOwn(snapshot.materials[0],'chunks'),false);

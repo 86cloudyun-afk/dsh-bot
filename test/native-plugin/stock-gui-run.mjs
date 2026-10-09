@@ -3,10 +3,11 @@ import {runRepairChecks} from './stock-repair-checks.mjs';
 import {runChatIdentityChecks} from './stock-chat-identity-checks.mjs';
 import {runBotDeleteChecks} from './stock-bot-delete-checks.mjs';
 import {runV11UiChecks} from './stock-v11-ui-checks.mjs';
+import {runV111QualityChecks} from './stock-v111-quality-checks.mjs';
 import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
-import { finishStockGui } from "./stock-report.mjs";
+import { finishStockGui, recordStockError } from "./stock-report.mjs";
 import { installStockFatalReport } from "./stock-fatal-report.mjs";
 import {
   stockGui,
@@ -808,6 +809,8 @@ try {
   await runBotDeleteChecks(gui);
   mark("v11-knowledge-collaboration-and-assistant-ui");
   await runV11UiChecks(gui);
+  mark("v111-bounded-quality-regressions");
+  await runV111QualityChecks(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");
   gui.report.passed = true;
@@ -815,7 +818,7 @@ try {
 } catch (error) {
   if (gui) {
     gui.report.passed = false;
-    gui.report.error = String(error.stack).replace(/https?:\/\/\S+/g, "[URL omitted]");
+    await recordStockError(gui.report,error,{evidence:gui.evidence});
     try {
       await gui.save("failure");
     } catch {}
@@ -830,12 +833,11 @@ try {
       node: process.version,
       realModelRequests: 0,
       checks: {},
-      error: String(error.stack).replace(/https?:\/\/\S+/g, "[URL omitted]"),
-      ...(error.code ? { errorCode: error.code } : {}),
-      ...(error.status !== undefined ? { commandExitCode: error.status } : {}),
+      ...(Number.isInteger(error.status) ? { commandExitCode: error.status } : {}),
     };
+    await recordStockError(report,error,{evidence});
     await writeFile(join(evidence, "stock-gui-report.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
-    console.log(JSON.stringify({ passed: false, stage: report.stage, error: report.error, evidence }));
+    console.log(JSON.stringify({ passed: false, stage: report.stage, error: report.error }));
   }
   process.exitCode = 1;
 } finally {
@@ -844,8 +846,7 @@ try {
       await writeFile(join(gui.root, "work/release"), "release", { mode: 0o600 });
     } catch (error) {
       gui.report.passed = false;
-      const code = ["ENOENT", "EACCES", "EPERM", "EIO", "ENOSPC", "EMFILE", "ENFILE"].includes(error.code) ? error.code : "cleanup_error";
-      gui.report.error ??= `Release cleanup failed: ${code}`;
+      await recordStockError(gui.report,error,{evidence:gui.evidence});
     }
     await finishStockGui(gui);
     console.log(
@@ -854,7 +855,6 @@ try {
         stage: gui.report.stage,
         checks: gui.report.checks,
         controlledRequests: gui.report.requests.length,
-        evidence: gui.evidence,
       }),
     );
     process.exitCode = gui.report.passed ? 0 : 1;

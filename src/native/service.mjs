@@ -6,18 +6,17 @@ import manifest from "../../package.json" with {type:"json"};
 export class BotService {
   #closed = false;
   #pending = new Set();
-  #previewReads(actor, previews=[]) {
-    const state=this.store.read();
+  #previewReads(actor, previews=[], state=this.store.read()) {
     for(const preview of previews) {
       const attempt=state.attempts[preview.attemptId],artifact=attempt?.[preview.kind];
       requireCondition(artifact,"access_denied");
-      this.policy.noteDerivedRead(actor,{...artifact,botId:attempt.botId},{sessionId:attempt.sessionId});
+      this.policy.noteDerivedRead(actor,{...artifact,botId:attempt.botId},{sessionId:attempt.sessionId},state);
     }
   }
-  #noticeReads(actor, notices=[]) {
+  #noticeReads(actor, notices=[], state) {
     for(const row of notices) {
-      this.policy.noteRead(actor,{kind:"notice",id:row.noticeId});
-      this.#previewReads(actor,row.previews);
+      this.policy.noteRead(actor,{kind:"notice",id:row.noticeId},state);
+      this.#previewReads(actor,row.previews,state);
     }
   }
   constructor({
@@ -57,9 +56,10 @@ export class BotService {
   }
   snapshot(actor) {
     requireCondition(!this.#closed, "disabled");
-    this.policy.actorKey(actor);
-    const state = this.store.read(),
-      result = {
+    // Reuse this private copy only within this synchronous snapshot call.
+    const state = this.store.read();
+    this.policy.actorKey(actor,state);
+    const result = {
         storeId: state.storeId,
         revision: state.revision,
         status: "enabled",
@@ -78,11 +78,11 @@ export class BotService {
       result[table] = Object.entries(state[table])
         .filter(
           ([id, row]) =>
-            this.policy.canRead(actor, { kind, id }) &&
+            this.policy.canRead(actor, { kind, id },undefined,state) &&
             !(kind === "memory" && row.forgotten),
         )
         .map(([id, row]) => {
-          this.policy.noteRead(actor, { kind, id });
+          this.policy.noteRead(actor, { kind, id },state);
           return kind === "group" && this.collaboration
             ? this.collaboration.viewGroup(actor, row)
             : kind === "meeting" && this.collaboration
@@ -93,8 +93,8 @@ export class BotService {
                     ...copy(row),
                     dependencyStatus: this.tasks?.dependencyStatus(actor,row,state) ?? {blocked:false},
                     handoffs: (row.handoffs ?? []).filter(history=>this.policy.canReadDerived(actor,{...history,botId:history.fromBotId,origins:history.provenance?.origins ?? []},state)).map(history=>{
-                      this.policy.noteDependencies(actor,history.provenance?.origins ?? []);
-                      if(history.source?.sessionId)this.policy.noteRead(actor,{kind:"session",id:history.source.sessionId});
+                      this.policy.noteDependencies(actor,history.provenance?.origins ?? [],state);
+                      if(history.source?.sessionId)this.policy.noteRead(actor,{kind:"session",id:history.source.sessionId},state);
                       return copy(history);
                     }),
                   } : copy(row);
@@ -108,21 +108,21 @@ export class BotService {
     result.attempts = Object.values(state.attempts)
       .filter(
         (row) =>
-          this.policy.canRead(actor, { kind: "task", id: row.taskId }) &&
-          (!row.sessionId || this.policy.canRead(actor, {kind:"session",id:row.sessionId})) &&
+          this.policy.canRead(actor, { kind: "task", id: row.taskId },undefined,state) &&
+          (!row.sessionId || this.policy.canRead(actor, {kind:"session",id:row.sessionId},undefined,state)) &&
           (!state.sessions[row.sessionId] || this.policy.canReadDerived(actor,state.sessions[row.sessionId],state)) &&
           (row.prerequisiteInputs ?? []).every(input=>input.inputId && this.policy.canRead(actor,{kind:"taskInput",id:input.inputId},null,state)) &&
           [row.result, row.report].filter(Boolean).every(artifact =>
             this.policy.canReadDerived(actor, {...artifact,botId:row.botId},state)),
       )
       .map((row) => {
-        this.policy.noteRead(actor, { kind: "task", id: row.taskId });
-        if(row.sessionId)this.policy.noteRead(actor,{kind:"session",id:row.sessionId});
-        for(const input of row.prerequisiteInputs ?? [])this.policy.noteRead(actor,{kind:"taskInput",id:input.inputId});
+        this.policy.noteRead(actor, { kind: "task", id: row.taskId },state);
+        if(row.sessionId)this.policy.noteRead(actor,{kind:"session",id:row.sessionId},state);
+        for(const input of row.prerequisiteInputs ?? [])this.policy.noteRead(actor,{kind:"taskInput",id:input.inputId},state);
         this.policy.noteDependencies(actor, [
           ...(row.result?.origins ?? []),
           ...(row.report?.origins ?? []),
-        ]);
+        ],state);
         return copy(row);
       });
     result.outbox = Object.values(state.outbox)
@@ -132,15 +132,15 @@ export class BotService {
           this.policy.canReadDerived(actor, row, state),
       )
       .map((row) => {
-        this.policy.noteDependencies(actor, row.origins);
+        this.policy.noteDependencies(actor, row.origins,state);
         return copy(row);
       });
-    result.materials = this.knowledge ? this.knowledge.metadata(actor, {limit:500}) : [];
+    result.materials = this.knowledge ? this.knowledge.metadata(actor, {limit:500},state) : [];
     if(!Array.isArray(result.materials))result.materials=result.materials.items ?? [];
     result.schedules = this.assistant?.listSchedules(actor,{}) ?? [];
     result.notices = this.assistant?.notices(actor,{}) ?? [];
-    for(const row of result.schedules)this.policy.noteRead(actor,{kind:"schedule",id:row.scheduleId});
-    this.#noticeReads(actor,result.notices);
+    for(const row of result.schedules)this.policy.noteRead(actor,{kind:"schedule",id:row.scheduleId},state);
+    this.#noticeReads(actor,result.notices,state);
     return result;
   }
   async #rememberReads(actor) {

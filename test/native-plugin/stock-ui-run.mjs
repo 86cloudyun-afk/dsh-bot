@@ -1,3 +1,4 @@
+import {finishStockGui,recordStockError} from './stock-report.mjs';
 import { stockGui, textReply, controlledProvider } from "./stock-gui-runtime.mjs";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
 let gui;
@@ -33,11 +34,11 @@ try {
   process.exitCode = 1;
   if (gui) {
     gui.report.passed = false;
-    gui.report.error = String(error.stack).replace(/https?:\/\/\S+/g, "[URL omitted]");
+    await recordStockError(gui.report,error,{evidence:gui.evidence});
   }
 } finally {
   if (gui) {
-    await gui.writeReport(); await gui.shutdown();
-    console.log(JSON.stringify({ passed: gui.report.passed, checks: gui.report.checks, error: gui.report.error?.split("\n")[0], evidence: gui.evidence }));
+    if(!await finishStockGui(gui))process.exitCode=1;
+    console.log(JSON.stringify({ passed: gui.report.passed, checks: gui.report.checks, error: gui.report.error }));
   }
 }
