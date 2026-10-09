@@ -29,13 +29,31 @@ export function canonical(value, ancestors = new Set()) {
 export const copy = value => JSON.parse(canonical(value));
 export const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
 const legacyMaps = ['bots', 'sessions', 'memories', 'grants', 'tasks', 'attempts', 'groups', 'meetings', 'operations', 'outbox'];
-const maps = [...legacyMaps, 'materials', 'schedules', 'occurrences', 'notices'];
+const maps = [...legacyMaps, 'materials', 'schedules', 'occurrences', 'notices', 'taskInputs'];
 function fresh() {return {schema: 2, storeId: randomUUID(), revision: 0, ...Object.fromEntries(maps.map(key => [key, {}]))};}
+function validateEntityFields(state, tables) {
+  const identities={bots:'botId',sessions:'sessionId',memories:'memoryId',grants:'grantId',tasks:'taskId',attempts:'attemptId',groups:'groupId',meetings:'meetingId',operations:'operationId',outbox:'outboxId',materials:'docId',schedules:'scheduleId',occurrences:'occurrenceId',notices:'noticeId',taskInputs:'inputId'};
+  const references=['botId','ownerBotId','recipientBotId','taskId','attemptId','sessionId','originSessionId','currentAttemptId','parentAttemptId','parentSessionId','resultOutboxId','operationId','runtimeId','ownerRuntimeId','scheduleId','occurrenceId','attemptSessionId','acceptedAttemptId','inputId'];
+  const nullable=new Set(['ownerBotId','originSessionId','currentAttemptId','parentAttemptId','parentSessionId','taskId','attemptId','sessionId']);
+  const numeric=['revision','version','epoch','definitionVersion','configRevision','taskVersion','memoryRevision','claimVersion','consentVersion','depth'];
+  for(const table of tables) for(const [id,row] of Object.entries(state[table])) {
+    const identity=identities[table];
+    if(Object.hasOwn(row,identity)) requireCondition(row[identity] === id,'malformed_state');
+    for(const field of references) if(Object.hasOwn(row,field)) {
+      const allowNull=nullable.has(field) || field==='botId' && ['sessions','outbox'].includes(table);
+      requireCondition(validId(row[field]) || allowNull && row[field] === null,'malformed_state');
+    }
+    for(const field of numeric) if(Object.hasOwn(row,field)) requireCondition(Number.isSafeInteger(row[field]) && row[field] >= 0,'malformed_state');
+    for(const field of ['state','lifecycle','acceptance']) if(Object.hasOwn(row,field)) requireCondition(typeof row[field] === 'string','malformed_state');
+    for(const field of ['archived','reservationHeld']) if(Object.hasOwn(row,field)) requireCondition(typeof row[field] === 'boolean','malformed_state');
+  }
+}
 function validate(state, {legacy = false} = {}) {
   requireCondition(plain(state), 'malformed_state');
   requireCondition(state.schema === (legacy ? 1 : 2), 'unsupported_schema');
   requireCondition(validId(state.storeId) && Number.isSafeInteger(state.revision) && state.revision >= 0, 'malformed_state');
   for (const key of legacy ? legacyMaps : maps) requireCondition(plain(state[key]) && Object.keys(state[key]).every(validId) && Object.values(state[key]).every(plain), 'malformed_state');
+  validateEntityFields(state, legacy ? legacyMaps : maps);
   for (const op of Object.values(state.operations)) requireCondition(plain(op) && typeof op.fingerprint === 'string' && Object.hasOwn(op, 'result'), 'malformed_state');
   const scopeValid=scope=>plain(scope) && Object.keys(scope).every(key=>(legacy ? ['sessions','tasks','memories'] : ['sessions','tasks','memories','materials']).includes(key)) &&
     Object.values(scope).every(ids=>Array.isArray(ids) && ids.every(id=>id==='*'||validId(id)));
@@ -116,6 +134,8 @@ export class PluginStore {
       const output = copy(result);
       draft.revision = this.#state.revision + 1;
       draft.operations[command.operationId] = {fingerprint, action: command.action, result: output};
+      requireCondition(plain(draft.taskInputs),'malformed_state');
+      for (const [inputId,input] of Object.entries(this.#state.taskInputs)) requireCondition(Object.hasOwn(draft.taskInputs,inputId) && canonical(draft.taskInputs[inputId]) === canonical(input),'malformed_state');
       requireCondition(draft.storeId === this.#state.storeId, 'malformed_state');
       requireCondition(canonical(draft.migrationBackup ?? null) === canonical(this.#state.migrationBackup ?? null), 'malformed_state');
       const committed = validate(copy(draft));

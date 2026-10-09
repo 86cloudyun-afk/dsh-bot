@@ -1,17 +1,18 @@
-import { canonical, copy, plain, requireCondition, validId } from "./store.mjs";
+import { canonical, copy, digest, plain, requireCondition, validId } from "./store.mjs";
 
 const tables = {
   bot: "bots",
   session: "sessions",
   memory: "memories",
   task: "tasks",
+  taskInput: "taskInputs",
   group: "groups",
   meeting: "meetings",
   material: "materials",
   schedule: "schedules",
   notice: "notices",
 };
-const scopeKeys = { session: "sessions", memory: "memories", task: "tasks", material: "materials" };
+const scopeKeys = { session: "sessions", memory: "memories", task: "tasks", taskInput: "tasks", material: "materials" };
 const humanOnly = new Set([
   "bot.create",
   "bot.delete",
@@ -58,7 +59,7 @@ function validScope(scope) {
 function includes(scope, resource) {
   const list = scope?.[scopeKeys[resource.kind]];
   return (
-    Array.isArray(list) && (list.includes("*") || list.includes(resource.id))
+    Array.isArray(list) && (list.includes("*") || list.includes(resource.kind === "taskInput" ? resource.record?.taskId : resource.id))
   );
 }
 
@@ -104,6 +105,7 @@ export class PermissionPolicy {
     requireCondition(validId(occurrenceId) && this.#scheduleAuthority, 'access_denied');
     const prospect = copy(this.#scheduleAuthority(occurrenceId, state));
     requireCondition(plain(prospect) && prospect.occurrenceId === occurrenceId && validId(prospect.scheduleId) && validId(prospect.botId) && validId(prospect.sessionId) && plain(prospect.recipe) && typeof prospect.recipeHash === 'string' && Array.isArray(prospect.origins ?? []), 'access_denied');
+    this.requireSavedConsentReceiverControl(prospect.executionConsent,prospect.botId,prospect.sessionId,state);
     return prospect;
   }
   fromScheduleOccurrence(occurrenceId) {
@@ -122,6 +124,16 @@ export class PermissionPolicy {
   canProspectiveBotReadDerived(prospect, record, state = this.#store.read()) {
     try {return this.#visible(this.#prospective(prospect,state), {kind:'memory',id:'derived',record,botId:record.botId ?? record.ownerBotId ?? null},state);} catch {return false;}
   }
+  requireSavedConsentReceiverControl(consent,ownerBotId,sessionId,state = this.#store.read()) {
+    requireCondition(plain(consent) && validId(ownerBotId) && validId(sessionId) && validId(consent.operationId),'access_denied');
+    const receipt=state.operations[consent.operationId];
+    requireCondition(receipt && ['schedule.create','schedule.update'].includes(receipt.action) && receipt.fingerprint === consent.operationFingerprint && plain(consent.command) && digest(consent.command) === consent.operationFingerprint && consent.command.callerKey === consent.callerKey && plain(receipt.result?.executionConsent) && canonical(receipt.result.executionConsent) === canonical(consent) && receipt.result.ownerBotId === ownerBotId && receipt.result.recipe?.originSessionId === sessionId && consent.sessionId === sessionId,'access_denied');
+    if(consent.callerKey === 'human') return;
+    const authorSessionId=receipt.result.source?.sessionId;
+    requireCondition(validId(authorSessionId) && consent.callerKey === canonical(['bot',ownerBotId,authorSessionId]) && state.sessions[authorSessionId]?.botId === ownerBotId && state.bots[ownerBotId]?.lifecycle === 'active','access_denied');
+    const prospect={kind:'prospective',botId:ownerBotId}, resource=this.resolve({kind:'session',id:sessionId},state);
+    requireCondition(this.#readAllowed(prospect,{kind:'session',id:sessionId},state,new Set()) && (resource.botId === ownerBotId || ((!resource.botId || this.#shareAllowed(prospect,resource,state)) && this.#grant(prospect,resource,state,'control'))),'access_denied');
+  }
   requireTaskTargetControl(actor, toBotId, taskId, state = this.#store.read()) {
     this.#checkActor(actor,state);
     requireCondition(validId(toBotId) && validId(taskId) && state.bots[toBotId]?.lifecycle === 'active' && state.tasks[taskId], 'access_denied');
@@ -136,6 +148,8 @@ export class PermissionPolicy {
     requireCondition(actor.kind === 'schedule', 'access_denied');
     const authority=this.#schedule(actor.occurrenceId,state), occurrence=state.occurrences[actor.occurrenceId], schedule=state.schedules[authority.scheduleId];
     requireCondition(schedule?.enabled === true && !schedule.archived && occurrence?.state === 'claimed' && occurrence.scheduleId === authority.scheduleId && occurrence.consentVersion === schedule.consentVersion && authority.consentVersion === schedule.consentVersion && state.bots[authority.botId]?.lifecycle === 'active', 'access_denied');
+    requireCondition(authority.admissionAllowed !== false,'disabled');
+    if(authority.admissionDeadlineAt !== undefined || authority.admissionObservedAt !== undefined) requireCondition(Number.isFinite(authority.admissionDeadlineAt) && Number.isFinite(authority.admissionObservedAt) && authority.admissionObservedAt <= authority.admissionDeadlineAt,'schedule_missed');
     const configRevision=authority.configRevision ?? schedule.executionConsent?.configRevision;
     requireCondition(configRevision === undefined || state.bots[authority.botId].configRevision === configRevision, 'access_denied');
     if (action === 'task.create') {
@@ -171,6 +185,14 @@ export class PermissionPolicy {
       add({kind:'task',id});
       const task=state.tasks[id],attempt=state.attempts[task?.currentAttemptId];
       collect(task?.acceptanceEvidence);collect(attempt?.result);collect(attempt?.report);
+    }
+    const admitted=state.attempts[authority.attemptId];
+    if(admitted && admitted.taskId === authority.taskId) for(const snapshot of admitted.prerequisiteInputs ?? []) {
+      const input=state.taskInputs[snapshot.inputId];
+      if(input && (authority.recipe.dependsOn ?? []).includes(input.taskId)) {
+        add({kind:'taskInput',id:input.inputId});collect(input.result);collect(input.report);collect(input.acceptanceEvidence);
+        if(input.attemptSessionId) add({kind:'session',id:input.attemptSessionId});
+      }
     }
     if(authority.taskId) add({kind:'task',id:authority.taskId});
     let inspected=0;
@@ -267,13 +289,18 @@ export class PermissionPolicy {
           : (record?.botId ?? record?.ownerBotId ?? null),
     };
   }
-  #visible(actor, resource, state, seen = new Set()) {
+  #visible(actor, resource, state, seen = new Set(), sourcePath = new Set()) {
     if (actor.kind === "human") return true;
     const record = resource.record,
       binding = actor.kind === 'bot' ? state.sessions[actor.sessionId] : null;
     if (record?.inactive === true) return false;
+    if (resource.kind === 'taskInput') {
+      const sessionId=record?.attemptSessionId ?? record?.sessionId;
+      if (sessionId && !this.#readAllowed(actor,{kind:'session',id:sessionId},state,seen,sourcePath)) return false;
+      for (const artifact of [record?.result,record?.report,record?.acceptanceEvidence].filter(Boolean)) if (!this.#visible(actor,{kind:'memory',id:'input-artifact',record:artifact,botId:resource.botId},state,seen,sourcePath)) return false;
+    }
     for (const origin of record?.origins ?? []) {
-      if (!this.#readAllowed(actor, origin, state, seen)) return false;
+      if (!this.#readAllowed(actor, origin, state, seen, sourcePath)) return false;
     }
     const sources = [
       record?.lineage,
@@ -284,8 +311,8 @@ export class PermissionPolicy {
       if (source.sessionId && state.sessions[source.sessionId]?.lineage)
         sources.push(state.sessions[source.sessionId].lineage);
     for (const source of sources.filter(Boolean)) {
-      if (source.kind === 'material' && source.docId && !this.#readAllowed(actor,{kind:'material',id:source.docId},state,seen)) return false;
-      if (source.sessionId && state.sessions[source.sessionId] && !(resource.kind === 'session' && resource.id === source.sessionId) && !this.#sourceSessionReadable(actor,source.sessionId,state,seen)) return false;
+      if (source.kind === 'material' && source.docId && !this.#readAllowed(actor,{kind:'material',id:source.docId},state,seen,sourcePath)) return false;
+      if (source.sessionId && state.sessions[source.sessionId] && !(resource.kind === 'session' && resource.id === source.sessionId) && !this.#sourceSessionReadable(actor,source.sessionId,state,seen,sourcePath)) return false;
     }
     for (const lineage of sources.filter(Boolean)) {
       if (!lineage.meetingId || lineage.phase !== "independent") continue;
@@ -330,14 +357,27 @@ export class PermissionPolicy {
       );
     return true;
   }
-  #sourceSessionReadable(actor,sessionId,state,seen) {
+  #sourceSessionReadable(actor,sessionId,state,seen,sourcePath) {
+    if(sourcePath.size >= 32) return false;
+    if(sourcePath.has(sessionId)) {
+      // A context task may point back to this already checked source session.
+      // Permit that edge only when it closes an inspected task origin, never
+      // when the session's own source links form a cycle.
+      const taskBackedge=[...seen].some(key=>{
+        const ref=JSON.parse(key),task=ref.kind === 'task' && state.tasks[ref.id];
+        return task && [task.source,...(task.contentSources ?? [])].flat().some(source=>source?.sessionId === sessionId);
+      });
+      const session=state.sessions[sessionId],sources=[session?.lineage,session?.source,...(session?.contentSources ?? [])].flat().filter(Boolean);
+      if(!taskBackedge || sources.some(source=>source.sessionId !== sessionId && sourcePath.has(source.sessionId))) return false;
+    }
+    const nextSources=new Set(sourcePath);nextSources.add(sessionId);
     const resource=this.resolve({kind:'session',id:sessionId},state), next=new Set(seen);
     next.add(canonical({kind:'session',id:sessionId}));
     if (next.size > 32) return false;
     // A source session may itself have consumed this task. Its already visited
     // origins were checked on entry; preserve every other origin and barrier.
     const record={...resource.record,origins:(resource.record?.origins ?? []).filter(ref=>!seen.has(canonical(ref)))};
-    if (!this.#visible(actor,{...resource,record},state,next)) return false;
+    if (!this.#visible(actor,{...resource,record},state,next,nextSources)) return false;
     return resource.botId === actor.botId || (resource.botId ? this.#shareAllowed(actor,resource,state) : this.#grant(actor,resource,state,'read'));
   }
   #shareAllowed(actor, resource, state) {
@@ -366,13 +406,13 @@ export class PermissionPolicy {
       return false;
     }
   }
-  #readAllowed(actor, reference, state, seen) {
+  #readAllowed(actor, reference, state, seen, sourcePath = new Set()) {
     const key = canonical(reference);
     if (seen.has(key) || seen.size >= 32) return false;
     const next = new Set(seen);
     next.add(key);
     const resource = this.resolve(reference, state);
-    if (!this.#visible(actor, resource, state, next)) return false;
+    if (!this.#visible(actor, resource, state, next, sourcePath)) return false;
     if (actor.kind === "human") return true;
     if (
       resource.kind === "group" ||
