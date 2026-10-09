@@ -5,6 +5,7 @@ import manifest from "../../package.json" with {type:"json"};
 /** One business surface shared by authenticated GUI RPC and Agent-scoped tools. */
 export class BotService {
   #closed = false;
+  #pending = new Set();
   #previewReads(actor, previews=[]) {
     const state=this.store.read();
     for(const preview of previews) {
@@ -218,7 +219,12 @@ export class BotService {
       ]);
     }
   }
-  async dispatch(actor, command, signal) {
+  dispatch(actor, command, signal) {
+    const operation=this.#dispatch(actor,command,signal);
+    this.#pending.add(operation);
+    return operation.finally(()=>this.#pending.delete(operation));
+  }
+  async #dispatch(actor, command, signal) {
     requireCondition(!this.#closed, "disabled");
     signal?.throwIfAborted();
     command = copy(command);
@@ -382,7 +388,8 @@ export class BotService {
     }
     return copy(result);
   }
-  close() {
+  async close() {
     this.#closed = true;
+    await Promise.allSettled([...this.#pending]);
   }
 }
