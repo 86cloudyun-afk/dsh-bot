@@ -45,9 +45,11 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind("dsh.bot"),
           listeners = new Set(),
           lifetime = new AbortController();
+        const pluginVersion = "1.0.1", clientProtocol = 1;
         let interval,
           refreshing,
-          pendingLoaded = false;
+          pendingLoaded = false,
+          pendingStoreId;
         let state = {
           snapshot: {
             bots: [],
@@ -65,6 +67,7 @@ window.__ModuleLoader__.load({
           busy: false,
           chooser: false,
           pending: [],
+          retained: [],
           loading: true,
         };
         const publish = (patch) => {
@@ -81,7 +84,7 @@ window.__ModuleLoader__.load({
             () => state,
           );
         const storageKey = () =>
-          `dsh-bot.pending.v1.${state.snapshot.storeId ?? "unknown"}`;
+          `dsh-bot.pending.v1.${pendingStoreId ?? state.snapshot.storeId ?? "unknown"}`;
         function savePending() {
           try {
             localStorage.setItem(storageKey(), JSON.stringify(state.pending));
@@ -103,6 +106,7 @@ window.__ModuleLoader__.load({
           if (!reply.ok)
             throw Object.assign(Error(reply.error.message), {
               code: reply.error.code,
+              details: reply.error.details,
             });
           return reply.value;
         }
@@ -111,9 +115,10 @@ window.__ModuleLoader__.load({
           refreshing = (async () => {
             try {
               const snapshot = await rpc("snapshot");
-              let pending = state.pending;
+              let pending = state.pending, retained = state.retained;
               if (!pendingLoaded && snapshot.storeId) {
                 pendingLoaded = true;
+                pendingStoreId = snapshot.storeId;
                 try {
                   const stored = JSON.parse(
                     localStorage.getItem(
@@ -122,6 +127,8 @@ window.__ModuleLoader__.load({
                   );
                   if (Array.isArray(stored) && stored.length <= 30)
                     pending = stored;
+                  const history=JSON.parse(localStorage.getItem(`${storageKey()}.retained`)??"[]");
+                  if(Array.isArray(history))retained=history;
                 } catch {
                   /* invalid browser cache cannot modify host state */
                 }
@@ -129,6 +136,7 @@ window.__ModuleLoader__.load({
               publish({
                 snapshot,
                 pending,
+                retained,
                 loading: false,
                 ...(catalog ? { catalog: await rpc("catalog") } : {}),
               });
@@ -144,6 +152,44 @@ window.__ModuleLoader__.load({
           })();
           return refreshing;
         }
+        async function requireCompatible() {
+          const snapshot = await rpc("snapshot");
+          if (snapshot.pluginVersion !== pluginVersion || snapshot.clientProtocol !== clientProtocol)
+            throw Object.assign(Error(`Bot 插件版本不一致：界面 ${pluginVersion}，运行服务 ${snapshot.pluginVersion ?? "旧候选／未知"}。请安装同一新版插件，完全重启 DSH 后刷新此页面。`), {code:"plugin_version_mismatch",beforeWrite:true});
+          if ((pendingStoreId ?? state.snapshot.storeId) && (pendingStoreId ?? state.snapshot.storeId) !== snapshot.storeId)
+            throw Object.assign(Error("当前 DSH profile 已改变。原始操作仍保留在原 profile，请刷新页面后再操作。"), {code:"profile_changed",beforeWrite:true});
+          return snapshot;
+        }
+        function forgetPending(operationId) {
+          publish({pending:state.pending.filter(row=>row.operationId !== operationId)});
+          savePending();
+        }
+        function retainPending(request) {
+          if(state.busy)return;
+          const retained=state.retained.some(row=>row.operationId===request.operationId)?state.retained:[...state.retained,request];
+          try {localStorage.setItem(`${storageKey()}.retained`,JSON.stringify(retained));}
+          catch {publish({error:"无法保存原始请求历史；待查回记录仍保留，请先恢复浏览器存储。"});return;}
+          publish({retained});forgetPending(request.operationId);
+        }
+        async function readOperation(request) {
+          return rpc("command",{action:"operation.lookup",input:{operationId:request.operationId,request}});
+        }
+        async function lookupOperation(request) {
+          if (state.busy) return;
+          publish({busy:true,error:""});
+          try {
+            await requireCompatible();
+            const receipt = await readOperation(request);
+            if (receipt.state === "committed") {
+              forgetPending(request.operationId);
+              await refresh();
+              return receipt.result;
+            }
+            publish({error:`原始操作 ${request.operationId} 暂无已提交回执，结果仍未确认。原请求已保留；查回不会执行任务或发送模型请求。`});
+          } catch (error) {
+            publish({error:`${error.code ?? "connection"}：${error.message}\n原始操作 ${request.operationId} 仍保留。`});
+          } finally {publish({busy:false});}
+        }
         async function command(action, input, original) {
           const request = original ?? {
             operationId: crypto.randomUUID(),
@@ -151,28 +197,30 @@ window.__ModuleLoader__.load({
             input,
           };
           if (state.busy) return;
-          if (
-            !state.pending.some(
-              (row) => row.operationId === request.operationId,
-            )
-          ) {
-            publish({ pending: [...state.pending, request].slice(-30) });
-            savePending();
-          }
           publish({ busy: true, error: "" });
           try {
+            await requireCompatible();
+            if (!state.pending.some(row=>row.operationId === request.operationId)) {
+              if (state.pending.length >= 30)
+                throw Object.assign(Error("待查回操作已达 30 条，请先查回，或将不再接续的请求“保留并收起”；原 ID 均保留在历史中。"),{code:"pending_limit",beforeWrite:true});
+              publish({pending:[...state.pending,request]});
+              savePending();
+            }
+            if (original) {
+              const receipt = await readOperation(request);
+              if (receipt.state === "committed") {
+                forgetPending(request.operationId);
+                await refresh();
+                return receipt.result;
+              }
+            }
             const value = await rpc("command", request);
-            publish({
-              pending: state.pending.filter(
-                (row) => row.operationId !== request.operationId,
-              ),
-            });
-            savePending();
+            forgetPending(request.operationId);
             await refresh();
             return value;
           } catch (error) {
             publish({
-              error: `${error.code ?? "unknown"}：${error.message}\n原始操作 ${request.operationId} 已保留，请查回后接续。`,
+              error: `${error.code ?? "unknown"}：${error.message}${error.beforeWrite ? "\n原始请求未发送。" : error.details?.rejectedBeforeWrite ? `\n提交被拒，未写入 Bot 配置。原始操作 ${request.operationId} 已保留；修正配置后可重新提交，也可先查回原始操作。` : `\n原始操作 ${request.operationId} 已保留，结果未确认，请先查回。`}`,
             });
           } finally {
             publish({ busy: false });
@@ -345,12 +393,22 @@ window.__ModuleLoader__.load({
             const model = JSON.parse(row.value);
             return model.provider === preferred?.provider && model.model === preferred?.model;
           })?.value ?? models[0]?.value ?? "";
-          const contact = bot
+          const initialContact = bot
             ? JSON.stringify({provider: bot.contact.provider, model: bot.contact.model})
             : selected;
           const separateExecution = bot && bot.executionMode !== "inherit";
+          const [draftChoices,setChoices]=useState({contact:initialContact,execution:separateExecution?JSON.stringify({provider:bot.execution.provider,model:bot.execution.model}):"",preset:bot?.presetId??""});
+          const contact=draftChoices.contact;
           const sameRoute = (a, b) => a?.provider === b?.provider && a?.model === b?.model;
+          const configuredModels = configuration => {
+            const value = configuration && JSON.stringify({provider:configuration.provider,model:configuration.model});
+            return value && !models.some(row=>row.value === value)
+              ? [...models,{value,label:`${configuration.provider} / ${configuration.model}（当前不可用，请重新选择）`}]
+              : models;
+          };
           const newDefaults = sameRoute(JSON.parse(contact || "{}"), preferred) ? preferred : undefined;
+          const presetOptions=state.catalog.presets.filter(row=>!row.broken).map(row=>({value:row.id,label:row.name??row.id}));
+          if(draftChoices.preset && !presetOptions.some(row=>row.value===draftChoices.preset))presetOptions.push({value:draftChoices.preset,label:`${draftChoices.preset}（当前不可用，请重新选择）`});
           const modelInput = (selection, effort, tokens, previous) => ({
             ...selection,
             ...(effort ? {reasoningEffort: effort} : {}),
@@ -364,6 +422,7 @@ window.__ModuleLoader__.load({
               h("p", {role: "status"}, "此 Bot 的配置已在其他页面更新。当前草稿已保留，保存将检查原版本。"),
               button("重新载入最新配置", () => {
                 setDraftBase(latestBot);
+                setChoices({contact:JSON.stringify({provider:latestBot.contact.provider,model:latestBot.contact.model}),execution:latestBot.executionMode!=="inherit"?JSON.stringify({provider:latestBot.execution.provider,model:latestBot.execution.model}):"",preset:latestBot.presetId??""});
                 setFormEpoch(epoch => epoch + 1);
               }),
             ),
@@ -391,17 +450,19 @@ window.__ModuleLoader__.load({
                 });
                 if (bot && saved) {
                   setDraftBase(saved);
+                  setChoices({contact:JSON.stringify({provider:saved.contact.provider,model:saved.contact.model}),execution:saved.executionMode!=="inherit"?JSON.stringify({provider:saved.execution.provider,model:saved.execution.model}):"",preset:saved.presetId??""});
                   setFormEpoch(epoch => epoch + 1);
                 }
                 return saved;
               },
               field("名称", "name", {value: bot?.name, maxLength: 100}),
               field("身份与职责", "role", {value: bot?.role, textarea: true, required: false, maxLength: 8192}),
-              field("模型", "contact", {value: contact, options: models, onChange: event => {
+              field("模型", "contact", {value: contact, options: configuredModels(JSON.parse(contact || "null")), onChange: event => {
                 const controls = event.currentTarget.form.elements;
-                const chosen = JSON.parse(event.currentTarget.value);
+                const value=event.currentTarget.value, chosen = JSON.parse(value);
                 controls.contactEffort.value = !bot && sameRoute(chosen, preferred) ? preferred?.reasoningEffort ?? "" : "";
                 if (!controls.execution.value) controls.executionEffort.value = "";
+                setChoices(choices=>({...choices,contact:value}));
               }}),
               advanced("更多设置",
                 field("工作目录（DSH 所在机器）", "cwd", {
@@ -409,11 +470,12 @@ window.__ModuleLoader__.load({
                   required: false, placeholder: "默认使用 DSH 当前工作目录",
                 }),
                 field("执行模型", "execution", {
-                  value: separateExecution ? JSON.stringify({provider: bot.execution.provider, model: bot.execution.model}) : "",
-                  options: [{value: "", label: "与聊天模型相同"}, ...models], required: false,
+                  value: draftChoices.execution,
+                  options: [{value: "", label: "与聊天模型相同"}, ...configuredModels(JSON.parse(draftChoices.execution || "null"))], required: false,
                   onChange: event => {
-                    const chosen = event.currentTarget.value ? JSON.parse(event.currentTarget.value) : null;
+                    const value=event.currentTarget.value,chosen = value ? JSON.parse(value) : null;
                     if (!sameRoute(chosen, bot?.execution)) event.currentTarget.form.elements.executionEffort.value = "";
+                    setChoices(choices=>({...choices,execution:value}));
                   },
                 }),
                 field("联络思考程度（留空使用当前模型默认）", "contactEffort", {
@@ -429,10 +491,11 @@ window.__ModuleLoader__.load({
                   value: bot?.execution.maxTokens ?? "", required: false, placeholder: "使用模型默认值",
                 }),
                 field("原生 Agent preset", "preset", {
-                  value: bot?.presetId ?? "",
+                  value: draftChoices.preset,
                   options: [{value: "", label: "使用 DSH 默认会话配置"},
-                    ...state.catalog.presets.filter(row => !row.broken).map(row => ({value: row.id, label: row.name ?? row.id}))],
+                    ...presetOptions],
                   required: false,
+                  onChange:event=>{const value=event.currentTarget.value;setChoices(choices=>({...choices,preset:value}));},
                 }),
               ),
               h("small", null, models.length ? "工作工具默认沿用 DSH，任务在后台运行，可随时继续聊天。" : "请先在 DSH 中配置模型，再创建 Bot。"),
@@ -554,6 +617,32 @@ window.__ModuleLoader__.load({
                 ),
               ),
             ),
+          );
+        }
+        function TaskAdjustment({task:latestTask}) {
+          const [task,setBase]=useState(latestTask),[formEpoch,setFormEpoch]=useState(0);
+          return advanced("调整与接续",
+            latestTask.version !== task.version && h("div",null,
+              h("p",{role:"status"},"任务已更新。当前目标草稿已保留；保存将检查原版本。"),
+              button("重新载入最新任务",()=>{setBase(latestTask);setFormEpoch(epoch=>epoch+1);}),
+            ),
+            h("div",{key:formEpoch},form("调整目标",async data=>{
+              const saved=await command("task.adjust",{taskId:task.taskId,expectedVersion:task.version,goal:data.get("goal")});
+              if(saved){setBase(saved);setFormEpoch(epoch=>epoch+1);}return saved;
+            },field("新目标","goal",{value:task.goal,textarea:true}))),
+          );
+        }
+        function TaskAcceptance({task:latestTask,attempt}) {
+          const [task,setBase]=useState(latestTask),[formEpoch,setFormEpoch]=useState(0);
+          return advanced("验收结果",
+            latestTask.version !== task.version && h("div",null,
+              h("p",{role:"status"},"任务或验收已更新。当前证据草稿已保留；保存将检查原版本。"),
+              button("重新载入最新验收",()=>{setBase(latestTask);setFormEpoch(epoch=>epoch+1);}),
+            ),
+            h("div",{key:formEpoch},form("记录验收",async data=>{
+              const saved=await command("task.accept",{taskId:task.taskId,expectedVersion:task.version,attemptId:attempt.attemptId,outcome:data.get("outcome"),evidence:data.get("evidence")});
+              if(saved){setBase(saved);setFormEpoch(epoch=>epoch+1);}return saved;
+            },field("结论","outcome",{value:task.acceptance,options:[{value:"unknown",label:"待定"},{value:"passed",label:"通过"},{value:"failed",label:"不通过"}]}),field("实际证据","evidence",{textarea:true}))),
           );
         }
         function TasksPane() {
@@ -704,41 +793,10 @@ window.__ModuleLoader__.load({
                     "small", null,
                     `本地资源：${attempt.reservationHeld ? "尚未结算" : "已结算"}；外部副作用：${attempt.externalEffects}；用量：${attempt.usage === "UNKNOWN" ? "未知" : JSON.stringify(attempt.usage)}`,
                   )),
-                  advanced("调整与接续", form(
-                    "调整目标",
-                    (data) =>
-                      command("task.adjust", {
-                        taskId: task.taskId,
-                        expectedVersion: task.version,
-                        goal: data.get("goal"),
-                      }),
-                    field("新目标", "goal", {
-                      value: task.goal,
-                      textarea: true,
-                    }),
-                  )),
+                  h(TaskAdjustment,{task,key:task.taskId}),
                   attempt &&
                     !attempt.reservationHeld &&
-                    advanced("验收结果", form(
-                      "记录验收",
-                      (data) =>
-                        command("task.accept", {
-                          taskId: task.taskId,
-                          expectedVersion: task.version,
-                          attemptId: attempt.attemptId,
-                          outcome: data.get("outcome"),
-                          evidence: data.get("evidence"),
-                        }),
-                      field("结论", "outcome", {
-                        value: task.acceptance,
-                        options: [
-                          { value: "unknown", label: "待定" },
-                          { value: "passed", label: "通过" },
-                          { value: "failed", label: "不通过" },
-                        ],
-                      }),
-                      field("实际证据", "evidence", { textarea: true }),
-                    )),
+                    h(TaskAcceptance,{task,attempt,key:attempt.attemptId}),
                 );
               }),
             ),
@@ -794,91 +852,40 @@ window.__ModuleLoader__.load({
             ),
           );
         }
+        function SharingEditor({bot:latestBot}) {
+          const view=useView(),[bot,setBase]=useState(latestBot),[receivers,setReceivers]=useState(null),[formEpoch,setFormEpoch]=useState(0);
+          const selected=receivers??view.snapshot.bots.filter(row=>row.botId!==bot.botId && (bot.share.receivers.includes("*")||bot.share.receivers.includes(row.botId))).map(row=>row.botId);
+          return resourceCard(bot.botId,`${botLabel(bot)} 的共享范围`,
+            latestBot.revision !== bot.revision && h("div",null,
+              h("p",{role:"status"},"共享范围或 Bot 配置已更新。当前权限草稿已保留；保存将检查原版本。"),
+              button("重新载入最新共享范围",()=>{setBase(latestBot);setReceivers(null);setFormEpoch(epoch=>epoch+1);}),
+            ),
+            h("div",{key:formEpoch},form("保存共享上限",async data=>{
+              const saved=await command("share.set",{botId:bot.botId,expectedVersion:bot.revision,share:{
+                enabled:data.get("enabled")==="on",receivers:data.getAll("receiver"),
+                scope:Object.fromEntries(["sessions","tasks","memories"].map(key=>[key,data.get(key)==="on"?["*"]:[]])),
+              }});
+              if(saved){setBase({...bot,share:saved,revision:bot.revision+1});setReceivers(null);setFormEpoch(epoch=>epoch+1);}return saved;
+            },check("enabled","允许其他 Bot 只读了解",bot.share.enabled),
+            ...view.snapshot.bots.filter(row=>row.botId!==bot.botId).map(row=>h("label",{className:"check",key:row.botId},
+              h("input",{type:"checkbox",name:"receiver",value:row.botId,checked:selected.includes(row.botId),onChange:event=>{
+                const checked=event.target.checked;setReceivers(checked?[...new Set([...selected,row.botId])]:selected.filter(id=>id!==row.botId));
+              }}),botLabel(row))),
+            check("sessions","共享会话",bot.share.scope.sessions?.includes("*")),
+            check("tasks","共享任务",bot.share.scope.tasks?.includes("*")),
+            check("memories","共享记忆",bot.share.scope.memories?.includes("*")),
+            )),
+          );
+        }
         function SharingPane() {
           const view = useView();
-          const [receiverDrafts, setReceiverDrafts] = useState({});
-          const savedReceivers = (bot) => view.snapshot.bots
-            .filter((row) => row.botId !== bot.botId &&
-              (bot.share.receivers.includes("*") || bot.share.receivers.includes(row.botId)))
-            .map((row) => row.botId);
           return h(
             "div",
             { className: "grid" },
             h(
               "div",
               null,
-              ...view.snapshot.bots.map((bot) =>
-                resourceCard(
-                  bot.botId,
-                  `${botLabel(bot)} 的共享范围`,
-                  form(
-                    "保存共享上限",
-                    async (data) => {
-                      const saved = await command("share.set", {
-                        botId: bot.botId,
-                        share: {
-                          enabled: data.get("enabled") === "on",
-                          receivers: data.getAll("receiver"),
-                          scope: Object.fromEntries(
-                            ["sessions", "tasks", "memories"].map((key) => [
-                              key,
-                              data.get(key) === "on" ? ["*"] : [],
-                            ]),
-                          ),
-                        },
-                      });
-                      if (saved) setReceiverDrafts((drafts) => {
-                        const next = { ...drafts }; delete next[bot.botId]; return next;
-                      });
-                      return saved;
-                    },
-                    check(
-                      "enabled",
-                      "允许其他 Bot 只读了解",
-                      bot.share.enabled,
-                    ),
-                    ...view.snapshot.bots
-                      .filter((row) => row.botId !== bot.botId)
-                      .map((row) =>
-                        h(
-                          "label",
-                          { className: "check", key: row.botId },
-                          h("input", {
-                            type: "checkbox",
-                            name: "receiver",
-                            value: row.botId,
-                            checked: (receiverDrafts[bot.botId] ?? savedReceivers(bot)).includes(row.botId),
-                            onChange: (event) => {
-                              const checked = event.target.checked;
-                              setReceiverDrafts((drafts) => {
-                                const selected = drafts[bot.botId] ?? savedReceivers(bot);
-                                return { ...drafts, [bot.botId]: checked
-                                  ? [...new Set([...selected, row.botId])]
-                                  : selected.filter((id) => id !== row.botId) };
-                              });
-                            },
-                          }),
-                          botLabel(row),
-                        ),
-                      ),
-                    check(
-                      "sessions",
-                      "共享会话",
-                      bot.share.scope.sessions?.includes("*"),
-                    ),
-                    check(
-                      "tasks",
-                      "共享任务",
-                      bot.share.scope.tasks?.includes("*"),
-                    ),
-                    check(
-                      "memories",
-                      "共享记忆",
-                      bot.share.scope.memories?.includes("*"),
-                    ),
-                  ),
-                ),
-              ),
+              ...view.snapshot.bots.map(bot=>h(SharingEditor,{bot,key:bot.botId})),
             ),
             h(
               "div",
@@ -956,11 +963,25 @@ window.__ModuleLoader__.load({
                       level: grant.level,
                       scope: grant.scope,
                       active: !grant.active,
+                      expectedVersion: grant.version,
                     }),
                   ),
                 ),
               ),
             ),
+          );
+        }
+        function GroupMembersEditor({group:latestGroup}) {
+          const [group,setBase]=useState(latestGroup),[formEpoch,setFormEpoch]=useState(0);
+          return advanced("管理群成员",
+            latestGroup.version !== group.version && h("div",null,
+              h("p",{role:"status"},"群成员或群状态已更新。当前成员草稿已保留；保存将检查原版本。"),
+              button("重新载入最新群成员",()=>{setBase(latestGroup);setFormEpoch(epoch=>epoch+1);}),
+            ),
+            h("div",{key:formEpoch},form("更新群成员",async data=>{
+              const saved=await command("group.members",{groupId:group.groupId,expectedVersion:group.version,botIds:data.getAll("botIds"),coordinatorBotId:data.get("coordinator")});
+              if(saved){setBase(saved);setFormEpoch(epoch=>epoch+1);}return saved;
+            },field("成员（可多选）","botIds",{options:botsOptions(),multiple:true,value:group.members.filter(row=>row.active).map(row=>row.botId)}),field("协调者","coordinator",{options:botsOptions(),value:group.coordinatorBotId}))),
           );
         }
         function GroupsPane() {
@@ -1028,27 +1049,7 @@ window.__ModuleLoader__.load({
                       maxLength: 32000,
                     }),
                   )),
-                  advanced("管理群成员", form(
-                    "更新群成员",
-                    (data) =>
-                      command("group.members", {
-                        groupId: group.groupId,
-                        expectedVersion: group.version,
-                        botIds: data.getAll("botIds"),
-                        coordinatorBotId: data.get("coordinator"),
-                      }),
-                    field("成员（可多选）", "botIds", {
-                      options: botsOptions(),
-                      multiple: true,
-                      value: group.members
-                        .filter((row) => row.active)
-                        .map((row) => row.botId),
-                    }),
-                    field("协调者", "coordinator", {
-                      options: botsOptions(),
-                      value: group.coordinatorBotId,
-                    }),
-                  )),
+                  h(GroupMembersEditor,{group,key:group.groupId}),
                 ),
               ),
             ),
@@ -1088,6 +1089,31 @@ window.__ModuleLoader__.load({
                 ),
               ),
             ),
+          );
+        }
+        function MeetingTopicEditor({meeting:latestMeeting}) {
+          const [meeting,setBase]=useState(latestMeeting),[formEpoch,setFormEpoch]=useState(0);
+          return advanced("修改议题",
+            latestMeeting.epoch !== meeting.epoch && h("div",null,
+              h("p",{role:"status"},"会议议题已变更。当前议题草稿保留在原会议世代；不会覆盖新议题。"),
+              button("重新载入最新议题",()=>{setBase(latestMeeting);setFormEpoch(epoch=>epoch+1);}),
+            ),
+            h("div",{key:formEpoch},form("修改议题并重开独立意见",async data=>{
+              const saved=await command("meeting.topic",{meetingId:meeting.meetingId,epoch:meeting.epoch,topic:data.get("topic"),materials:data.get("materials")});
+              if(saved){setBase(saved);setFormEpoch(epoch=>epoch+1);}return saved;
+            },field("新议题","topic",{value:meeting.topic,maxLength:1000}),field("新材料","materials",{value:meeting.materials,textarea:true,required:false,maxLength:32000}))),
+          );
+        }
+        function MeetingActionEditor({meeting:latestMeeting}) {
+          const [meeting,setBase]=useState(latestMeeting),[formEpoch,setFormEpoch]=useState(0);
+          return advanced("登记行动任务",
+            latestMeeting.epoch !== meeting.epoch && h("div",null,
+              h("p",{role:"status"},"会议决定所属世代已改变。当前行动草稿仍属于原决定；请先查阅最新决定。"),
+              button("重新载入最新会议决定",()=>{setBase(latestMeeting);setFormEpoch(epoch=>epoch+1);}),
+            ),
+            h("div",{key:formEpoch},form("生成真实行动任务",data=>command("meeting.action",{
+              meetingId:meeting.meetingId,epoch:meeting.epoch,botId:data.get("botId"),title:data.get("title"),goal:data.get("goal"),criteria:String(data.get("criteria")).split("\n").filter(Boolean),
+            }),field("负责人","botId",{options:botsOptions()}),field("任务标题","title",{maxLength:200}),field("行动目标","goal",{textarea:true,maxLength:16000}),field("验收条件","criteria",{textarea:true}))),
           );
         }
         function MeetingsPane() {
@@ -1167,41 +1193,9 @@ window.__ModuleLoader__.load({
                     ),
                 ),
                 meeting.decision &&
-                  advanced("登记行动任务", form(
-                    "生成真实行动任务",
-                    (data) =>
-                      command("meeting.action", {
-                        meetingId: meeting.meetingId,
-                        epoch: meeting.epoch,
-                        botId: data.get("botId"),
-                        title: data.get("title"),
-                        goal: data.get("goal"),
-                        criteria: String(data.get("criteria"))
-                          .split("\n")
-                          .filter(Boolean),
-                      }),
-                    field("负责人", "botId", { options: botsOptions() }),
-                    field("任务标题", "title"),
-                    field("行动目标", "goal", { textarea: true }),
-                    field("验收条件", "criteria", { textarea: true }),
-                  )),
+                  h(MeetingActionEditor,{meeting,key:`action:${meeting.meetingId}`}),
                 !["complete", "cancelled"].includes(meeting.phase) &&
-                  advanced("修改议题", form(
-                    "修改议题并重开独立意见",
-                    (data) =>
-                      command("meeting.topic", {
-                        meetingId: meeting.meetingId,
-                        epoch: meeting.epoch,
-                        topic: data.get("topic"),
-                        materials: data.get("materials"),
-                      }),
-                    field("新议题", "topic", { value: meeting.topic }),
-                    field("新材料", "materials", {
-                      value: meeting.materials,
-                      textarea: true,
-                      required: false,
-                    }),
-                  )),
+                  h(MeetingTopicEditor,{meeting,key:`topic:${meeting.meetingId}`}),
               ),
             ),
           );
@@ -1345,7 +1339,7 @@ window.__ModuleLoader__.load({
                 "div",
                 null,
                 h("h1", null, t("title")),
-                h("small", null, "原生多 Bot · 独立记忆 · 协作任务"),
+                h("small", null, `原生多 Bot · 独立记忆 · 协作任务 · 插件 ${pluginVersion} / 服务 ${view.snapshot.pluginVersion ?? "未知"}`),
               ),
               h(
                 "div",
@@ -1364,12 +1358,22 @@ window.__ModuleLoader__.load({
                     "div",
                     { className: "actions", key: row.operationId },
                     h("small", null, `${row.action} · ${row.operationId}`),
-                    button("用原始操作查回／接续", () =>
+                    button("查回原始操作", () => lookupOperation(row)),
+                    button("用原 ID 接续", () =>
                       command(row.action, row.input, row),
                     ),
+                    button("保留并收起",()=>retainPending(row)),
                   ),
                 ),
               ),
+            view.retained.length>0 && advanced("保留的原始操作",
+              h("p",{className:"muted"},"收起只改变浏览器记录的显示；原始请求和 ID 保留，任务和未知状态不受影响。"),
+              ...view.retained.map(row=>h("div",{className:"actions",key:row.operationId},
+                h("small",null,`${row.action} · ${row.operationId}`),
+                button("查回原始操作",()=>lookupOperation(row)),
+                button("用原 ID 接续",()=>command(row.action,row.input,row)),
+              )),
+            ),
             h(
               "nav",
               { "aria-label": "Bot 工作台功能" },

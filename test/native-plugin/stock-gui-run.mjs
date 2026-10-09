@@ -1,4 +1,5 @@
 import {runSimpleUiChecks} from './stock-simple-ui-checks.mjs';
+import {runRepairChecks} from './stock-repair-checks.mjs';
 import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
@@ -793,6 +794,7 @@ try {
   );
   mark("ui-sharing-and-concurrent-draft-regressions");
   await runSimpleUiChecks(gui);
+  await runRepairChecks(gui);
   await runUiRegressions(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");

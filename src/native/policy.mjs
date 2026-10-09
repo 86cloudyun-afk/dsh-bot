@@ -358,6 +358,7 @@ export class PermissionPolicy {
       if (command.action === "share.set") {
         const bot = draft.bots[input.botId];
         requireCondition(bot, "not_found");
+        requireCondition(input.expectedVersion === undefined || input.expectedVersion === bot.revision, "revision_conflict");
         requireCondition(
           plain(input.share) &&
             typeof input.share.enabled === "boolean" &&
@@ -386,14 +387,16 @@ export class PermissionPolicy {
         "not_found",
       );
       const current = draft.grants[input.grantId];
+      requireCondition(input.expectedVersion === undefined || input.expectedVersion === (current?.version ?? 0), "revision_conflict");
       requireCondition(
         !current ||
           (current.ownerBotId === input.ownerBotId &&
             current.recipientBotId === input.recipientBotId),
         "grant_identity_conflict",
       );
+      const {expectedVersion, ...configuration} = input;
       const grant = {
-        ...copy(input),
+        ...copy(configuration),
         version: (current?.version ?? 0) + 1,
         grantedBy: "human",
       };
