@@ -203,8 +203,10 @@ export class PermissionPolicy {
     }
     return refs.has(canonical(reference)) && this.#readAllowed({kind:'prospective',botId:authority.botId},reference,state,new Set());
   }
-  actorKey(actor) {
-    this.#checkActor(actor, this.#store.read());
+  // Optional state is trusted, call-owned data for synchronous internal reads.
+  // Ordinary callers omit it to check the current store on every call.
+  actorKey(actor, state = this.#store.read()) {
+    this.#checkActor(actor, state);
     if (actor.kind === "schedule") return canonical(["schedule",actor.occurrenceId]);
     return actor.kind === "human"
       ? "human"
@@ -221,11 +223,10 @@ export class PermissionPolicy {
     }
     return { ...copy(command), callerKey };
   }
-  noteRead(actor, reference) {
-    this.require(actor, `${reference.kind}.read`, reference);
+  noteRead(actor, reference, state = this.#store.read()) {
+    this.require(actor, `${reference.kind}.read`, reference, state);
     if (actor.kind === "human" || actor.kind === "schedule") return;
-    const state = this.#store.read(),
-      resource = this.resolve(reference, state),
+    const resource = this.resolve(reference, state),
       refs = this.#reads.get(actor.agent) ?? new Map();
     for (const ref of [
       ...(resource.botId !== actor.botId ? [reference] : []),
@@ -258,18 +259,18 @@ export class PermissionPolicy {
       return false;
     }
   }
-  noteDependencies(actor, references = []) {
-    for (const reference of references) this.noteRead(actor, reference);
+  noteDependencies(actor, references = [], state) {
+    for (const reference of references) this.noteRead(actor, reference, state);
   }
-  noteDerivedRead(actor, record, {sessionId} = {}) {
-    requireCondition(this.canReadDerived(actor,record),'access_denied');
+  noteDerivedRead(actor, record, {sessionId} = {}, state = this.#store.read()) {
+    requireCondition(this.canReadDerived(actor,record,state),'access_denied');
     const references=[...(record?.origins ?? [])];
     if(sessionId)references.push({kind:'session',id:sessionId});
     for(const source of [record?.lineage,record?.source,...(record?.contentSources ?? [])].flat().filter(Boolean)) {
       if(source.sessionId)references.push({kind:'session',id:source.sessionId});
       if(source.kind==='material'&&source.docId)references.push({kind:'material',id:source.docId});
     }
-    this.noteDependencies(actor,references);
+    this.noteDependencies(actor,references,state);
     if(actor.kind!=='bot')return;
     const refs=this.#reads.get(actor.agent) ?? new Map();
     // Explicit source references also preserve same-Bot channel barriers.

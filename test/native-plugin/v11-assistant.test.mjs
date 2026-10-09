@@ -1,3 +1,4 @@
+import manifest from '../../package.json' with {type:'json'};
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {businessFixture} from './business-fixture.mjs';
@@ -59,7 +60,7 @@ test('notice identity and CAS preserve new unread result, saved previews use cod
 });
 test('diagnostics allowlists primitives and never forwards injected data or errors',async t=>{
  const f=await fixture(t);const output=f.assistant.diagnostics(f.human,{operationIds:['safe-operation','https://secret.example/token'],error:{code:'safe_code',message:'/secret Authorization=abc'},versions:{plugin:'1.1.0',node:'/absolute/secret',model:'API_SECRET'},path:'/secret',url:'https://secret'});const text=JSON.stringify(output);
- assert.match(text,/1.1.0/);assert.doesNotMatch(text,/Authorization|secret|API_SECRET|absolute|https:/);assert.equal(output.counts.bots,1);
+ assert.equal(output.versions.plugin,manifest.version);assert.doesNotMatch(text,/Authorization|secret|API_SECRET|absolute|https:/);assert.equal(output.counts.bots,1);
 });
 test('one lifecycle timer, close drains admitted work and old wakeup cannot admit',async t=>{
  const f=await fixture(t);await f.schedule();await f.assistant.start();assert.equal(f.active.size,1);const old=[...f.active.values()][0].fn;
@@ -111,7 +112,7 @@ test('handoff current task cannot expose old execution artifacts when original s
  });assert.equal(f.assistant.briefing(actor,{botId:other.botId}).tasks.length,1);assert.equal(f.assistant.briefing(actor,{botId:other.botId}).tasks[0].previews.length,0);assert.doesNotMatch(JSON.stringify(f.assistant.briefing(actor)),/OLD_PRIVATE/);
 });
 test('diagnostics versions come from actual runtime rather than caller-supplied version labels',async t=>{
- const f=await fixture(t);const output=f.assistant.diagnostics(f.human,{versions:{plugin:'9.9.9',service:'8.8.8',dsh:'7.7.7',node:'6.6.6'},error:{code:'my_secret_key'}});assert.equal(output.versions.plugin,'1.1.0');assert.equal(output.versions.node,process.version);assert.equal(output.versions.dsh,'0.2.0-rc.2');assert.equal(output.errorCode,'unknown_error');
+ const f=await fixture(t);const output=f.assistant.diagnostics(f.human,{versions:{plugin:'9.9.9',service:'8.8.8',dsh:'7.7.7',node:'6.6.6'},error:{code:'my_secret_key'}});assert.equal(output.versions.plugin,manifest.version);assert.equal(output.versions.node,process.version);assert.equal(output.versions.dsh,'0.2.0-rc.2');assert.equal(output.errorCode,'unknown_error');
 });
 test('editing frequency preserves recipe origins and independent meeting barriers for a prospective execution',async t=>{
  const f=await fixture(t);await f.store.transact({operationId:'independent-source',action:'test.meeting'},draft=>{draft.meetings['sealed-meeting']={meetingId:'sealed-meeting',epoch:1,phase:'independent',participants:[{botId:f.bot.botId,memberEpoch:1,active:true}]};draft.sessions[f.session.sessionId].lineage={meetingId:'sealed-meeting',epoch:1,phase:'independent',botId:f.bot.botId,memberEpoch:1,sessionId:f.session.sessionId};return true;});const actor=f.policy.fromAgent(f.ctx.agents.get(f.session.sessionId));
