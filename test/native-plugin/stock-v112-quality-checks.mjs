@@ -201,10 +201,19 @@ async function catalogHistory(gui) {
 }
 
 async function diagnostics(gui,operationId) {
-  await gui.workbench('会话管理');
-  await gui.page.getByLabel('附带的原始操作（可多选）').waitFor({state:'attached'});
-  const diagnostic=details(gui.page,'诊断');await gui.expand(card(gui,'原生会话管理'),'诊断');
-  const selection=diagnostic.getByLabel('附带的原始操作（可多选）');await selection.selectOption([operationId]);
+  const roster=await holdReply(gui,'**/api/dsh.bot/command',row=>row?.payload?.action==='session.list');
+  let diagnostic,selection,rosterPrimary;
+  try {
+    await gui.workbench('会话管理');
+    await gui.page.getByLabel('附带的原始操作（可多选）').waitFor({state:'attached'});
+    await roster.ready();assert.ok(roster.actual.value.items.length>0,'The actual held native session roster must add cards');
+    diagnostic=details(gui.page,'诊断');await gui.expand(card(gui,'原生会话管理'),'诊断');
+    selection=diagnostic.getByLabel('附带的原始操作（可多选）');await selection.selectOption([operationId]);
+    await roster.finish();
+    assert.deepEqual(await selection.evaluate(el=>[...el.selectedOptions].map(row=>row.value)),[operationId]);
+    assert.equal(await diagnostic.evaluate(el=>el.open),true);
+    gui.check('v114DeferredSessionRosterKeepsDiagnosticSelectionAndOpenState',true);
+  } catch(error) {rosterPrimary=error;} finally {await cleanup(rosterPrimary,[()=>roster.close()]);}
   const held=await holdReply(gui,'**/api/dsh.bot/command',row=>row?.payload?.action==='diagnostics.read');let pending,primary;
   try {
     pending=observe(uiRpc(gui,'diagnostics.read',()=>button(diagnostic,'预览诊断').click()));await held.ready();
@@ -269,7 +278,7 @@ async function runningNoop(gui) {
 
 export async function runV112QualityChecks(gui) {
   const originalChecks=Object.keys(gui.report.checks).length;
-  gui.report.v112Quality={realBrowser:true,actualInstalledNative:true,heldActualFileRead:true,heldActualSearchResponse:true,heldActualDiagnosticsResponse:true,heldActualCatalogResponse:true,heldActualNativeFinish:true,apiCommands:0,uiCommands:0,originalChecksBeforeV112:originalChecks,coverage:{uiReadIntentChecks:7,nativeExecutionChecks:1,apiSetupOnly:true,optionalLifecycleCases:'focused official SDK tests; no installed GUI claim'}};
+  gui.report.v112Quality={realBrowser:true,actualInstalledNative:true,heldActualFileRead:true,heldActualSearchResponse:true,heldActualDiagnosticsResponse:true,heldActualCatalogResponse:true,heldActualNativeFinish:true,apiCommands:0,uiCommands:0,originalChecksBeforeV112:originalChecks,coverage:{uiReadIntentChecks:8,nativeExecutionChecks:1,apiSetupOnly:true,optionalLifecycleCases:'focused official SDK tests; no installed GUI claim'}};
   await memoryCancel(gui);await materialSearch(gui);const operationId=await catalogHistory(gui);await diagnostics(gui,operationId);await runningNoop(gui);
   gui.check('v112QualityUsesNoExternalModelRequests',gui.report.realModelRequests===0);
   gui.report.v112Quality.checksAdded=Object.keys(gui.report.checks).length-originalChecks;

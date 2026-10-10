@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind("dsh.bot"),
           listeners = new Set(),
           lifetime = new AbortController();
-        const pluginVersion = "1.1.3", clientProtocol = 2;
+        const pluginVersion = "1.1.4", clientProtocol = 2;
         let interval,
           refreshing,
           refreshingCatalog = false,
@@ -1490,7 +1490,7 @@ window.__ModuleLoader__.load({
               );
             }),
             page.cursor && button("加载下一页", () => load(page.cursor)),
-            h(DiagnosticsPane),
+            h(DiagnosticsPane,{key:'diagnostics'}),
           );
         }
         function DiagnosticsPane() {

@@ -119,6 +119,7 @@ export const guiCheckNames=Object.freeze([
   "v112CanceledHeldMemoryReadCannotRestorePreviewOrIssueImport",
   "v112OutOfOrderActualMaterialRepliesKeepLatestSearch",
   "v112ShowAllMaterialsInvalidatesHeldActualSearch",
+  "v114DeferredSessionRosterKeepsDiagnosticSelectionAndOpenState",
   "v112ChangedDiagnosticSelectionCannotReviveHeldActualPreview",
   "v112CatalogRefreshPreservesNewPendingOriginalOperation",
   "v112CatalogRefreshPreservesRetainedOriginalOperationHistory",
@@ -139,6 +140,7 @@ export const stockSources=Object.freeze({
   'upgrade-v110':prior('1.1.0','5ca1ebde0a3d59869f180e2fe692dcfb70b32aadb885f5d1d624093c425e85e1',2),
   'upgrade-v111':prior('1.1.1','cf651bff75f9fa144e05b0db7fd6284038c50bcafb8a44ccfa8b0d4d66bb9c92',2),
   'upgrade-v112':prior('1.1.2','426a244ae02927129e315420907ab4b2f9acf16414144e0e6792b7f25bfe48ff',2),
+  'upgrade-v113':prior('1.1.3','55c192a3837d36ff6dd78fa5f34c36d2375a648258ddd499f793d6e3a47ae289',2),
 });
 const stableVersion=version=>typeof version==='string'&&/^\d+\.\d+\.\d+$/.test(version);
 const hex=(value,size)=>typeof value==='string'&&new RegExp(`^[a-f\\d]{${size}}$`).test(value);
