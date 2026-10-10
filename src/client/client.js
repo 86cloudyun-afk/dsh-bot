@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind("dsh.bot"),
           listeners = new Set(),
           lifetime = new AbortController();
-        const pluginVersion = "1.1.1", clientProtocol = 2;
+        const pluginVersion = "1.1.2", clientProtocol = 2;
         let interval,
           refreshing,
           pendingLoaded = false,
@@ -140,12 +140,14 @@ window.__ModuleLoader__.load({
                   /* invalid browser cache cannot modify host state */
                 }
               }
+              // Load cached originals before awaiting the catalog. Reads must not
+              // restore an older pending/retained array over a live command.
+              publish({pending,retained});
+              const nextCatalog = catalog ? await rpc("catalog") : undefined;
               publish({
                 snapshot,
-                pending,
-                retained,
                 loading: false,
-                ...(catalog ? { catalog: await rpc("catalog") } : {}),
+                ...(catalog ? { catalog: nextCatalog } : {}),
               });
             } catch (error) {
               if (!lifetime.signal.aborted)
@@ -533,7 +535,7 @@ window.__ModuleLoader__.load({
         }
         function TemplateCreator({teamOnly=false}) {
           const view=useView(),[templates,setTemplates]=useState([]),[choice,setChoice]=useState(""),[baseRevision,setBaseRevision]=useState(view.snapshot.revision),[epoch,setEpoch]=useState(0),[selections,setSelections]=useState({}),initialRoute=useRef(null);
-          useEffect(()=>{let active=true;query("template.list").then(value=>{if(active&&value)setTemplates(Array.isArray(value)?value:value.templates??[]);});return()=>{active=false;};},[]);
+          useEffect(()=>{let active=true;query("template.list",{},()=>active).then(value=>{if(active&&value)setTemplates(Array.isArray(value)?value:value.templates??[]);});return()=>{active=false;};},[]);
           const choices=templates.filter(row=>!!row.coordinatorRoleKey===teamOnly),template=choices.find(row=>row.templateId===choice)??choices[0],models=modelsOptions();
           const defaults=models.find(row=>{const parsed=JSON.parse(row.value);return parsed.provider===view.catalog.defaultModel?.provider&&parsed.model===view.catalog.defaultModel?.model;})?.value??models[0]?.value??"";
           if(initialRoute.current===null)initialRoute.current=defaults;
@@ -623,17 +625,18 @@ window.__ModuleLoader__.load({
             },field("内容","text",{value:base?.text,textarea:true,maxLength:8192}),field("分类","category",{value:base?.category??"fact",options:choices}),check("pinned","固定重要记忆（每 Bot 最多 8 条）",base?.pinned??false))),
             h("small",null,"长期记忆随对话按预算带入；编辑与遗忘保留真实来源。"));
         }
-        function MemoryTransfer({botId}) {
-          const view=useView(),[draft,setDraft]=useState(null),[unpin,setUnpin]=useState([]),[selected,setSelected]=useState([]),[loading,setLoading]=useState(false);
+        function MemoryTransfer({botId,readIntent}) {
+          const view=useView(),[draft,setDraft]=useState(null),[unpin,setUnpin]=useState([]),[selected,setSelected]=useState([]),[loading,setLoading]=useState(false),draftGeneration=useRef(0);
+          useEffect(()=>()=>{draftGeneration.current++;},[botId]);
           const activeMemories=view.snapshot.memories.filter(row=>row.botId===botId&&!row.forgotten);
           return advanced("导入导出",
             h("p",null,"只迁移当前 Bot 的长期记忆。导入仅追加；不可验证的受保护来源会保留为不可用。"),
             field("导出条目（可多选；留空导出全部，最多 500 条）","memoryIds",{options:activeMemories.map(row=>({value:row.memoryId,label:row.text.slice(0,60)})),multiple:true,required:false,value:selected,onChange:event=>setSelected([...event.target.selectedOptions].map(row=>row.value))}),
             button("导出记忆 JSON",async()=>{const result=await query("memory.export",{botId,...(selected.length?{memoryIds:selected}:{})});if(result)downloadText(result.fileText,result.fileName??"bot-memory.json","application/json;charset=utf-8");}),
             field("导入 JSON 文件","importFile",{type:"file",required:false,accept:".json,application/json",disabled:loading,onChange:async event=>{
-              const file=event.target.files?.[0];if(!file)return;setLoading(true);
-              try{const fileText=await readUtf8(file,4*1024*1024),digest=await fileDigest(fileText),preview=await query("memory.import.preview",{botId,fileText,fileDigest:digest});if(preview){setDraft({botId,fileText,fileDigest:digest,preview,fileEntries:JSON.parse(fileText).entries});setUnpin([]);}}
-              catch(error){publish({error:error.message});}finally{setLoading(false);}
+              const generation=++draftGeneration.current,paneGeneration=readIntent.current,isActive=()=>generation===draftGeneration.current&&paneGeneration===readIntent.current&&!lifetime.signal.aborted,file=event.target.files?.[0];setDraft(null);setUnpin([]);if(!file){setLoading(false);return;}setLoading(true);
+              try{const fileText=await readUtf8(file,4*1024*1024);if(!isActive())return;const digest=await fileDigest(fileText);if(!isActive())return;const preview=await query("memory.import.preview",{botId,fileText,fileDigest:digest},isActive);if(preview&&isActive()){setDraft({botId,fileText,fileDigest:digest,preview,fileEntries:JSON.parse(fileText).entries});setUnpin([]);}}
+              catch(error){if(isActive())publish({error:error.message});}finally{if(isActive())setLoading(false);}
             }}),
             draft && h("div",null,
               h("p",null,`预览 ${draft.preview.entries.length} 条；目标记忆版本 ${draft.preview.memoryRevision}。并发修改将拒绝整批导入，当前预览保留。`),
@@ -641,38 +644,39 @@ window.__ModuleLoader__.load({
               ...draft.preview.entries.map((entry,index)=>h("article",{className:"card",key:index},
                 h("p",null,entry.text??draft.fileEntries[entry.index??index]?.text??""),h("small",null,`${categoryName(entry.category??draft.fileEntries[entry.index??index]?.category)} · ${{skip:"重复，跳过",inactive:"来源待验证，不可用",append:"新增"}[entry.decision]??"待确认"} · ${{external_description:"外部来源说明",source_unverified:"来源待验证",external_protected_source:"外部受保护来源",verified_local_source:"本地来源已验证",source_revoked:"来源权限已撤销"}[entry.sourceVerification]??"来源待验证"}`),
                 entry.pinned && entry.decision!=="skip" && h("label",{className:"check"},h("input",{type:"checkbox",checked:unpin.includes(index),onChange:event=>setUnpin(ids=>event.target.checked?[...ids,index]:ids.filter(id=>id!==index))}),"导入时取消固定"))),
-              button("确认整批追加",async()=>{const result=await command("memory.import",{botId:draft.botId,fileText:draft.fileText,fileDigest:draft.fileDigest,expectedMemoryRevision:draft.preview.memoryRevision,...(unpin.length?{unpinnedEntryIndexes:unpin}:{})});if(result){setDraft(null);setUnpin([]);}}, {disabled:view.busy||draft.botId!==botId||(draft.preview.pinCount??0)-unpin.filter(index=>draft.preview.entries.some(entry=>entry.index===index&&entry.pinned&&entry.decision!=="skip")).length>8}),
-              button("取消导入",()=>{setDraft(null);setUnpin([]);}),
-            ));
+              button("确认整批追加",async()=>{const generation=draftGeneration.current,result=await command("memory.import",{botId:draft.botId,fileText:draft.fileText,fileDigest:draft.fileDigest,expectedMemoryRevision:draft.preview.memoryRevision,...(unpin.length?{unpinnedEntryIndexes:unpin}:{})});if(result&&generation===draftGeneration.current){draftGeneration.current++;setDraft(null);setUnpin([]);}}, {disabled:view.busy||loading||draft.botId!==botId||(draft.preview.pinCount??0)-unpin.filter(index=>draft.preview.entries.some(entry=>entry.index===index&&entry.pinned&&entry.decision!=="skip")).length>8}),
+            ),
+            (draft||loading)&&button("取消导入",()=>{draftGeneration.current++;setDraft(null);setUnpin([]);setLoading(false);})
+          );
         }
-        function MaterialReader({docId,chunkId,onClose}) {
-          const [page,setPage]=useState(null),[cursor,setCursor]=useState(null);
-          useEffect(()=>{let active=true;query("material.page",{docId,...(chunkId?{chunkId}:{})}).then(value=>{if(active&&value){setPage(value);setCursor(value.nextCursor);}});return()=>{active=false;};},[docId,chunkId]);
-          return card(page?.title??"资料正文",button("关闭正文",onClose),page&&h("div",null,
+        function MaterialReader({docId,chunkId,onClose,readIntent,selectionIntent=readIntent}) {
+          const [page,setPage]=useState(null),[cursor,setCursor]=useState(null),pageGeneration=useRef(0);
+          useEffect(()=>{const generation=++pageGeneration.current,paneGeneration=readIntent.current,selectionGeneration=selectionIntent.current,isActive=()=>generation===pageGeneration.current&&paneGeneration===readIntent.current&&selectionGeneration===selectionIntent.current;query("material.page",{docId,...(chunkId?{chunkId}:{})},isActive).then(value=>{if(isActive()&&value){setPage(value);setCursor(value.nextCursor);}});return()=>{pageGeneration.current++;};},[docId,chunkId]);
+          return card(page?.title??"资料正文",button("关闭正文",()=>{pageGeneration.current++;onClose();}),page&&h("div",null,
             h("p",{className:"muted"},`资料 ${docId}${chunkId?` · 引用 ${chunkId}`:""}`),
             h("pre",null,page.text??page.items?.map(row=>row.text??row.excerpt??"").join("\n")??""),
             page.chunkId&&h("small",null,`行 ${page.startLine}–${page.endLine}${page.section?` · ${page.section}`:""}`),
             page.source?.status==="verified"&&page.source.sessionId&&button("打开已核对的原生来源",()=>openSession(page.source.sessionId)),
             page.source&&h("p",{className:"muted"},({verified:"原生片段来源已核对",changed:"原生来源已变化；此处保留收录时的不可变正文",unavailable:"原生来源暂不可用；此处保留收录时的不可变正文",derived:"由 Bot 整理的资料",description:"用户提供的资料"})[page.source.status]??"来源说明"),
-            cursor&&button("下一页正文",async()=>{const value=await query("material.page",{docId,cursor});if(value){setPage(value);setCursor(value.nextCursor);}}),
+            cursor&&button("下一页正文",async()=>{const generation=++pageGeneration.current,paneGeneration=readIntent.current,selectionGeneration=selectionIntent.current,isActive=()=>generation===pageGeneration.current&&paneGeneration===readIntent.current&&selectionGeneration===selectionIntent.current;const value=await query("material.page",{docId,cursor},isActive);if(value&&isActive()){setPage(value);setCursor(value.nextCursor);}}),
             button("下载此份资料",async()=>{const result=await query("material.download",{docId});if(result)downloadText(result.text,result.fileName??`${result.title??"material"}.txt`);})
           ));
         }
-        function MaterialsPane({botId}) {
-          const view=useView(),[hits,setHits]=useState(null),[opened,setOpened]=useState(null),[draft,setDraft]=useState({text:"",fileName:"",mediaType:"text/plain"}),[epoch,setEpoch]=useState(0),[loading,setLoading]=useState(false),draftGeneration=useRef(0);
-          useEffect(()=>()=>{draftGeneration.current++;},[]);
+        function MaterialsPane({botId,readIntent}) {
+          const view=useView(),[hits,setHits]=useState(null),[opened,setOpened]=useState(null),[draft,setDraft]=useState({text:"",fileName:"",mediaType:"text/plain"}),[epoch,setEpoch]=useState(0),[loading,setLoading]=useState(false),draftGeneration=useRef(0),searchGeneration=useRef(0),readerIntent=useRef(0);
+          useEffect(()=>()=>{draftGeneration.current++;searchGeneration.current++;},[botId]);
           const rows=(view.snapshot.materials??[]).filter(row=>row.botId===botId);
           return h("div",{className:"grid"},card("资料检索",
-            form("搜索资料",async data=>{const result=await query("material.search",{botId,query:data.get("query"),limit:20});if(result)setHits(result);},field("关键词","query",{maxLength:500})),
+            form("搜索资料",async data=>{const generation=++searchGeneration.current,paneGeneration=readIntent.current,isActive=()=>generation===searchGeneration.current&&paneGeneration===readIntent.current;const result=await query("material.search",{botId,query:data.get("query"),limit:20},isActive);if(result&&isActive())setHits(result);},field("关键词","query",{maxLength:500})),
             ...(hits??rows).map(row=>h("article",{className:"card",key:row.chunkId??row.docId},
               h("h3",null,row.title),row.excerpt&&h("pre",null,row.excerpt),
               h("small",null,row.chunkId?`行 ${row.startLine??row.lineStart}–${row.endLine??row.lineEnd} · ${row.contentHash}`:`${row.archived?"已归档 · ":""}更新 ${updatedName(row.updatedAt??row.createdAt)}`),
-              button(row.chunkId?"打开此引用":"打开正文",()=>setOpened({docId:row.docId,chunkId:row.chunkId})),
-              !row.chunkId&&button("修订这份资料",async()=>{const generation=++draftGeneration.current,isActive=()=>generation===draftGeneration.current;setLoading(true);try{const result=await query("material.download",{docId:row.docId},isActive);if(result&&isActive()){setDraft({text:result.text,fileName:row.fileName??"",mediaType:row.mediaType??"text/plain",title:row.title,replacesDocId:row.docId});setEpoch(n=>n+1);}}finally{if(isActive())setLoading(false);}},{disabled:view.busy||loading}),
+              button(row.chunkId?"打开此引用":"打开正文",()=>{if(opened?.docId!==row.docId||opened?.chunkId!==row.chunkId)readerIntent.current++;setOpened({docId:row.docId,chunkId:row.chunkId});}),
+              !row.chunkId&&button("修订这份资料",async()=>{const generation=++draftGeneration.current,paneGeneration=readIntent.current,isActive=()=>generation===draftGeneration.current&&paneGeneration===readIntent.current;setLoading(true);try{const result=await query("material.download",{docId:row.docId},isActive);if(result&&isActive()){setDraft({text:result.text,fileName:row.fileName??"",mediaType:row.mediaType??"text/plain",title:row.title,replacesDocId:row.docId});setEpoch(n=>n+1);}}finally{if(isActive())setLoading(false);}},{disabled:view.busy||loading}),
               !row.chunkId&&!row.archived&&button("归档资料",()=>command("material.archive",{docId:row.docId,expectedVersion:row.version})),
-            )),hits&&button("显示全部资料",()=>setHits(null))),
+            )),hits&&button("显示全部资料",()=>{searchGeneration.current++;setHits(null);})),
             card("收录资料",
-              field("UTF-8 文本或 Markdown 文件","materialFile",{type:"file",required:false,accept:".txt,.md,text/plain,text/markdown",onChange:async event=>{const generation=++draftGeneration.current,file=event.target.files?.[0];if(!file){setLoading(false);return;}setLoading(true);try{if(!/\.(txt|md)$/i.test(file.name))throw Error("请选择 .txt 或 .md 文件。");const text=await readUtf8(file,65536);if(generation!==draftGeneration.current)return;setDraft({text,fileName:file.name,mediaType:/\.md$/i.test(file.name)?"text/markdown":"text/plain"});setEpoch(n=>n+1);}catch(error){if(generation===draftGeneration.current)publish({error:error.message});}finally{if(generation===draftGeneration.current)setLoading(false);}}}),
+              field("UTF-8 文本或 Markdown 文件","materialFile",{type:"file",required:false,accept:".txt,.md,text/plain,text/markdown",onChange:async event=>{const generation=++draftGeneration.current,paneGeneration=readIntent.current,isActive=()=>generation===draftGeneration.current&&paneGeneration===readIntent.current,file=event.target.files?.[0];if(!file){setLoading(false);return;}setLoading(true);try{if(!/\.(txt|md)$/i.test(file.name))throw Error("请选择 .txt 或 .md 文件。");const text=await readUtf8(file,65536);if(!isActive())return;setDraft({text,fileName:file.name,mediaType:/\.md$/i.test(file.name)?"text/markdown":"text/plain"});setEpoch(n=>n+1);}catch(error){if(isActive())publish({error:error.message});}finally{if(isActive())setLoading(false);}}}),
               loading&&h("p",{role:"status"},"正在读取资料，完成后可编辑标题和正文并保存。"),
               h("fieldset",{disabled:loading,style:{border:0,padding:0,margin:0,minWidth:0}},h("div",{key:epoch},form("保存不可变资料",async data=>{
                 if(loading)return;
@@ -681,12 +685,13 @@ window.__ModuleLoader__.load({
                 const text=displayText(enteredText)===displayText(draft.text)?draft.text:enteredText;
                 const result=await command("material.ingest",{botId,title:data.get("title"),text,mediaType:draft.mediaType,...(draft.replacesDocId?{replacesDocId:draft.replacesDocId}:{}),...(draft.fileName?{fileName:draft.fileName}:{})});if(result&&generation===draftGeneration.current){draftGeneration.current++;setDraft({text:"",fileName:"",mediaType:"text/plain"});setEpoch(n=>n+1);}},field("资料标题","title",{value:draft.title??draft.fileName,maxLength:200}),field("正文","text",{value:draft.text,textarea:true}),h("small",null,draft.replacesDocId?"正在修订所选资料：保存形成新资料，旧正文、来源和引用保留。":"每份最多 64 KiB。修订形成新资料，引用保留原文。"),draft.replacesDocId&&button("改为收录新资料",()=>{draftGeneration.current++;setDraft({...draft,replacesDocId:undefined});})))),
               advanced("从原生会话摘录",form("收录真实会话片段",data=>command("material.ingest",{botId,title:data.get("title"),source:{sessionId:data.get("sessionId"),eventSeq:Number(data.get("eventSeq")),partIndex:Number(data.get("partIndex")),startOffset:Number(data.get("startOffset")),endOffset:Number(data.get("endOffset"))}}),field("标题","title"),field("来源会话","sessionId",{options:view.snapshot.sessions.map(row=>({value:row.sessionId,label:`${view.snapshot.bots.find(bot=>bot.botId===row.botId)?.name??"会话"} · ${row.sessionId}`}))}),field("事件序号","eventSeq",{type:"number",min:0}),field("文本部分序号","partIndex",{type:"number",min:0,value:0}),field("文本开始位置","startOffset",{type:"number",min:0,value:0}),field("文本结束位置","endOffset",{type:"number",min:1}),h("small",null,"范围由真实原生日志核对；不会用粘贴文字替代该来源。")))
-            ),opened&&h(MaterialReader,{...opened,onClose:()=>setOpened(null),key:`${opened.docId}:${opened.chunkId??""}`}));
+            ),opened&&h(MaterialReader,{...opened,readIntent,selectionIntent:readerIntent,onClose:()=>setOpened(null),key:`${opened.docId}:${opened.chunkId??""}`}));
         }
-        function ContextPreview({botId}) {
-          const view=useView(),[preview,setPreview]=useState(null);
+        function ContextPreview({botId,readIntent}) {
+          const view=useView(),[preview,setPreview]=useState(null),previewGeneration=useRef(0);
+          useEffect(()=>()=>{previewGeneration.current++;},[botId]);
           return advanced("上下文预览",h("p",null,"查看当前预算下可带入此 Bot 下一轮的记忆摘要与未完成任务。实际对话仍按当时的权限与查询选择。"),
-            form("查看上下文预览",async data=>{const value=await query("memory.context.preview",{botId,...(data.get("query")?{query:data.get("query")}:{})});if(value){
+            form("查看上下文预览",async data=>{const generation=++previewGeneration.current,paneGeneration=readIntent.current,isActive=()=>generation===previewGeneration.current&&paneGeneration===readIntent.current;const value=await query("memory.context.preview",{botId,...(data.get("query")?{query:data.get("query")}:{})},isActive);if(value&&isActive()){
               const items = prefix => {try{const line=value.context?.split("\n").find(row=>row.startsWith(prefix));return line?JSON.parse(line.slice(prefix.length)):[];}catch{return [];}};
               setPreview({...value,memoryPreviews:value.memoryPreviews??items("长期记忆（记录带来源，引用不授予控制权）："),taskPreviews:value.taskPreviews??items("未完成任务：")});
             }},field("当前话题关键词","query",{required:false,maxLength:500})),
@@ -694,17 +699,17 @@ window.__ModuleLoader__.load({
               advanced("未带入原因",...(preview.omitted??[]).map(row=>h("p",{key:row.memoryId},`${view.snapshot.memories.find(memory=>memory.memoryId===row.memoryId)?.text.slice(0,40)??"记忆"} · ${{forgotten:"已遗忘",inactive:"来源待验证",inaccessible:"来源暂不可读",budget:"本轮预算不足",relevance_or_recency:"按相关性与最近更新选择其他记忆"}[row.reason]??"本轮未选择"}`)))));
         }
         function MemoryPane() {
-          const view=useView(),[id,setId]=useState(""),[section,setSection]=useState("memory"),[editing,setEditing]=useState(null),[hits,setHits]=useState(null),[sourceRef,setSourceRef]=useState(null),[creationEpoch,setCreationEpoch]=useState(0),searchGeneration=useRef(0);
+          const view=useView(),[id,setId]=useState(""),[section,setSection]=useState("memory"),[editing,setEditing]=useState(null),[hits,setHits]=useState(null),[sourceRef,setSourceRef]=useState(null),[creationEpoch,setCreationEpoch]=useState(0),searchGeneration=useRef(0),readIntent=useRef(0),sourceIntent=useRef(0);
           const botId=id||view.snapshot.bots.find(bot=>!bot.deletedAt)?.botId, rows=(hits?hits.map(hit=>view.snapshot.memories.find(row=>row.memoryId===hit.memoryId)).filter(Boolean):view.snapshot.memories).filter(row=>row.botId===botId&&!row.forgotten),selected=view.snapshot.memories.find(row=>row.memoryId===editing&&row.botId===botId&&!row.forgotten);
           useEffect(()=>()=>{searchGeneration.current++;},[botId,section]);
           return h("div",null,
-            h("label",null,"所属 Bot",h("select",{"aria-label":"所属 Bot",value:botId??"",onChange:event=>{searchGeneration.current++;setId(event.target.value);setEditing(null);setHits(null);setSourceRef(null);}},botsOptions().map(row=>option(row.value,row.label)))),
-            h("nav",{"aria-label":"记忆与资料"},button("长期记忆",()=>{if(section!=="memory")searchGeneration.current++;setSection("memory");},{"aria-selected":section==="memory"}),button("资料",()=>{if(section!=="materials")searchGeneration.current++;setSection("materials");},{"aria-selected":section==="materials"})),
-            !botId?h("p",null,"请先创建 Bot。") : section==="materials"?h(MaterialsPane,{botId,key:botId}):h("div",{className:"grid"},card("长期记忆",
+            h("label",null,"所属 Bot",h("select",{"aria-label":"所属 Bot",value:botId??"",onChange:event=>{searchGeneration.current++;readIntent.current++;setId(event.target.value);setEditing(null);setHits(null);setSourceRef(null);}},botsOptions().map(row=>option(row.value,row.label)))),
+            h("nav",{"aria-label":"记忆与资料"},button("长期记忆",()=>{if(section!=="memory"){searchGeneration.current++;readIntent.current++;sourceIntent.current++;setSourceRef(null);}setSection("memory");},{"aria-selected":section==="memory"}),button("资料",()=>{if(section!=="materials"){searchGeneration.current++;readIntent.current++;sourceIntent.current++;setSourceRef(null);}setSection("materials");},{"aria-selected":section==="materials"})),
+            !botId?h("p",null,"请先创建 Bot。") : section==="materials"?h(MaterialsPane,{botId,readIntent,key:botId}):h("div",{className:"grid"},card("长期记忆",
               form("搜索记忆",async data=>{const generation=++searchGeneration.current,isActive=()=>generation===searchGeneration.current;const result=await query("memory.search",{botId,query:data.get("query"),...(data.get("category")?{category:data.get("category")}:{})},isActive);if(result&&isActive())setHits(result);},field("内容关键词","query",{required:false,maxLength:500}),field("分类筛选","category",{required:false,options:[{value:"",label:"全部分类"},...categories,...[...new Set(rows.map(row=>row.category))].filter(value=>!categories.some(row=>row.value===value)).map(value=>({value,label:categoryName(value)}))]})),
-              ...[...rows].sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||String(b.updatedAt).localeCompare(String(a.updatedAt))).map(row=>h("article",{className:"card",key:row.memoryId},h("p",null,row.text),h("small",null,`${categoryName(row.category)} · ${row.pinned?"已固定 · ":""}更新 ${updatedName(row.updatedAt)}${row.inactive?" · 来源待验证，不可用":""}`),h("div",{className:"actions"},button("编辑记忆",()=>setEditing(row.memoryId)),button(row.pinned?"取消固定":"固定",()=>command("memory.pin",{memoryId:row.memoryId,expectedVersion:row.version,pinned:!row.pinned})),row.source?.kind==="material"?button("查看资料来源",()=>setSourceRef({docId:row.source.docId,chunkId:row.source.chunkId})):row.source?.sessionId&&button("查看来源",()=>openSession(row.source.sessionId)),button("遗忘此记忆",()=>command("memory.forget",{memoryId:row.memoryId,expectedVersion:row.version}))))),
-              hits&&button("显示全部记忆",()=>{searchGeneration.current++;setHits(null);}),button("添加另一条记忆",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(MemoryTransfer,{botId,key:botId}),h(ContextPreview,{botId,key:`context:${botId}`})),
-              h(MemoryEditor,{memory:selected,botId,onSaved:saved=>setEditing(saved.memoryId),key:selected?.memoryId??`new:${botId}:${creationEpoch}`})),sourceRef&&h(MaterialReader,{...sourceRef,onClose:()=>setSourceRef(null),key:`source:${sourceRef.docId}:${sourceRef.chunkId}`}));
+              ...[...rows].sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||String(b.updatedAt).localeCompare(String(a.updatedAt))).map(row=>h("article",{className:"card",key:row.memoryId},h("p",null,row.text),h("small",null,`${categoryName(row.category)} · ${row.pinned?"已固定 · ":""}更新 ${updatedName(row.updatedAt)}${row.inactive?" · 来源待验证，不可用":""}`),h("div",{className:"actions"},button("编辑记忆",()=>setEditing(row.memoryId)),button(row.pinned?"取消固定":"固定",()=>command("memory.pin",{memoryId:row.memoryId,expectedVersion:row.version,pinned:!row.pinned})),row.source?.kind==="material"?button("查看资料来源",()=>{if(sourceRef?.docId!==row.source.docId||sourceRef?.chunkId!==row.source.chunkId)sourceIntent.current++;setSourceRef({docId:row.source.docId,chunkId:row.source.chunkId});}):row.source?.sessionId&&button("查看来源",()=>openSession(row.source.sessionId)),button("遗忘此记忆",()=>command("memory.forget",{memoryId:row.memoryId,expectedVersion:row.version}))))),
+              hits&&button("显示全部记忆",()=>{searchGeneration.current++;setHits(null);}),button("添加另一条记忆",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(MemoryTransfer,{botId,readIntent,key:botId}),h(ContextPreview,{botId,readIntent,key:`context:${botId}`})),
+              h(MemoryEditor,{memory:selected,botId,onSaved:saved=>setEditing(saved.memoryId),key:selected?.memoryId??`new:${botId}:${creationEpoch}`})),sourceRef&&h(MaterialReader,{...sourceRef,readIntent,selectionIntent:sourceIntent,onClose:()=>setSourceRef(null),key:`source:${sourceRef.docId}:${sourceRef.chunkId}`}));
         }
         function TaskRelations({task:latestTask}) {
           const view=useView(),[task,setBase]=useState(latestTask),[epoch,setEpoch]=useState(0);
@@ -753,7 +758,7 @@ window.__ModuleLoader__.load({
         }
         function BriefingDialog() {
           const view=useView(),request=view.briefing,[data,setData]=useState(null),modal=useRef(null);
-          useEffect(()=>{let active=true;setData(null);if(request)query("briefing",{botId:request.botId}).then(value=>{if(active)setData(value);});return()=>{active=false;};},[request,view.snapshot.revision]);
+          useEffect(()=>{let active=true;const isActive=()=>active&&state.briefing===request&&state.snapshot.revision===view.snapshot.revision;setData(null);if(request)query("briefing",{botId:request.botId},isActive).then(value=>{if(isActive())setData(value);});return()=>{active=false;};},[request,view.snapshot.revision]);
           useEffect(()=>{const element=modal.current;if(!request||!element)return;element.showModal();return()=>{if(element.open)element.close();if(request.returnFocus?.isConnected)request.returnFocus.focus();};},[request]);
           if(!request)return null;
           return h("dialog",{ref:modal,className:"dsh-bot-briefing-modal","aria-label":"任务简报",onCancel:event=>{event.preventDefault();if(!view.busy)publish({briefing:null});}},h("section",{className:"dsh-bot"},h("style",null,styles+".dsh-bot-briefing-modal{border:0;padding:0;background:transparent;color:inherit;width:min(680px,calc(100vw - 32px));max-height:90vh;overflow:auto;border-radius:16px}.dsh-bot-briefing-modal::backdrop{background:rgba(0,0,0,.35)}.dsh-bot-briefing-modal .dsh-bot{height:auto;background:var(--dsw-alias-bg-layer-1,Canvas)}"),
@@ -790,9 +795,9 @@ window.__ModuleLoader__.load({
               check("enabled","启用安排",base?.enabled??true),h("small",null,kind==="task"?"确认后按以上负责人、目标、频率和结果位置开始独立任务，使用该 Bot 的执行模型。关闭 DSH 时不运行，原生工具审批继续生效。":"到期保存插件内通知。关闭 DSH 时不运行，恢复后显示原定时间和迟到标记。"))));
         }
         function ScheduleHistory({scheduleId}) {
-          const view=useView(),[rows,setRows]=useState([]),[selected,setSelected]=useState([]),[confirm,setConfirm]=useState(false),[pruneDraft,setPruneDraft]=useState(null);
-          const load=async()=>{const value=await query("occurrence.list",{scheduleId,limit:100});if(value)setRows(Array.isArray(value)?value:value.items??[]);};
-          useEffect(()=>{let active=true;query("occurrence.list",{scheduleId,limit:100},()=>active).then(value=>{if(active&&value)setRows(Array.isArray(value)?value:value.items??[]);});return()=>{active=false;};},[scheduleId,view.snapshot.revision]);
+          const view=useView(),[rows,setRows]=useState([]),[selected,setSelected]=useState([]),[confirm,setConfirm]=useState(false),[pruneDraft,setPruneDraft]=useState(null),readGeneration=useRef(0),mounted=useRef(true);
+          const load=async()=>{if(!mounted.current)return;const generation=++readGeneration.current,isActive=()=>mounted.current&&generation===readGeneration.current;const value=await query("occurrence.list",{scheduleId,limit:100},isActive);if(value&&isActive())setRows(Array.isArray(value)?value:value.items??[]);};
+          useEffect(()=>{mounted.current=true;load();return()=>{mounted.current=false;readGeneration.current++;};},[scheduleId,view.snapshot.revision]);
           return advanced("触发历史",...rows.map(row=>h("article",{key:row.occurrenceId},h("p",null,`${updatedName(row.dueAt)} · ${stateName(row.state)}`),row.taskId&&h("small",null,`任务 ${row.taskId}`),["settled","missed"].includes(row.state)&&h("label",{className:"check"},h("input",{type:"checkbox",checked:selected.includes(row.occurrenceId),onChange:event=>{setConfirm(false);setPruneDraft(null);setSelected(ids=>event.target.checked?[...ids,row.occurrenceId]:ids.filter(id=>id!==row.occurrenceId));}}),"选择清理此已结算触发记录"))),
             selected.length>0&&h("div",null,button("清理所选历史",()=>{setPruneDraft({occurrenceIds:[...selected],expectedVersions:Object.fromEntries(rows.filter(row=>selected.includes(row.occurrenceId)).map(row=>[row.occurrenceId,row.version]))});setConfirm(true);}),confirm&&h("div",null,h("p",null,`确认清理 ${pruneDraft?.occurrenceIds.length??0} 条已结算触发记录？原任务和操作回执保留。`),button("确认清理所选记录",async()=>{const result=await command("occurrence.prune",{...pruneDraft,confirm:true});if(result){setSelected([]);setConfirm(false);setPruneDraft(null);await load();}}),button("取消清理",()=>{setConfirm(false);setPruneDraft(null);}))));
         }
@@ -1387,23 +1392,29 @@ window.__ModuleLoader__.load({
         }
         function SessionsPane() {
           const [page, setPage] = useState({ items: [], cursor: null }),
-            [error, setError] = useState("");
-          const load = (cursor) =>
-            rpc("command", {
+            [error, setError] = useState(""),loadGeneration=useRef(0),mounted=useRef(true);
+          const load = async (cursor) => {
+            if(!mounted.current)return;
+            const generation=++loadGeneration.current,isActive=()=>mounted.current&&generation===loadGeneration.current&&!lifetime.signal.aborted;
+            setError("");
+            try {
+              const next=await rpc("command", {
               action: "session.list",
               input: { limit: 50, ...(cursor ? { cursor } : {}) },
-            })
-              .then((next) =>
+              });
+              if(isActive())
                 setPage((previous) => ({
                   items: cursor
                     ? [...previous.items, ...next.items]
                     : next.items,
                   cursor: next.nextCursor,
-                })),
-              )
-              .catch((e) => setError(e.message));
+                }));
+            } catch(e) {if(isActive())setError(e.message);}
+          };
           useEffect(() => {
+            mounted.current=true;
             load();
+            return()=>{mounted.current=false;loadGeneration.current++;};
           }, []);
           return card(
             "原生会话管理",
@@ -1467,12 +1478,13 @@ window.__ModuleLoader__.load({
           );
         }
         function DiagnosticsPane() {
-          const view=useView(),[preview,setPreview]=useState(""),[selected,setSelected]=useState([]),[copied,setCopied]=useState(false);
+          const view=useView(),[preview,setPreview]=useState(""),[selected,setSelected]=useState([]),[copied,setCopied]=useState(false),previewGeneration=useRef(0);
+          useEffect(()=>()=>{previewGeneration.current++;},[]);
           const operations=[...view.pending,...view.retained];
           return advanced("诊断",h("p",null,"在本机读取版本、功能状态、对象数量、错误码和选定的操作 ID。预览与复制内容相同；不会上传，正文、路径和凭据不包含在内。"),
-            field("附带的原始操作（可多选）","operationIds",{options:operations.map(row=>({value:row.operationId,label:row.operationId})),multiple:true,required:false,value:selected,onChange:event=>{setSelected([...event.target.selectedOptions].map(row=>row.value));setPreview("");setCopied(false);}}),
-            button("预览诊断",async()=>{const value=await query("diagnostics.read",{operationIds:selected});if(value){setPreview(JSON.stringify(value,null,2));setCopied(false);}}),
-            preview&&h("div",null,h("pre",null,preview),button("复制以上诊断",async()=>{try{await navigator.clipboard.writeText(preview);setCopied(true);}catch{publish({error:"无法写入剪贴板，请从预览选择并复制。"});}}),copied&&h("p",{role:"status"},"已复制诊断。")));
+            field("附带的原始操作（可多选）","operationIds",{options:operations.map(row=>({value:row.operationId,label:row.operationId})),multiple:true,required:false,value:selected,onChange:event=>{previewGeneration.current++;setSelected([...event.target.selectedOptions].map(row=>row.value));setPreview("");setCopied(false);}}),
+            button("预览诊断",async()=>{const generation=++previewGeneration.current,isActive=()=>generation===previewGeneration.current;const value=await query("diagnostics.read",{operationIds:selected},isActive);if(value&&isActive()){setPreview(JSON.stringify(value,null,2));setCopied(false);}}),
+            preview&&h("div",null,h("pre",null,preview),button("复制以上诊断",async()=>{const generation=previewGeneration.current,isActive=()=>generation===previewGeneration.current&&!lifetime.signal.aborted;try{await navigator.clipboard.writeText(preview);if(isActive())setCopied(true);}catch{if(isActive())publish({error:"无法写入剪贴板，请从预览选择并复制。"});}}),copied&&h("p",{role:"status"},"已复制诊断。")));
         }
         function OutboxPane() {
           const view = useView();

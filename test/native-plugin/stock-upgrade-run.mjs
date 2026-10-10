@@ -6,6 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {resolve,join} from 'node:path';
 import {stockGui,textReply,controlledProvider,waitFor} from './stock-gui-runtime.mjs';
 import {finishStockGui,recordStockError} from './stock-report.mjs';
+import {stockSources} from './stock-qualification.mjs';
 
 let gui;
 const canonical=value=>Array.isArray(value)?`[${value.map(canonical).join(',')}]`:value&&typeof value==='object'?`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`:JSON.stringify(value);
@@ -13,8 +14,10 @@ const stateChecksum=value=>createHash('sha256').update(canonical(value)).digest(
 try {
   const previousVersion=process.env.DSH_BOT_UPGRADE_FROM??'1.0.0',
     targetVersion=JSON.parse(await readFile('package.json','utf8')).version,
-    previousHashes={'1.0.0':'1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724','1.0.1':'e3eca64ca596c1609e5f447e2c0ba8e2e4a778bf0e583e22a07623e00c3fa1dd','1.0.2':'c0e72fe808dddd31d74ad4907dcfb30f7736a7782a83bb307a6d4ca6587de822','1.1.0':'5ca1ebde0a3d59869f180e2fe692dcfb70b32aadb885f5d1d624093c425e85e1'};
+    previousSources=Object.values(stockSources).filter(Boolean),
+    previousHashes=Object.fromEntries(previousSources.map(source=>[source.version,source.sha256]));
   assert.ok(Object.hasOwn(previousHashes,previousVersion),'Upgrade source must be an immutable previous release');
+  const schemaTwo=previousSources.find(source=>source.version===previousVersion).schema===2;
   const patch=resolve(process.argv[2]),previous=resolve(`dist/dsh-bot-${previousVersion}.tgz`);
   assert.equal(createHash('sha256').update(await readFile(previous)).digest('hex'),previousHashes[previousVersion]);
   const existingRoot=process.argv[3];
@@ -39,7 +42,7 @@ try {
     return events.some(event=>event.type==='user/message'&&event.data.id===attempt.resultMessageId);
   },'legacy native result message is durably visible before migration snapshot');
   let v11Proof;
-  if(previousVersion==='1.1.0') {
+  if(schemaTwo) {
     const pinned=await service.dispatch(actor,{operationId:'upgrade-v11-memory-pin',action:'memory.pin',input:{memoryId:memory.memoryId,expectedVersion:memory.version,pinned:true}});
     const material=await service.dispatch(actor,{operationId:'upgrade-v11-material',action:'material.ingest',input:{botId:bot.botId,title:'V110 retained immutable material',text:'\uFEFF# Retained material\r\nExact native upgrade bytes 🧭\n',fileName:'retained-v110.md',mediaType:'text/markdown'}});
     const future=Date.now()+3600000,iso=new Date(future).toISOString();
@@ -71,7 +74,7 @@ try {
   assert.equal(documents.length,1,'One closed official plugin KV document must retain the original store');
   assert.equal(documents[0].unit.version,1);
   const legacyState=documents[0].tables.state.current;
-  assert.equal(legacyState.schema,previousVersion==='1.1.0'?2:1);
+  assert.equal(legacyState.schema,schemaTwo?2:1);
   await writeFile(join(gui.root,'upgrade-legacy-state.json'),JSON.stringify(legacyState),{mode:0o600});
   await writeFile(join(gui.root,'upgrade-closed-kv-document.json'),JSON.stringify(documents[0]),{mode:0o600});
   gui.uninstall();gui.reinstall(patch);
@@ -92,12 +95,14 @@ try {
   gui.report.previousArtifactSha256=createHash('sha256').update(await readFile(previous)).digest('hex');
   gui.report.upgradeArtifactSha256=createHash('sha256').update(await readFile(patch)).digest('hex');
   gui.report.freshHostProcessAfterUpgrade=true;
+  gui.report.upgradeFromVersion=previousVersion;
+  gui.report.upgradeToVersion=targetVersion;
   const snapshot=service.snapshot(actor);
   const migrated=service.store.read(),legacyState=JSON.parse(await readFile(join(gui.root,'upgrade-legacy-state.json'),'utf8'));
   assert.equal(migrated.schema,2);
   assert.equal(snapshot.clientProtocol,2);
   assert.equal(migrated.storeId,legacyState.storeId);
-  if(previousVersion==='1.1.0') {
+  if(schemaTwo) {
     assert.equal(legacyState.schema,2);
     assert.deepEqual(migrated.migrationBackup,legacyState.migrationBackup,'Retain the existing backup or its absence exactly; schema two needs no migration');
     for(const table of ['bots','sessions','memories','grants','tasks','attempts','groups','meetings','operations','outbox','materials','schedules','occurrences','notices','taskInputs']) {
@@ -111,8 +116,8 @@ try {
     assert.equal(migrated.notices[v11Proof.noticeId].read,true);
     assert.equal(migrated.occurrences[v11Proof.occurrenceId].state,'settled');
     gui.report.upgradeSchemaTwo={fromSchema:2,toSchema:2,existingMigrationBackupRetained:true,backupWasPresent:Object.hasOwn(legacyState,'migrationBackup'),allOriginalReceiptIdentitiesPreserved:true,exactV11RowsRetained:true,sourceSnapshotReadFromClosedOfficialKv:true};
-    gui.check('upgradeV110SchemaTwoFullHostRestartRetainsExistingBackupExactly',true);
-    gui.check('upgradeV110PreservesEveryOriginalIdentityReceiptAndExactV11Rows',true);
+    gui.check(`upgradeV${previousVersion.replaceAll('.','')}SchemaTwoFullHostRestartRetainsExistingBackupExactly`,true);
+    gui.check(`upgradeV${previousVersion.replaceAll('.','')}PreservesEveryOriginalIdentityReceiptAndExactV11Rows`,true);
   } else {
   assert.equal(migrated.migrationBackup.schema,1);
   assert.deepEqual(migrated.migrationBackup.payload,legacyState);
