@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {controlledProvider,waitFor} from './stock-gui-runtime.mjs';
+import {createTrackedRoute} from './stock-route-scope.mjs';
 
 const button=(scope,name)=>scope.getByRole('button',{name,exact:true});
 const card=(gui,title)=>gui.page.locator('section.card').filter({has:gui.page.getByRole('heading',{name:title,level:2,exact:true})});
@@ -95,27 +96,39 @@ async function memorySearch(gui) {
     await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${text}$`)}).waitFor();
   }
   await gui.page.getByLabel('所属 Bot',{exact:true}).selectOption(botA);
-  const release=deferred(),completed=deferred();let actual;
+  const release=deferred(),completed=deferred();let actual,rpc,primary;
   const gate=async route=>{
     const request=route.request().postDataJSON();
     if(request?.payload?.action!=='memory.search'||request.payload.input.botId!==botA)return route.continue();
-    const response=await route.fetch();actual=(await response.json()).result;
-    await release.promise;await route.fulfill({response});completed.resolve();
+    try {
+      const response=await route.fetch();actual=(await response.json()).result;
+      await release.promise;await route.fulfill({response});
+    } finally {completed.resolve();}
   };
-  await gui.page.route('**/api/dsh.bot/command',gate);
+  const routeScope=await createTrackedRoute(gui.page,'**/api/dsh.bot/command',gate);
   try {
     await card(gui,'长期记忆').getByLabel('内容关键词',{exact:true}).fill(markerA);
-    const rpc=uiRpc(gui,'memory.search',()=>button(card(gui,'长期记忆'),'搜索记忆').click());
+    rpc=uiRpc(gui,'memory.search',()=>button(card(gui,'长期记忆'),'搜索记忆').click()).then(value=>({value}),error=>({error}));
     await waitFor(()=>actual!==undefined,'actual native memory-search response is held');
     assert.equal(actual.ok,true);assert.ok(actual.value.some(row=>gui.app.ctx.dshBot.store.read().memories[row.memoryId]?.text===markerA));
     await gui.page.getByLabel('所属 Bot',{exact:true}).selectOption(botB);
     await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${markerB}$`)}).waitFor();
-    release.resolve();await completed.promise;await rpc;await paint(gui.page);
+    release.resolve();await completed.promise;
+    const outcome=await rpc;if(outcome.error)throw outcome.error;
+    await paint(gui.page);
     assert.equal(await gui.page.getByLabel('所属 Bot',{exact:true}).inputValue(),botB);
     assert.equal(await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${markerB}$`)}).count(),1);
     assert.equal(await button(gui.page,'显示全部记忆').count(),0);
     gui.check('v111HeldActualBotAMemorySearchCannotReplaceBotBVisibleMemory',true);
-  } finally {release.resolve();await gui.page.unroute('**/api/dsh.bot/command',gate);}
+  } catch(error) {primary=error;} finally {
+    release.resolve();let routeError;
+    try {await routeScope.close(primary);} catch(error) {routeError=error;}
+    const outcome=rpc&&await rpc;
+    if(routeError&&outcome?.error&&routeError!==outcome.error)
+      throw new AggregateError([routeError,outcome.error],'Memory search and route cleanup failed',{cause:primary??routeError});
+    if(routeError)throw routeError;
+    if(outcome?.error)throw outcome.error;
+  }
 }
 
 const once=at=>{const iso=new Date(at).toISOString();return {kind:'once',timezone:'UTC',date:iso.slice(0,10),time:iso.slice(11,16)};};
