@@ -47,6 +47,124 @@ test('official SDK exit preserves this run\'s genuine completed normal failure b
   assert.equal(bytes.includes('SECRET_SENTINEL'),false);
 });
 
+for(const testsPassed of [false,true])test(`official SDK exit during real unfinished cleanup records the exit with testsPassed=${testsPassed}`,async t=>{
+  const evidence=await mkdtemp(join(tmpdir(),'dsh-intermediate-failure-proof-'));t.after(()=>rm(evidence,{recursive:true,force:true}));
+  const helper=new URL('./stock-fatal-report.mjs',import.meta.url).href,normal=new URL('./stock-report.mjs',import.meta.url).href,sdk=import.meta.resolve('@deepseek-ai/dsh-app-boot');
+  const script=`import {installStockFatalReport} from ${JSON.stringify(helper)};import {finishStockGui} from ${JSON.stringify(normal)};import {installFailLoud} from ${JSON.stringify(sdk)};import {readFile,writeFile} from 'node:fs/promises';import {join} from 'node:path';
+    const evidence=${JSON.stringify(evidence)},report={passed:${testsPassed},stage:'native-teardown',checks:{originalNativeCheck:true},requests:[{}],sourceCommit:'${'d'.repeat(40)}',artifactSha256:'${'e'.repeat(64)}',realModelRequests:0};
+    const gui={evidence,report,errors:[],writeReport(){return writeFile(join(evidence,'stock-gui-report.json'),JSON.stringify(report,null,2)+'\\n');},async shutdown(){
+      await writeFile(join(evidence,'intermediate-snapshot.json'),await readFile(join(evidence,'stock-gui-report.json')));
+      Promise.reject(new TypeError('SECRET_SENTINEL SDK exit during unfinished cleanup'));await new Promise(()=>{});
+    }};
+    installStockFatalReport(()=>gui);installFailLoud('controlled-sdk',process);await finishStockGui(gui);`;
+  const child=spawnSync(process.execPath,['--input-type=module','--eval',script],{encoding:'utf8'});
+  assert.equal(child.status,1);assert.equal(child.signal,null);assert.ok(child.stderr.includes('fatal load failure'));
+  const intermediate=JSON.parse(await readFile(join(evidence,'intermediate-snapshot.json'),'utf8'));
+  assert.equal(intermediate.passed,false);assert.equal(intermediate.testsPassed,testsPassed);assert.equal(intermediate.teardownComplete,false);assert.equal(intermediate.fatalExit,undefined);
+  const bytes=await readFile(join(evidence,'stock-gui-report.json'),'utf8'),saved=JSON.parse(bytes);
+  assert.equal(saved.fatalExit,true,'A real SDK exit during unfinished cleanup must replace the intermediate checkpoint');assert.deepEqual(saved.processExit,{code:1});
+  assert.equal(saved.passed,false);assert.equal(saved.testsPassed,testsPassed);assert.equal(saved.teardownComplete,false);
+  assert.equal(saved.fatal,undefined);assert.equal(saved.error,undefined);
+  assert.equal(saved.stage,'native-teardown');assert.deepEqual(saved.checks,{originalNativeCheck:true});assert.equal(saved.controlledRequests,1);assert.equal(saved.realModelRequests,0);
+  assert.equal(saved.sourceCommit,'d'.repeat(40));assert.equal(saved.artifactSha256,'e'.repeat(64));assert.equal(bytes.includes('SECRET_SENTINEL'),false);
+});
+
+test('real caught cleanup failure retains its known public errors while recording nonzero exit',async t=>{
+  const evidence=await mkdtemp(join(tmpdir(),'dsh-caught-cleanup-proof-'));t.after(()=>rm(evidence,{recursive:true,force:true}));
+  const helper=new URL('./stock-fatal-report.mjs',import.meta.url).href,normal=new URL('./stock-report.mjs',import.meta.url).href,sdk=import.meta.resolve('@deepseek-ai/dsh-app-boot');
+  const script=`import {installStockFatalReport} from ${JSON.stringify(helper)};import {finishStockGui} from ${JSON.stringify(normal)};import {installFailLoud} from ${JSON.stringify(sdk)};import {readFile,writeFile} from 'node:fs/promises';import {join} from 'node:path';
+    const evidence=${JSON.stringify(evidence)},report={passed:true,stage:'native-teardown',checks:{originalNativeCheck:true},requests:[{}],realModelRequests:0};
+    const gui={evidence,report,errors:[],writeReport(){return writeFile(join(evidence,'stock-gui-report.json'),JSON.stringify(report,null,2)+'\\n');},async shutdown(){throw Object.assign(new RangeError('SECRET_SENTINEL caught cleanup failure'),{code:'EIO'});}};
+    installStockFatalReport(()=>gui);installFailLoud('controlled-sdk',process);
+    const passed=await finishStockGui(gui);await writeFile(join(evidence,'caught-snapshot.json'),await readFile(join(evidence,'stock-gui-report.json')));process.exitCode=passed?0:1;`;
+  const child=spawnSync(process.execPath,['--input-type=module','--eval',script],{encoding:'utf8'});
+  assert.equal(child.status,1);assert.equal(child.signal,null);
+  const normalReport=JSON.parse(await readFile(join(evidence,'caught-snapshot.json'),'utf8'));
+  assert.equal(normalReport.teardownComplete,false);assert.equal(normalReport.teardownError.type,'RangeError');assert.equal(normalReport.teardownError.code,'EIO');assert.match(normalReport.teardownError.messageHash,/^[a-f\d]{64}$/);
+  const bytes=await readFile(join(evidence,'stock-gui-report.json'),'utf8'),saved=JSON.parse(bytes);
+  assert.equal(saved.fatalExit,true);assert.deepEqual(saved.processExit,{code:1});assert.equal(saved.passed,false);assert.equal(saved.testsPassed,true);assert.equal(saved.teardownComplete,false);
+  assert.deepEqual(saved.error,normalReport.error);assert.deepEqual(saved.teardownError,normalReport.teardownError);assert.deepEqual(saved.checks,{originalNativeCheck:true});assert.equal(saved.controlledRequests,1);
+  assert.equal(saved.fatal,undefined);assert.equal(bytes.includes('SECRET_SENTINEL'),false);
+});
+
+test('exit fallback never converts invalid current error evidence into a public error or hash',async t=>{
+  const evidence=await mkdtemp(join(tmpdir(),'dsh-invalid-error-proof-'));t.after(()=>rm(evidence,{recursive:true,force:true}));
+  const helper=new URL('./stock-fatal-report.mjs',import.meta.url).href;
+  const script=`import {installStockFatalReport} from ${JSON.stringify(helper)};
+    installStockFatalReport(()=>({evidence:${JSON.stringify(evidence)},report:{commandExitCode:'7',error:{type:'Error',messageHash:'SECRET_SENTINEL invalid hash',message:'SECRET_SENTINEL raw error'},teardownError:{type:'SECRET_SENTINEL invalid type',messageHash:'${'a'.repeat(64)}',code:'EIO'}}}));process.exit(1);`;
+  const child=spawnSync(process.execPath,['--input-type=module','--eval',script],{encoding:'utf8'});
+  assert.equal(child.status,1);assert.equal(child.signal,null);
+  const bytes=await readFile(join(evidence,'stock-gui-report.json'),'utf8'),saved=JSON.parse(bytes);
+  assert.equal(saved.fatalExit,true);assert.deepEqual(saved.processExit,{code:1});assert.equal(saved.error,undefined);assert.equal(saved.teardownError,undefined);assert.equal(saved.fatal,undefined);assert.equal(saved.commandExitCode,undefined);
+  assert.equal(bytes.includes('SECRET_SENTINEL'),false);
+});
+
+test('exit fallback retains the known integer exit of a real failed initialization command',async t=>{
+  const evidence=await mkdtemp(join(tmpdir(),'dsh-command-exit-proof-'));t.after(()=>rm(evidence,{recursive:true,force:true}));
+  const helper=new URL('./stock-fatal-report.mjs',import.meta.url).href,normal=new URL('./stock-report.mjs',import.meta.url).href;
+  const script=`import {installStockFatalReport} from ${JSON.stringify(helper)};import {publicStockError} from ${JSON.stringify(normal)};import {execFileSync} from 'node:child_process';
+    let report;installStockFatalReport(()=>report?({evidence:${JSON.stringify(evidence)},report}):undefined,{output:${JSON.stringify(evidence)}});
+    try{execFileSync(process.execPath,['--eval','process.exit(7)'],{stdio:'pipe'});}catch(error){report={stage:'standard-profile-initialization-or-plugin-install',commandExitCode:error.status,error:publicStockError(error)};process.exitCode=1;}`;
+  const child=spawnSync(process.execPath,['--input-type=module','--eval',script],{encoding:'utf8'});
+  assert.equal(child.status,1);assert.equal(child.signal,null);
+  const bytes=await readFile(join(evidence,'stock-gui-report.json'),'utf8'),saved=JSON.parse(bytes);
+  assert.equal(saved.fatalExit,true);assert.deepEqual(saved.processExit,{code:1});assert.equal(saved.commandExitCode,7);
+  assert.equal(saved.error.type,'Error');assert.match(saved.error.messageHash,/^[a-f\d]{64}$/);assert.equal(saved.teardownComplete,false);assert.equal(saved.stage,'standard-profile-initialization-or-plugin-install');
+  assert.equal(saved.controlledRequests,undefined);assert.equal(saved.realModelRequests,undefined);assert.equal(bytes.includes('process.exit(7)'),false);
+});
+
+for(const [label,prior,expected] of [
+  ['known zero',{controlledRequests:0},0],['known three',{controlledRequests:3},3],
+  ['negative unknown',{controlledRequests:-1},undefined],['string unknown',{controlledRequests:'3'},undefined],
+  ['empty actual array',{requests:[],controlledRequests:3},0],['actual array length',{requests:[{},{}],controlledRequests:0},2],
+])test(`official SDK exit keeps current request-count proof: ${label}`,async t=>{
+  const evidence=await mkdtemp(join(tmpdir(),'dsh-current-count-proof-'));t.after(()=>rm(evidence,{recursive:true,force:true}));
+  const helper=new URL('./stock-fatal-report.mjs',import.meta.url).href,sdk=import.meta.resolve('@deepseek-ai/dsh-app-boot');
+  const script=`import {installStockFatalReport} from ${JSON.stringify(helper)};import {installFailLoud} from ${JSON.stringify(sdk)};
+    installStockFatalReport(()=>({evidence:${JSON.stringify(evidence)},report:{stage:'current-native-stage',checks:{originalNativeCheck:true},...${JSON.stringify(prior)}}}));
+    installFailLoud('controlled-sdk',process);Promise.reject(new TypeError('SECRET_SENTINEL current SDK exit'));`;
+  const child=spawnSync(process.execPath,['--input-type=module','--eval',script],{encoding:'utf8'});
+  assert.equal(child.status,1);assert.equal(child.signal,null);assert.ok(child.stderr.includes('fatal load failure'));
+  const bytes=await readFile(join(evidence,'stock-gui-report.json'),'utf8'),saved=JSON.parse(bytes);
+  assert.equal(saved.fatalExit,true);assert.deepEqual(saved.processExit,{code:1});assert.equal(saved.controlledRequests,expected);assert.deepEqual(saved.checks,{originalNativeCheck:true});
+  assert.equal(saved.realModelRequests,undefined);assert.equal(bytes.includes('SECRET_SENTINEL'),false);
+});
+
+for(const mode of ['complete','caught-failure','invalid-false','raw-error','mismatch'])test(`current actual SDK child failure has terminal parent cleanup guard: ${mode}`,async t=>{
+  const evidence=await mkdtemp(join(tmpdir(),'dsh-child-parent-proof-'));t.after(()=>rm(evidence,{recursive:true,force:true}));
+  const helper=new URL('./stock-fatal-report.mjs',import.meta.url).href,normal=new URL('./stock-report.mjs',import.meta.url).href,sdk=import.meta.resolve('@deepseek-ai/dsh-app-boot');
+  const childScript=`import {installStockFatalReport} from ${JSON.stringify(helper)};import {installFailLoud} from ${JSON.stringify(sdk)};
+    installStockFatalReport(()=>({evidence:${JSON.stringify(evidence)},report:{stage:'child-native-stage',checks:{childOriginalCheck:true},requests:[],sourceCommit:'${'d'.repeat(40)}',artifactSha256:'${'e'.repeat(64)}',realModelRequests:0}}));
+    installFailLoud('controlled-sdk',process);Promise.reject(new TypeError('SECRET_SENTINEL current child failure'));`;
+  const child=spawnSync(process.execPath,['--input-type=module','--eval',childScript],{encoding:'utf8'});
+  assert.equal(child.status,1);assert.equal(child.signal,null);assert.ok(child.stderr.includes('fatal load failure'));
+  const original=JSON.parse(await readFile(join(evidence,'stock-gui-report.json'),'utf8'));
+  assert.equal(original.teardownComplete,false);assert.equal(original.controlledRequests,0);assert.equal(original.requests,undefined);
+  const script=`import {installStockFatalReport} from ${JSON.stringify(helper)};import {publicStockError} from ${JSON.stringify(normal)};import {writeFile} from 'node:fs/promises';import {join} from 'node:path';
+    const evidence=${JSON.stringify(evidence)},report=${JSON.stringify(original)};
+    installStockFatalReport(()=>({evidence,report}));
+    async function shutdown(){${mode==='caught-failure'?"throw new TypeError('SECRET_SENTINEL settled parent cleanup failure');":''}}
+    try{await shutdown();report.parentCleanup={complete:true};}catch(error){report.parentCleanup={complete:false,error:publicStockError(error)};}
+    ${mode==='invalid-false'?'report.parentCleanup={complete:false};':mode==='raw-error'?`report.parentCleanup={complete:false,error:{type:'TypeError',messageHash:'${'a'.repeat(64)}',message:'SECRET_SENTINEL raw cleanup error'}};`:''}
+    const bytes=JSON.stringify(report,null,2)+'\\n';await writeFile(join(evidence,'stock-gui-report.json'),bytes);await writeFile(join(evidence,'parent-snapshot.json'),bytes);
+    ${mode==='mismatch'?"report.stage='current-parent-stage';report.checks={currentParentCheck:true};":''}
+    process.exitCode=1;`;
+  const parent=spawnSync(process.execPath,['--input-type=module','--eval',script],{encoding:'utf8'});
+  assert.equal(parent.status,1);assert.equal(parent.signal,null);
+  const bytes=await readFile(join(evidence,'stock-gui-report.json'),'utf8'),saved=JSON.parse(bytes),snapshot=await readFile(join(evidence,'parent-snapshot.json'),'utf8');
+  if(mode==='complete'||mode==='caught-failure'){
+    assert.equal(bytes,snapshot,'Current child evidence and settled parent cleanup must survive nonzero parent exit byte-for-byte');
+    assert.equal(saved.teardownComplete,false);assert.equal(saved.controlledRequests,0);assert.equal(saved.testsPassed,false);assert.deepEqual(saved.checks,{childOriginalCheck:true});
+    assert.equal(saved.parentCleanup.complete,mode==='complete');
+    if(mode==='caught-failure'){assert.equal(saved.parentCleanup.error.type,'TypeError');assert.match(saved.parentCleanup.error.messageHash,/^[a-f\d]{64}$/);}
+  }else{
+    assert.notEqual(bytes,snapshot,'Invalid or mismatching parent checkpoint must not be preserved');assert.equal(saved.fatalExit,true);assert.deepEqual(saved.processExit,{code:1});
+    if(mode==='mismatch'){assert.equal(saved.stage,'current-parent-stage');assert.deepEqual(saved.checks,{currentParentCheck:true});}
+    else assert.equal(saved.parentCleanup,undefined);
+  }
+  assert.equal(saved.sourceCommit,original.sourceCommit);assert.equal(saved.artifactSha256,original.artifactSha256);assert.equal(bytes.includes('SECRET_SENTINEL'),false);
+});
+
 for(const mode of ['release','immediate'])test(`official SDK fatal rejection ${mode} leaves fallback evidence without changing its native exit`,async t=>{
   const evidence=await mkdtemp(join(tmpdir(),'dsh-sdk-fatal-proof-'));t.after(()=>rm(evidence,{recursive:true,force:true}));
   const helper=new URL('./stock-fatal-report.mjs',import.meta.url).href,sdk=import.meta.resolve('@deepseek-ai/dsh-app-boot');
