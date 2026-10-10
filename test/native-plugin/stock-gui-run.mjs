@@ -19,8 +19,8 @@ import {
   waitFor,
 } from "./stock-gui-runtime.mjs";
 
-let gui;
-installStockFatalReport(() => gui);
+let gui, initializationReport;
+installStockFatalReport(() => gui ?? initializationReport);
 const calls = new Map();
 async function* stream(options, state) {
   const service = state.app.ctx.dshBot,
@@ -804,7 +804,9 @@ try {
   );
   mark("ui-sharing-and-concurrent-draft-regressions");
   await runSimpleUiChecks(gui);
+  mark("ui-original-operation-and-configuration-recovery");
   await runRepairChecks(gui);
+  mark("ui-sharing-and-concurrent-draft-regressions");
   await runUiRegressions(gui);
   mark("chat-identity-and-recoverable-bot-delete");
   await runChatIdentityChecks(gui);
@@ -841,6 +843,7 @@ try {
       checks: {},
       ...(Number.isInteger(error.status) ? { commandExitCode: error.status } : {}),
     };
+    initializationReport = { evidence, report };
     await recordStockError(report,error,{evidence});
     await writeFile(join(evidence, "stock-gui-report.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
     console.log(JSON.stringify({ passed: false, stage: report.stage, error: report.error }));
