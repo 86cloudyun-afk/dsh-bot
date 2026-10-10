@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {waitFor} from './stock-gui-runtime.mjs';
+import {createTrackedRoute} from './stock-route-scope.mjs';
 
 const button=(scope,name)=>scope.getByRole('button',{name,exact:true});
 const card=(gui,title)=>gui.card(title);
@@ -41,19 +42,7 @@ async function command(gui,action,input) {
 }
 
 async function trackedRoute(gui,path,handle) {
-  const active=new Set(),failures=[];
-  const throwFailure=()=>{if(failures.length===1)throw failures[0];if(failures.length>1)throw new AggregateError(failures,'Actual route lifecycle failed');};
-  const drain=async()=>{while(active.size)await Promise.allSettled([...active]);};
-  const route=async route=>{
-    const work=Promise.resolve().then(()=>handle(route));
-    active.add(work);
-    // Playwright dispatches handlers without an awaitable public callback promise.
-    // Retain failures here and throw them through awaited lifecycle methods.
-    try {await work;} catch(error) {failures.push(error);}
-    finally {active.delete(work);}
-  };
-  await gui.page.route(path,route);
-  return {failures,throwFailure,drain,close:()=>cleanup(undefined,[drain,()=>gui.page.unroute(path,route),throwFailure])};
+  return createTrackedRoute(gui.page,path,handle);
 }
 
 // Intercept only the delivery of one genuine native reply, preserving its body.

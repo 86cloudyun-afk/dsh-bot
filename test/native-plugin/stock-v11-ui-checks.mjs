@@ -172,8 +172,10 @@ async function memoryAndMaterials(gui, botId) {
   await gui.expand(v11Card(gui,'长期记忆'),'导入导出');
   await transfer.getByLabel('导出条目（可多选；留空导出全部，最多 500 条）').selectOption(memoryId);
   const downloadPromise=gui.page.waitForEvent('download');
-  const exported=await uiRpc(gui,'memory.export',()=>button(transfer,'导出记忆 JSON').click());
-  const downloaded=await downloadPromise,downloadPath=join(gui.root,'work/v11-memory-export.json');
+  const [exported,downloaded]=await Promise.all([
+    uiRpc(gui,'memory.export',()=>button(transfer,'导出记忆 JSON').click()),downloadPromise,
+  ]);
+  const downloadPath=join(gui.root,'work/v11-memory-export.json');
   await downloaded.saveAs(downloadPath);
   const fileText=await readFile(downloadPath,'utf8'),file=JSON.parse(fileText);
   assert.equal(fileText,exported.value.fileText);

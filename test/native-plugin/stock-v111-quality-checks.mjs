@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {controlledProvider,waitFor} from './stock-gui-runtime.mjs';
+import {createTrackedRoute} from './stock-route-scope.mjs';
 
 const button=(scope,name)=>scope.getByRole('button',{name,exact:true});
 const card=(gui,title)=>gui.page.locator('section.card').filter({has:gui.page.getByRole('heading',{name:title,level:2,exact:true})});
@@ -8,15 +9,34 @@ const digest=text=>createHash('sha256').update(text,'utf8').digest('hex');
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
 const paint=page=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
 
-async function uiRpc(gui,action,interact) {
-  const responsePromise=gui.page.waitForResponse(response=>{
-    try{return response.request().postDataJSON()?.payload?.action===action;}catch{return false;}
+export async function uiRpc(gui,action,interact,{signal,timeout=30000}={}) {
+  const page=gui.page;let selected,settled=false,timer,stop;
+  const responsePromise=new Promise((resolve,reject)=>{
+    const cleanup=()=>{
+      clearTimeout(timer);page.off('request',onRequest);page.off('response',onResponse);
+      page.off('requestfailed',onFailed);page.off('close',onClose);signal?.removeEventListener('abort',onAbort);
+    };
+    const finish=(complete,value)=>{if(!settled){settled=true;cleanup();complete(value);}};
+    const onRequest=request=>{if(selected)return;try{if(request.postDataJSON()?.payload?.action===action)selected=request;}catch{}};
+    const onResponse=response=>{if(response.request()===selected)finish(resolve,response);};
+    const onFailed=request=>{if(request===selected)finish(reject,Error(`${action}: actual request failed (${request.failure()?.errorText??'unknown'})`));};
+    const onClose=()=>finish(reject,Error(`Actual page closed while waiting for ${action}`));
+    const onAbort=()=>finish(reject,signal.reason);
+    stop=reason=>finish(reject,reason);
+    page.on('request',onRequest);page.on('response',onResponse);page.on('requestfailed',onFailed);page.on('close',onClose);
+    signal?.addEventListener('abort',onAbort,{once:true});
+    timer=setTimeout(()=>finish(reject,Object.assign(Error(`Timed out waiting for actual ${action} response`),{name:'TimeoutError'})),timeout);
+    if(signal?.aborted)onAbort();else if(page.isClosed())onClose();
   });
-  const [,response]=await Promise.all([interact(),responsePromise]);
-  const request=response.request().postDataJSON().payload,reply=(await response.json()).result;
-  assert.equal(reply?.ok,true,`${action}: ${reply?.error?.code}`);
-  if(request.operationId)assert.ok(gui.app.ctx.dshBot.store.read().operations[request.operationId]);
-  return {request,value:reply.value};
+  let primary;
+  try {
+    const [,response]=await Promise.all([Promise.resolve().then(()=>{signal?.throwIfAborted();return interact();}),responsePromise]);
+    const request=response.request().postDataJSON().payload,reply=(await response.json()).result;
+    assert.equal(reply?.ok,true,`${action}: ${reply?.error?.code}`);
+    if(request.operationId)assert.ok(gui.app.ctx.dshBot.store.read().operations[request.operationId]);
+    return {request,value:reply.value};
+  } catch(error) {primary=error;throw error;}
+  finally {stop(primary??Error(`Actual ${action} observer finished`));}
 }
 
 // Public authenticated RPC in the actual browser, with original command IDs.
@@ -95,27 +115,41 @@ async function memorySearch(gui) {
     await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${text}$`)}).waitFor();
   }
   await gui.page.getByLabel('所属 Bot',{exact:true}).selectOption(botA);
-  const release=deferred(),completed=deferred();let actual;
+  const release=deferred(),completed=deferred(),rpcLifetime=new AbortController();let actual,rpc,primary;
   const gate=async route=>{
     const request=route.request().postDataJSON();
     if(request?.payload?.action!=='memory.search'||request.payload.input.botId!==botA)return route.continue();
-    const response=await route.fetch();actual=(await response.json()).result;
-    await release.promise;await route.fulfill({response});completed.resolve();
+    try {
+      const response=await route.fetch();actual=(await response.json()).result;
+      await release.promise;await route.fulfill({response});
+    } finally {completed.resolve();}
   };
-  await gui.page.route('**/api/dsh.bot/command',gate);
+  const routeScope=await createTrackedRoute(gui.page,'**/api/dsh.bot/command',gate);
   try {
     await card(gui,'长期记忆').getByLabel('内容关键词',{exact:true}).fill(markerA);
-    const rpc=uiRpc(gui,'memory.search',()=>button(card(gui,'长期记忆'),'搜索记忆').click());
-    await waitFor(()=>actual!==undefined,'actual native memory-search response is held');
+    rpc=uiRpc(gui,'memory.search',()=>button(card(gui,'长期记忆'),'搜索记忆').click(),{signal:rpcLifetime.signal}).then(value=>({value}),error=>({error}));
+    await waitFor(()=>actual!==undefined||routeScope.failures.length,'actual native memory-search response is held');
+    routeScope.throwFailure();
     assert.equal(actual.ok,true);assert.ok(actual.value.some(row=>gui.app.ctx.dshBot.store.read().memories[row.memoryId]?.text===markerA));
     await gui.page.getByLabel('所属 Bot',{exact:true}).selectOption(botB);
     await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${markerB}$`)}).waitFor();
-    release.resolve();await completed.promise;await rpc;await paint(gui.page);
+    release.resolve();await completed.promise;await routeScope.drain();routeScope.throwFailure();
+    const outcome=await rpc;if(outcome.error)throw outcome.error;
+    await paint(gui.page);
     assert.equal(await gui.page.getByLabel('所属 Bot',{exact:true}).inputValue(),botB);
     assert.equal(await card(gui,'长期记忆').getByRole('paragraph').filter({hasText:new RegExp(`^${markerB}$`)}).count(),1);
     assert.equal(await button(gui.page,'显示全部记忆').count(),0);
     gui.check('v111HeldActualBotAMemorySearchCannotReplaceBotBVisibleMemory',true);
-  } finally {release.resolve();await gui.page.unroute('**/api/dsh.bot/command',gate);}
+  } catch(error) {primary=error;} finally {
+    release.resolve();let routeError;
+    try {await routeScope.close(primary);} catch(error) {routeError=error;}
+    if(routeError)rpcLifetime.abort(routeError);
+    const outcome=rpc&&await rpc;
+    if(routeError&&outcome?.error&&routeError!==outcome.error)
+      throw new AggregateError([routeError,outcome.error],'Memory search and route cleanup failed',{cause:primary??routeError});
+    if(routeError)throw routeError;
+    if(outcome?.error)throw outcome.error;
+  }
 }
 
 const once=at=>{const iso=new Date(at).toISOString();return {kind:'once',timezone:'UTC',date:iso.slice(0,10),time:iso.slice(11,16)};};
