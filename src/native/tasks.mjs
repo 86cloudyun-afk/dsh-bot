@@ -801,12 +801,16 @@ export class TaskController {
           if (Object.hasOwn(input, key)) requireCondition(
             key === "criteria" ? Array.isArray(input[key]) && input[key].length <= 30 && input[key].every(item => typeof item === "string" && item.length <= 2000) :
               typeof input[key] === "string" && input[key].trim().length > 0 && input[key].length <= (key === "title" ? 200 : 16000), "invalid_task");
+        if (Object.hasOwn(input, "botId"))
+          requireCondition(validId(input.botId) && typeof (input.note ?? "") === "string" && (input.note ?? "").length <= 2000, "invalid_handoff");
+        const ownerChanged = Object.hasOwn(input, "botId") && input.botId !== task.botId;
         // Validate the entire handoff before any definition field is written.
-        if (Object.hasOwn(input, "botId")) this.#handoffInDraft(actor, {...input, toBotId: input.botId}, command.operationId, task, draft);
+        if (ownerChanged) this.#handoffInDraft(actor, {...input, toBotId: input.botId}, command.operationId, task, draft);
         const previousDefinition = this.#definition(task);
         for (const key of ["goal", "title", "criteria"])
           if (Object.hasOwn(input, key)) task[key] = copy(input[key]);
         const definitionChanged = previousDefinition !== this.#definition(task);
+        if (!definitionChanged && !ownerChanged) return task;
         if (definitionChanged) {
           this.#inheritContent(actor, task, draft);
           if (Object.hasOwn(input, "botId")) {
@@ -816,21 +820,31 @@ export class TaskController {
           task.definitionVersion = (task.definitionVersion ?? 1) + 1;
           task.acceptance = "unknown";
           task.state = "adjusted";
-          task.adjustStopId = randomUUID();
+          const attempt = draft.attempts[task.currentAttemptId];
+          if (attempt?.reservationHeld)
+            task.adjustStop = {
+              operationId: command.operationId,
+              stopOperationId: randomUUID(),
+              attemptId: attempt.attemptId,
+              epoch: attempt.epoch,
+            };
+          else delete task.adjustStop;
         }
         task.version++;
         return task;
       },
     );
-    const attempt = this.store.read().attempts[changed.currentAttemptId];
-    if (attempt?.reservationHeld && changed.adjustStopId)
+    const stop = changed.adjustStop, state = this.store.read(),
+      attempt = stop && state.attempts[stop.attemptId];
+    if (stop?.operationId === command.operationId && attempt?.reservationHeld &&
+        attempt.epoch === stop.epoch && state.tasks[changed.taskId].currentAttemptId === stop.attemptId)
       await this.stop(actor, {
-        operationId: changed.adjustStopId,
+        operationId: stop.stopOperationId,
         action: "task.stop",
         input: {
           taskId: changed.taskId,
-          attemptId: attempt.attemptId,
-          epoch: attempt.epoch,
+          attemptId: stop.attemptId,
+          epoch: stop.epoch,
         },
       });
     return this.store.read().tasks[changed.taskId];

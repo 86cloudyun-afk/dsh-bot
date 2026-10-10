@@ -352,7 +352,7 @@ export class ConversationBroker {
         target.agent[row.mode === "steer" ? "steer" : "followup"](row.message);
         await this.adapter.context.sessions.flush(target.agent.session);
       }
-      return await this.reconcileDelivery(row.outboxId);
+      return await this.reconcileDelivery(row.outboxId, { admissionComplete: true });
     } catch (error) {
       await this.store
         .transact(
@@ -362,11 +362,16 @@ export class ConversationBroker {
             input: { outboxId: row.outboxId, reason: error.code ?? error.name },
           },
           (draft) => {
-            draft.outbox[row.outboxId].state = nativeAdmission
+            const current = draft.outbox[row.outboxId];
+            if (current.state === "accepted" &&
+                current.nativeEvidence?.sessionId === current.sessionId &&
+                current.nativeEvidence.originalMessageId === current.message.id &&
+                Number.isSafeInteger(current.nativeEvidence.eventSeq)) return null;
+            current.state = nativeAdmission
               ? "UNKNOWN"
               : "blocked";
-            draft.outbox[row.outboxId].nativeAdmission = nativeAdmission;
-            draft.outbox[row.outboxId].error = error.code ?? error.name;
+            current.nativeAdmission = nativeAdmission;
+            current.error = error.code ?? error.name;
             return null;
           },
         )
@@ -374,7 +379,7 @@ export class ConversationBroker {
       return this.store.read().outbox[row.outboxId];
     }
   }
-  async reconcileDelivery(outboxId) {
+  async reconcileDelivery(outboxId, { admissionComplete = false } = {}) {
     const row = this.store.read().outbox[outboxId];
     requireCondition(row, "not_found");
     if (["accepted", "available", "blocked"].includes(row.state)) return row;
@@ -399,6 +404,18 @@ export class ConversationBroker {
       },
       (draft) => {
         const current = draft.outbox[outboxId];
+        // A native scan predates this queued commit. Preserve newer admission
+        // proof, and let an active delivery finish before treating absence as unknown.
+        if (["accepted", "available", "blocked"].includes(current.state)) return current;
+        if (!evidence && current.nativeEvidence?.sessionId === current.sessionId &&
+            current.nativeEvidence.originalMessageId === current.message.id &&
+            Number.isSafeInteger(current.nativeEvidence.eventSeq)) {
+          current.state = "accepted";
+          return current;
+        }
+        if (!evidence && !admissionComplete && current.runtimeId === this.runtimeId &&
+            this.#deliveries.has(outboxId) && ["queued", "admitting"].includes(current.state))
+          return current;
         current.state = evidence ? "accepted" : "UNKNOWN";
         current.nativeEvidence = evidence
           ? {
