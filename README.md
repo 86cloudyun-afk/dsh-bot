@@ -2,7 +2,7 @@
 
 在你现有的 **官方 DSH** 中创建有名字、长期记忆和独立职责的 Bot。后台任务继续运行时，Bot 仍能聊天、接受新任务、查询进度和响应停止指令。
 
-[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.1/dist/dsh-bot-1.1.1.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.1/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.0/docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
+[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/dsh-bot-1.1.2.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.0/docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
 
 ## 日常能力
 
@@ -26,11 +26,11 @@
 
 兼容基线为 **官方 `@deepseek-ai/dsh@0.2.0-rc.2`**、Node **22（≥22.19）或 24 及以上**，验证平台为 Linux 与 macOS。官方插件安装命令需要 `pnpm`。
 
-1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.1) 提供本版源码和验收记录。
+1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.2) 提供本版源码和验收记录。
 2. 将插件安装到你日常使用的 DSH profile。以 `web` 为例：
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.1.1.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.1.2.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -38,7 +38,9 @@ dsh web
 
 完整的依赖检查、首次安装、升级和卸载步骤见 [安装说明](docs/install.zh-CN.md)。版本是否正式交付，以对应 Release 的验收报告为准。
 
-**v1.1.1**修复异步上传、记忆搜索、会话并发操作和提醒恢复，并减少记录增多时工作台刷新的重复开销。v1.1.0 增加 Bot 自身会话管理、任务依赖与责任交接、团队模板、资料引用与记忆管理、简报和定时功能。从 v1.0.0／v1.0.1／v1.0.2／v1.1.0 升级后，完全重启 DSH 并刷新浏览器，核对 **插件 1.1.1 / 服务 1.1.1**。升级保留原 Bot、记忆、会话、任务、资料、安排及原始操作 ID 和回执。v1.0.x 的 schema 1 迁移保留校验过的升级前备份，旧授权的新增资料范围默认为关闭；v1.1.0 的 schema 2 数据原样延续。
+**v1.1.2**修复未改变内容的任务调整误停原执行、并发查回覆盖已证明的结果投递、修改未来定时配方阻止原任务结果、重新启用定时后旧未准入触发阻塞后续工作、插件重载后的既有联络绑定、归档期间的原生准入竞争，以及记忆导入来源与界面迟到读取问题。取消／更换文件、搜索、切换诊断或刷新目录后，界面保留最新选择及已接受操作的原 ID。具体证据与验收状态见 [v1.1.2 验收记录](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.2/docs/releases/v1.1.2-qualification.zh-CN.md)。
+
+从 v1.0.0／v1.0.1／v1.0.2／v1.1.0／v1.1.1 升级后，完全重启 DSH 并刷新浏览器，核对 **插件 1.1.2 / 服务 1.1.2**。升级保留原 Bot、记忆、会话、任务、资料、安排及原始操作 ID 和回执。v1.0.x 的 schema 1 迁移保留校验过的升级前备份，旧授权的新增资料范围默认为关闭；v1.1.0／v1.1.1 的 schema 2 数据继续保留，协议仍为 2。
 
 已有原生会话的工作目录固定，带历史的接续会话继承原有效 preset；更换 preset 时新建会话。停止被接受与资源结算分别记录；UNKNOWN 不自动重放。
 
@@ -59,7 +61,7 @@ dsh web
 
 正式版本以同一不可变包完成两平台安装与 GUI 检查，模型调用类型和多轮独立复审证据均在对应报告注明。受控模型、真实模型和资源停止证据在验收报告中分别注明。
 
-**此前独立软件版已完全作废。** 旧 Host 装配、owner 启动器、专用 Home/profile、独立网页和旧安装器退出运行及分发入口；本仓库只交付原生插件。见 [作废说明](docs/history/standalone-void.md)。
+**此前独立软件版已完全作废。** 旧 Host 装配、owner 启动器、专用 Home/profile、独立网页和旧安装器已从当前运行及交付入口移除；当前只交付原生插件。旧分支、历史记录及归档资产保留供追溯，不受支持，也不参与当前安装。见 [作废说明](docs/history/standalone-void.md)。
 
 ## 开发与许可
 

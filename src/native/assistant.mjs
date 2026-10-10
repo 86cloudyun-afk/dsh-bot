@@ -78,30 +78,54 @@ export class AssistantController {
       if(config.recipe){schedule.recipeHash=digest(config.recipe);schedule.dependencyOrigins=config.recipe.dependsOn.map(id=>({kind:'task',id}));}else{delete schedule.recipe;delete schedule.recipeHash;delete schedule.dependencyOrigins;}
       if(trigger?.skipReason)schedule.lastSkippedLocalTimes={reason:trigger.skipReason,count:trigger.skippedLocalTimes};
       schedule.executionConsent=this.#consent(actor,stamped,schedule,draft);draft.schedules[current.scheduleId]=schedule;
-      if(schedule.enabled)for(const occurrence of Object.values(draft.occurrences))if(occurrence.scheduleId===schedule.scheduleId&&occurrence.consentVersion!==schedule.consentVersion&&this.#provedUnadmitted(occurrence,draft)) {
-        // Superseded IDs retain their original consent, task and operation receipts.
-        occurrence.state='missed';occurrence.errorCode='schedule_superseded';occurrence.version++;this.#missedNotice(draft,schedule,occurrence,at);
-      }
+      if(schedule.enabled)this.#retireSuperseded(draft,schedule,at);
       return schedule;
     });
   }
   async setScheduleState(actor,command) {
-    this.#authenticate(actor);command=copy(command);requireCondition(['schedule.state','schedule.pause','schedule.cancel','schedule.enable'].includes(command.action),'invalid_command');const stamped=this.policy.command(actor,command);
+    this.#authenticate(actor);command=copy(command);requireCondition(['schedule.state','schedule.pause','schedule.cancel','schedule.enable'].includes(command.action),'invalid_command');const stamped=this.policy.command(actor,command),at=this.#now();
     return this.store.transact(stamped,draft=>{
       const input=command.input;requireCondition(plain(input)&&Object.keys(input).every(k=>['scheduleId','expectedVersion','enabled','archived'].includes(k))&&typeof input.enabled==='boolean'&&(input.archived===undefined||typeof input.archived==='boolean'),'invalid_schedule');
       const s=draft.schedules[input.scheduleId];requireCondition(s,'not_found');this.#owner(actor,s.ownerBotId,draft);requireCondition(input.expectedVersion===s.version,'revision_conflict');
       if(input.enabled&&s.kind==='task') {requireCondition(s.executionConsent?.configRevision===draft.bots[s.ownerBotId].configRevision,'schedule_config_changed');requireCondition(!s.archived||input.archived===false,'archived');}
       if(s.archived&&input.archived===false)requireCondition(Object.values(draft.schedules).filter(row=>!row.archived).length<100,'schedule_capacity_exceeded');
-      s.enabled=input.enabled;s.archived=input.archived??s.archived;if(s.archived)s.enabled=false;s.version++;return s;
+      s.enabled=input.enabled;s.archived=input.archived??s.archived;if(s.archived)s.enabled=false;s.version++;
+      if(s.enabled)this.#retireSuperseded(draft,s,at);
+      return s;
     });
   }
+  #retireSuperseded(draft,schedule,at) {
+    for(const occurrence of Object.values(draft.occurrences))if(occurrence.scheduleId===schedule.scheduleId&&occurrence.consentVersion!==schedule.consentVersion&&this.#provedUnadmitted(occurrence,draft)) {
+      // Superseded IDs retain their original consent, task and operation receipts.
+      occurrence.state='missed';occurrence.errorCode='schedule_superseded';occurrence.version++;this.#missedNotice(draft,schedule,occurrence,at);
+    }
+  }
+  #consentedDefinition(occurrence,current,state) {
+    if(!occurrence?.attemptId)return {schedule:current,attempt:null};
+    const attempt=state.attempts[occurrence.attemptId],task=state.tasks[occurrence.taskId],create=state.operations[occurrence.createOperationId],start=state.operations[occurrence.startOperationId];
+    requireCondition(attempt&&task&&attempt.taskId===task.taskId&&attempt.botId===current?.ownerBotId&&attempt.operationId===occurrence.startOperationId&&
+      task.createdBy?.kind==='schedule'&&task.createdBy.occurrenceId===occurrence.occurrenceId&&task.createdBy.scheduleId===current.scheduleId&&
+      task.source?.kind==='schedule'&&task.source.occurrenceId===occurrence.occurrenceId&&task.source.scheduleId===current.scheduleId&&
+      create?.action==='task.create'&&create.result?.taskId===task.taskId&&create.result.botId===attempt.botId&&
+      canonical(create.result.createdBy)===canonical(task.createdBy)&&canonical(create.result.source)===canonical(task.source)&&
+      start?.action==='task.start'&&start.result?.attemptId===attempt.attemptId&&start.result.taskId===task.taskId&&start.result.botId===attempt.botId&&start.result.configRevision===attempt.configRevision,'schedule_consent_invalid');
+    const receipts=occurrence.consentOperationId?[state.operations[occurrence.consentOperationId]]:Object.values(state.operations).filter(op=>['schedule.create','schedule.update'].includes(op.action)&&op.result?.scheduleId===current.scheduleId&&op.result.consentVersion===occurrence.consentVersion);
+    requireCondition(receipts.length===1,'schedule_consent_invalid');
+    const schedule=receipts[0]?.result;
+    requireCondition(['schedule.create','schedule.update'].includes(receipts[0]?.action)&&schedule?.scheduleId===current.scheduleId&&schedule.ownerBotId===current.ownerBotId&&schedule.consentVersion===occurrence.consentVersion&&
+      (!occurrence.consentOperationId||schedule.executionConsent?.operationId===occurrence.consentOperationId)&&
+      canonical(occurrence.origins??schedule.origins??[])===canonical(schedule.origins??[])&&
+      (occurrence.source===undefined||canonical(occurrence.source)===canonical(schedule.source)),'schedule_consent_invalid');
+    for(const key of ['title','goal','criteria','dependsOn','originSessionId'])requireCondition(canonical(create.result[key])===canonical(key==='originSessionId'?schedule.recipe.originSessionId:schedule.recipe[key]),'schedule_consent_invalid');
+    return {schedule,attempt};
+  }
   #authority(id,state) {
-    const occurrence=state.occurrences[id],s=state.schedules[occurrence?.scheduleId],c=s?.executionConsent;
+    const occurrence=state.occurrences[id],current=state.schedules[occurrence?.scheduleId],{schedule:s,attempt}=this.#consentedDefinition(occurrence,current,state),c=s?.executionConsent;
     requireCondition(occurrence&&s?.kind==='task'&&c&&occurrence.consentVersion===s.consentVersion&&c.consentVersion===s.consentVersion,'schedule_consent_invalid');
     const receipt=state.operations[c.operationId];
     requireCondition(receipt&&['schedule.create','schedule.update'].includes(receipt.action)&&receipt.fingerprint===c.operationFingerprint&&digest(c.command)===c.operationFingerprint&&c.command.callerKey===c.callerKey&&receipt.result?.scheduleId===s.scheduleId&&receipt.result.ownerBotId===s.ownerBotId&&canonical(receipt.result.origins??[])===canonical(s.origins??[])&&canonical(receipt.result.source)===canonical(s.source)&&canonical(receipt.result.contentSources??[])===canonical(s.contentSources??[])&&canonical(receipt.result.executionConsent)===canonical(c)&&canonical(receipt.result.recipe)===canonical(s.recipe)&&c.recipeHash===digest(s.recipe)&&s.recipeHash===c.recipeHash&&occurrence.recipeHash===c.recipeHash&&canonical(occurrence.recipe)===canonical(s.recipe),'schedule_consent_invalid');
     requireCondition(c.callerKey==='human'||(c.callerKey===canonical(['bot',s.ownerBotId,s.source?.sessionId])&&state.sessions[s.source.sessionId]?.botId===s.ownerBotId),'schedule_consent_invalid');
-    const bot=state.bots[s.ownerBotId];requireCondition(bot?.lifecycle==='active'&&!bot.deletedAt,'bot_not_active');requireCondition(bot.configRevision===c.configRevision&&occurrence.configRevision===c.configRevision,'schedule_config_changed');
+    const bot=state.bots[s.ownerBotId];requireCondition(bot?.lifecycle==='active'&&!bot.deletedAt,'bot_not_active');requireCondition((attempt?attempt.configRevision:bot.configRevision)===c.configRevision&&occurrence.configRevision===c.configRevision,'schedule_config_changed');
     const receiver=state.sessions[c.sessionId];requireCondition(receiver&&receiver.state==='ready'&&!receiver.archived&&!this.adapter?.isArchived?.(c.sessionId)&&c.sessionId===s.recipe.originSessionId,'schedule_receiver_changed');
     const prospect={botId:s.ownerBotId,purpose:'execution',lineage:null};
     requireCondition(this.policy.canProspectiveBotReadDerived(prospect,s,state),'access_denied');
@@ -109,7 +133,7 @@ export class AssistantController {
     const dependencyRefs=occurrence.attemptId?(state.attempts[occurrence.attemptId]?.prerequisiteInputs??[]).map(row=>({kind:'taskInput',id:row.inputId})):s.recipe.dependsOn.map(id=>({kind:'task',id}));
     for(const ref of [...(s.origins??[]),...dependencyRefs])requireCondition(this.policy.canProspectiveBotRead(prospect,ref,state),'access_denied');
     requireCondition(this.policy.canProspectiveBotRead(prospect,{kind:'session',id:c.sessionId},state),'access_denied');
-    return {occurrenceId:id,scheduleId:s.scheduleId,consentVersion:s.consentVersion,botId:s.ownerBotId,sessionId:c.sessionId,recipe:copy(occurrence.recipe),recipeHash:c.recipeHash,origins:copy([...(occurrence.origins??s.origins??[]),...(occurrence.attemptId?dependencyRefs:[])]),...(occurrence.taskId?{taskId:occurrence.taskId}:{}),...(occurrence.attemptId?{attemptId:occurrence.attemptId}:{}),createOperationId:occurrence.createOperationId,startOperationId:occurrence.startOperationId,configRevision:c.configRevision,executionConsent:copy(c),admissionDeadlineAt:this.#deadline(occurrence),admissionObservedAt:this.#now(),admissionAllowed:!this.#closed};
+    return {occurrenceId:id,scheduleId:s.scheduleId,consentVersion:s.consentVersion,botId:s.ownerBotId,sessionId:c.sessionId,recipe:copy(occurrence.recipe),recipeHash:c.recipeHash,origins:copy([...(occurrence.origins??s.origins??[]),...(occurrence.attemptId?dependencyRefs:[])]),...(occurrence.taskId?{taskId:occurrence.taskId}:{}),...(occurrence.attemptId?{attemptId:occurrence.attemptId}:{}),createOperationId:occurrence.createOperationId,startOperationId:occurrence.startOperationId,configRevision:c.configRevision,executionConsent:copy(c),admissionDeadlineAt:this.#deadline(occurrence),admissionObservedAt:this.#now(),admissionAllowed:!this.#closed&&current?.consentVersion===s.consentVersion};
   }
   #attemptSettled(attempt) {
     const proof=attempt?.localEvidence,current=attempt?.sessionId?this.adapter?.resources?.(attempt.sessionId):null;
@@ -119,7 +143,7 @@ export class AssistantController {
   #deadline(occurrence){return Date.parse(occurrence.recoveryObservedAt??occurrence.dueAt)+60000;}
   #assertAdmission(id,state=this.store.read()) {
     requireCondition(!this.#closed,'disabled');const a=this.#authority(id,state),o=state.occurrences[id],s=state.schedules[o.scheduleId];
-    requireCondition(s.enabled&&!s.archived&&o.state==='claimed','access_denied');requireCondition(this.#now()<=this.#deadline(o),'schedule_missed');
+    requireCondition(s.enabled&&!s.archived&&o.state==='claimed'&&o.consentVersion===s.consentVersion,'access_denied');requireCondition(this.#now()<=this.#deadline(o),'schedule_missed');
     requireCondition(!Object.values(state.occurrences).some(other=>other.scheduleId===s.scheduleId&&other.occurrenceId!==id&&UNSETTLED.has(other.state)),'attempt_unsettled');return a;
   }
   #noticeInDraft(draft,input) {
@@ -286,7 +310,7 @@ export class AssistantController {
         const occurrenceId=`occurrence_${digest([scheduleId,s.consentVersion,s.rule.version,trigger.triggerKey])}`;
         if(draft.occurrences[occurrenceId])continue;
         const missed=s.kind==='task'&&late&&(!catchup||trigger.dueAt!==latest.dueAt),o={occurrenceId,scheduleId,consentVersion:s.consentVersion,dueAt:trigger.dueAt,triggerKey:trigger.triggerKey,version:1,claimVersion:0,state:missed?'missed':'planned',createOperationId:`schedule_create_${digest(occurrenceId)}`,startOperationId:`schedule_start_${digest(occurrenceId)}`,source:s.source,origins:copy(s.origins??[]),createdAt:nowISO(at)};
-        if(s.recipe)Object.assign(o,{recipe:copy(s.recipe),recipeHash:s.recipeHash,configRevision:s.executionConsent.configRevision,originSessionId:s.recipe.originSessionId});
+        if(s.recipe)Object.assign(o,{recipe:copy(s.recipe),recipeHash:s.recipeHash,configRevision:s.executionConsent.configRevision,consentOperationId:s.executionConsent.operationId,originSessionId:s.recipe.originSessionId});
         if(catchup&&trigger.dueAt===latest.dueAt)o.recoveryObservedAt=nowISO(at);
         draft.occurrences[occurrenceId]=o;
         if(missed)this.#missedNotice(draft,s,o,at);else if(s.kind==='reminder'){o.state='settled';this.#noticeInDraft(draft,{kind:'reminder',occurrenceId,scheduleId,botId:s.ownerBotId,message:s.message,dueAt:o.dueAt,late:at>Date.parse(o.dueAt),source:s.source,origins:s.origins??[]});}else ids.push(occurrenceId);
