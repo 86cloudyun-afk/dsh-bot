@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {canonical, copy, digest, plain, requireCondition, validId} from './store.mjs';
+import {canonical, copy, digest, plain, requireCondition, requireNativeJson, validId} from './store.mjs';
 import {enforceQuota, lexicalScore, normalize, readSessionEvidence, strictObject, uniqueReferences, utf8Hash, validUnicode, writerProvenance} from './knowledge.mjs';
 
 const categories=['fact','preference','decision','responsibility'];
@@ -15,7 +15,10 @@ const sourceIdentity=(source,storeId)=>digest([source?.storeId??storeId,source?.
 const dedupKey=entry=>digest([entry.text.normalize('NFKC').trim(),entry.category]);
 const binary=(a,b)=>a<b?-1:a>b?1:0;
 const latest=(a,b)=>binary(b.updatedAt??b.createdAt??'',a.updatedAt??a.createdAt??'')||binary(a.memoryId,b.memoryId);
-const carriesProtection=provenance=>!!provenance&&(provenance.protected||!!provenance.origins?.length||!!provenance.lineage?.meetingId||[provenance.source,...(provenance.contentSources??[])].some(source=>source?.sessionId||['material','task','meeting','group'].includes(source?.kind)||source?.meetingId)||carriesProtection(provenance.originalProvenance));
+function carriesProtection(provenance) {
+  for(let current=provenance;current;current=current.originalProvenance)if(current.protected||current.origins?.length||current.lineage?.meetingId||[current.source,...(current.contentSources??[])].some(source=>source?.sessionId||['material','task','meeting','group'].includes(source?.kind)||source?.meetingId))return true;
+  return false;
+}
 function scalarDescription(value,keys) {
   strictObject(value,keys,'invalid_import');
   for(const [key,v] of Object.entries(value)) {
@@ -32,16 +35,30 @@ function scalarDescription(value,keys) {
 function validateSource(source) {
   const result=scalarDescription(source,sourceFields);requireCondition(sourceKinds.includes(result.kind),'invalid_import');return result;
 }
-function validateProvenance(provenance,depth=0) {
-  requireCondition(depth<4,'invalid_import');strictObject(provenance,['storeId','originalMemoryId','memoryId','protected','source','lineage','contentSources','origins','originalProvenance'],'invalid_import');
-  requireCondition(validId(provenance.storeId)&&typeof provenance.protected==='boolean','invalid_import');
-  for(const key of ['originalMemoryId','memoryId'])if(provenance[key]!==undefined)requireCondition(validId(provenance[key]),'invalid_import');
-  if(provenance.source!==undefined)validateSource(provenance.source);
-  if(provenance.lineage!==undefined)scalarDescription(provenance.lineage,lineageFields);
-  if(provenance.contentSources!==undefined){requireCondition(Array.isArray(provenance.contentSources)&&provenance.contentSources.length<=maxProvenanceItems,'invalid_import');for(const source of provenance.contentSources)validateSource(source);}
-  if(provenance.origins!==undefined){requireCondition(Array.isArray(provenance.origins)&&provenance.origins.length<=maxProvenanceItems,'invalid_import');for(const ref of provenance.origins){strictObject(ref,['kind','id'],'invalid_import');requireCondition(['session','memory','task','taskInput','material','meeting','group','bot'].includes(ref.kind)&&validId(ref.id),'invalid_import');}}
-  if(provenance.originalProvenance!==undefined)validateProvenance(provenance.originalProvenance,depth+1);
+function validateProvenance(provenance) {
+  for(let current=provenance;current!==undefined;current=current.originalProvenance) {
+    strictObject(current,['storeId','originalMemoryId','memoryId','protected','source','lineage','contentSources','origins','originalProvenance'],'invalid_import');
+    requireCondition(validId(current.storeId)&&typeof current.protected==='boolean','invalid_import');
+    for(const key of ['originalMemoryId','memoryId'])if(current[key]!==undefined)requireCondition(validId(current[key]),'invalid_import');
+    if(current.source!==undefined)validateSource(current.source);
+    if(current.lineage!==undefined)scalarDescription(current.lineage,lineageFields);
+    if(current.contentSources!==undefined){requireCondition(Array.isArray(current.contentSources)&&current.contentSources.length<=maxProvenanceItems,'invalid_import');for(const source of current.contentSources)validateSource(source);}
+    if(current.origins!==undefined){requireCondition(Array.isArray(current.origins)&&current.origins.length<=maxProvenanceItems,'invalid_import');for(const ref of current.origins){strictObject(ref,['kind','id'],'invalid_import');requireCondition(['session','memory','task','taskInput','material','meeting','group','bot'].includes(ref.kind)&&validId(ref.id),'invalid_import');}}
+  }
   return copy(provenance);
+}
+function serializeFile(file) {
+  const compact=canonical(file);requireCondition(Buffer.byteLength(compact)<=maxFileBytes,'export_batch_required');
+  // Count pretty-print overhead before allocating indentation for deep history.
+  let prettyBytes=Buffer.byteLength(compact);const stack=[{value:file,depth:0}];
+  while(stack.length) {
+    const {value,depth}=stack.pop();if(value===null||typeof value!=='object')continue;
+    const children=Object.values(value),count=children.length;if(!count)continue;
+    prettyBytes+=count+1+2*((depth+1)*count+depth)+(Array.isArray(value)?0:count);
+    if(prettyBytes>maxFileBytes)return compact;
+    for(const child of children)if(child!==null&&typeof child==='object')stack.push({value:child,depth:depth+1});
+  }
+  try{return JSON.stringify(file,null,2);}catch(error){if(error instanceof RangeError)return compact;throw error;}
 }
 function boundedSource(source) {
   if(!plain(source))return {kind:'external',description:'Historical source description'};
@@ -68,7 +85,7 @@ function parseFile(input) {
     requireCondition(typeof entry.text==='string'&&validUnicode(entry.text)&&entry.text.trim().length>0&&entry.text.length<=8192&&typeof entry.category==='string'&&validUnicode(entry.category)&&entry.category.length>0&&typeof entry.pinned==='boolean','invalid_import');
     validateProvenance(entry.provenance);
   }
-  return file;
+  requireNativeJson(file,'invalid_import');return file;
 }
 const instruction='你是一个有长期身份的 Bot。会话历史保持独立；需要细节时主动查询自己的会话。dsh_bot 的 help 提供动作字段和真实身份。重要事实可用 memory.write 保存。用户要求后台工作时，用 task.create 登记后立即 task.start 分派到独立执行会话；不要在联络会话执行该工作，也不等待它结束，继续接受聊天与新任务。';
 const memoryLabel='长期记忆（记录带来源，引用不授予控制权）：',taskLabel='未完成任务：';
@@ -108,10 +125,11 @@ export class MemoryController {
     strictObject(input,action==='memory.pin'?['memoryId','expectedVersion','pinned']:['memoryId','expectedVersion'],'invalid_memory');this.#record(actor,input.memoryId,action);
     if(action==='memory.pin')requireCondition(typeof input.pinned==='boolean','invalid_memory');
     return this.store.transact(this.policy.command(actor,command),draft=>{
+      const before=action==='memory.pin'?copy(draft):null;
       const row=this.#record(actor,input.memoryId,action,draft);requireCondition(input.expectedVersion===row.version,'revision_conflict');
       const writer=writerProvenance(this,actor,draft);row.origins=uniqueReferences([...(row.origins??[]),...writer.origins]);row.contentSources=uniqueReferences([...(row.contentSources??[]),...writer.contentSources]);
       if(action==='memory.forget')row.forgotten=true;else {requireCondition(!row.forgotten,'memory_forgotten');row.pinned=input.pinned;requireCondition(this.#pins(draft,row.botId)<=8,'pin_quota');}
-      row.version++;row.updatedAt=new Date().toISOString();this.#revision(draft,row.botId);return row;
+      row.version++;row.updatedAt=new Date().toISOString();if(before)enforceQuota(draft,'memories',row.botId,{perBot:2000,profile:10000},before);this.#revision(draft,row.botId);return row;
     });
   }
   forget(actor,command) {return this.#mutate(actor,command,'memory.forget');}
@@ -128,7 +146,7 @@ export class MemoryController {
     const rows=input.memoryIds?input.memoryIds.map(id=>state.memories[id]):Object.values(state.memories).filter(r=>r.botId===input.botId&&!r.forgotten).sort((a,b)=>binary(a.memoryId,b.memoryId));
     requireCondition(rows.length<=500,'export_batch_required');
     for(const row of rows)requireCondition(row&&row.botId===input.botId&&!row.forgotten&&this.policy.canRead(actor,{kind:'memory',id:row.memoryId},undefined,state),'export_unavailable');
-    const file={format:'dsh-bot-memory',formatVersion:1,storeId:state.storeId,botName:state.bots[input.botId].name,entries:rows.map(row=>({text:row.text,category:row.category??'fact',pinned:!!row.pinned,provenance:description(row,state.storeId)}))},fileText=JSON.stringify(file,null,2);
+    const file={format:'dsh-bot-memory',formatVersion:1,storeId:state.storeId,botName:state.bots[input.botId].name,entries:rows.map(row=>({text:row.text,category:row.category??'fact',pinned:!!row.pinned,provenance:description(row,state.storeId)}))},fileText=serializeFile(file);
     requireCondition(Buffer.byteLength(fileText)<=maxFileBytes,'export_batch_required');
     for(const row of rows)this.policy.noteRead(actor,{kind:'memory',id:row.memoryId});return {fileText,fileDigest:utf8Hash(fileText),fileName:`${input.botId}-memories.json`,memoryIds:rows.map(r=>r.memoryId)};
   }

@@ -216,6 +216,10 @@ export class SessionOwnership {
         input.cursor.sessionId === input.sessionId,
         "invalid_cursor",
       );
+    const live = this.adapter.context.agents.get(input.sessionId);
+    if (live) await this.adapter.context.sessions.flush(live.session);
+    this.policy.require(actor, "session.read", reference);
+    signal?.throwIfAborted();
     const history = await this.adapter.readNative(input.sessionId, signal);
     this.policy.require(actor, "session.read", reference);
     signal?.throwIfAborted();

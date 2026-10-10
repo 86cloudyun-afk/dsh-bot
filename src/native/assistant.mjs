@@ -224,10 +224,11 @@ export class AssistantController {
   }
   #arm() {
     this.#clear();if(!this.#started||this.#closed||this.#halted)return;let state;try{state=this.store.read();}catch(error){this.#halt(error);return;}const now=this.#now();let due=Infinity;
-    for(const s of Object.values(state.schedules))if(s.enabled&&!s.archived&&s.pauseReason!=='occurrence_capacity_exceeded'){
+    for(const s of Object.values(state.schedules)){
       const pending=Object.values(state.occurrences).filter(o=>o.scheduleId===s.scheduleId&&UNSETTLED.has(o.state));
       if(pending.some(o=>['running','UNKNOWN'].includes(o.state)&&state.attempts[o.attemptId]?.reservationHeld&&o.state!==(state.attempts[o.attemptId].state==='UNKNOWN'?'UNKNOWN':'running'))){due=Math.min(due,now);continue;}
       if(pending.some(o=>['claimed','running','UNKNOWN'].includes(o.state)&&this.#attemptSettled(state.attempts[o.attemptId]))){due=Math.min(due,now);continue;}
+      if(!s.enabled||s.archived||s.pauseReason==='occurrence_capacity_exceeded')continue;
       if(pending.some(o=>['claimed','running','UNKNOWN'].includes(o.state)))continue;
       if(pending.some(o=>o.consentVersion!==s.consentVersion))continue;
       for(const o of pending)due=Math.min(due,Math.max(now+1000,Math.min(this.#deadline(o)+1,now+5000)));

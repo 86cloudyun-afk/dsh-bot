@@ -5,6 +5,7 @@ import {runBotDeleteChecks} from './stock-bot-delete-checks.mjs';
 import {runV11UiChecks} from './stock-v11-ui-checks.mjs';
 import {runV111QualityChecks} from './stock-v111-quality-checks.mjs';
 import {runV112QualityChecks} from './stock-v112-quality-checks.mjs';
+import {runV113QualityChecks} from './stock-v113-quality-checks.mjs';
 import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
@@ -814,6 +815,8 @@ try {
   await runV111QualityChecks(gui);
   mark("v112-bounded-quality-regressions");
   await runV112QualityChecks(gui);
+  mark("v113-bounded-quality-regressions");
+  await runV113QualityChecks(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");
   gui.report.passed = true;

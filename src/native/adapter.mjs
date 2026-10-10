@@ -48,7 +48,6 @@ export class NativeDshAdapter {
   #activity = new Map();
   #botAdmissionFences = new Set();
   #sessionAdmissionFences = new Set();
-  #ordinarySelections = new Map();
   #nativeActivities = new Map();
   #nativeToolActivities = new Map();
   #starting;
@@ -115,7 +114,8 @@ export class NativeDshAdapter {
             await this.bindAgent(agent, binding);
             if (source === "resume" && ctx.get("sessionController"))
               this.#records.get(agent.id).nativeControllerRestore = true;
-          }
+          } else if (binding?.purpose === "ordinary")
+            await this.#restoreOrdinarySelection(agent,binding);
         },
         { global: true },
       ),
@@ -330,6 +330,8 @@ export class NativeDshAdapter {
         const binding=this.#store.read().sessions[agent.id];
         if(binding?.botId&&binding.state==="ready"&&!this.isArchived(agent.id)&&this.#ctx.agents.get(agent.id)===agent)
           await this.bindAgent(agent,binding);
+        else if(binding?.purpose === "ordinary")
+          await this.#restoreOrdinarySelection(agent,binding);
       }
       requireCondition(!this.#closed&&!this.#closing,"disposed");
     })();
@@ -844,21 +846,75 @@ export class NativeDshAdapter {
     const event = session.append("session/title", {title:name.trim(),messageSeqs:[],source:{kind:"user"}});
     return {title:name.trim(),eventSeq:event.seq};
   }
-  async configureOwned(binding, config, signal) {
-    let agent = this.#ctx.agents.get(binding.sessionId);
-    if (!agent) {
-      if (binding.botId) agent = await this.resumeOwned({...binding,state:"ready"});
-      else {
-        const native = await this.inspectSession(binding.sessionId,signal);
-        const handle = await this.#ctx.agents.resume({resumeSessionId:binding.sessionId,signal,
-          ...(binding.model ? {agentOptions:copy(binding.model)} : {}),
-          setup:async (ctx)=>{const presets=this.#ctx.get("agentPresets");if(presets)await presets.mount(ctx,native.presetId ?? undefined);}});
-        this.#handles.set(binding.sessionId,handle);agent=handle.agent;
-      }
+  #ordinarySelection(agent) {
+    const scope = agent.ctx.isolate("dshBotOrdinaryModelSelection",Symbol.for(`dsh-bot:ordinary-model:${agent.id}`));
+    let record = scope.get("dshBotOrdinaryModelSelection");
+    if (!record) {
+      record = {agent,selection:{current:undefined},closed:false};
+      scope.provide("dshBotOrdinaryModelSelection",record);
+      installModelSelection(scope,record.selection);
+      scope.on("session/event",(session,event)=>{
+        if (session === agent.session && event.type === "model/selection") {
+          record.selection.current = Object.freeze(copy(event.data));
+        }
+      },{global:true});
+      scope.on("agent/request",async (_payload,next)=>{
+        const result=await next(),selected=record.selection.assembled;
+        return selected ? {...result,...selected} : result;
+      },{prepend:true});
+      scope.effect(()=>()=>{record.closed=true;record.selection.current=undefined;});
     }
+    requireCondition(record.agent === agent && !record.closed, "resource_identity_unknown");
+    return record;
+  }
+  async #restoreOrdinarySelection(agent,binding) {
+    if (binding?.botId !== null || binding.purpose !== "ordinary" || binding.state !== "ready" || !binding.model) return;
+    const state=this.#store.read(),matches=result=>result?.state === "ready" && result.sessionId === agent.id && result.botId === null &&
+      result.purpose === "ordinary" && result.revision <= binding.revision && result.model && digest(result.model) === digest(binding.model) &&
+      Number.isSafeInteger(result.modelSeq ?? result.nativeConfigEvidence?.modelSeq);
+    const status=state.operations[binding.configureStatusId];
+    let receipt=status?.action === "session.configured" ? status.result : undefined;
+    if (!matches(receipt)) receipt=Object.values(state.operations).filter(operation=>operation.action === "session.configured").map(operation=>operation.result).findLast(matches);
+    if (!receipt) return;
+    const modelSeq=receipt.modelSeq ?? receipt.nativeConfigEvidence.modelSeq;
+    if (binding.modelSeq !== undefined && binding.modelSeq !== modelSeq) return;
+    const query=this.#ctx.get("sessionQuery");
+    requireCondition(typeof query?.observeSession === "function", "session_query_unavailable");
+    const observed=await query.observeSession(agent.id,{projectionMode:"none"});
+    try {
+      const latest=observed.events.findLast(event=>event.type === "model/selection"),current=this.#store.read(),row=current.sessions[agent.id],
+        intent=current.operations[row?.configureOperationId]?.result;
+      if (this.#closed || this.#closing || this.#ctx.agents.get(agent.id) !== agent || observed.header.id !== binding.sessionId ||
+        observed.cursor !== agent.session.seq-1 || latest?.seq !== modelSeq ||
+        !row || row.botId !== null || row.purpose !== "ordinary" || row.modelSeq !== undefined && row.modelSeq !== modelSeq || digest(row.model) !== digest(binding.model) ||
+        !(row.state === "ready" || row.state === "configuring" && !Object.hasOwn(intent?.config ?? {},"model") && digest(intent?.previous) === digest(binding)) ||
+        ["provider","model","reasoningEffort"].some(key=>latest.data[key] !== binding.model[key])) return;
+      const record=this.#ordinarySelection(agent),evidence={modelSeq,model:copy(binding.model),effective:"next-step"};
+      record.model=copy(binding.model);record.selection.current=Object.freeze(copy(binding.model));
+      return copy(evidence);
+    } finally {observed[Symbol.dispose]();}
+  }
+  async configureOwned(binding, config, signal) {
+    requireCondition(!this.#closed && !this.#closing, "disposed");
+    let agent = this.#ctx.agents.get(binding.sessionId);
+    if (!binding.botId) {
+      const controller = this.#ctx.get("sessionController");
+      requireCondition(typeof controller?.resolveAgent === "function" &&
+        typeof this.#ctx.agents.withoutInitiator === "function", "session_controller_unavailable");
+      signal?.throwIfAborted();
+      const found = await this.#ctx.agents.withoutInitiator(() => controller.resolveAgent(binding.sessionId));
+      if ("error" in found) throw found.error;
+      agent = found.agent;
+    } else if (!agent) {
+      agent = await this.resumeOwned({...binding,state:"ready"});
+    }
+    const restored=!binding.botId && config.model === undefined
+      ? await this.#restoreOrdinarySelection(agent,binding) : undefined;
+    requireCondition(!this.#closed && !this.#closing, "disposed");
+    requireCondition(this.#ctx.agents.get(binding.sessionId) === agent, "resource_identity_unknown");
     requireCondition(agent.status === "idle" && !agent.inbox.nextTurn.length && !agent.inbox.nextStep.length,"session_active");
     signal?.throwIfAborted();
-    const evidence = {};
+    const evidence = restored ?? {};
     try {
     const presets = this.#ctx.get("agentPresets"),
       effective = () => this.#ctx.sessionProjections.stateOf(agent.session,"agentPreset") ?? agent.session.header.agentPreset ?? null;
@@ -877,25 +933,15 @@ export class NativeDshAdapter {
     if (config.model !== undefined) {
       let record = this.#records.get(binding.sessionId);
       if (!binding.botId) {
-        record = this.#ordinarySelections.get(binding.sessionId);
-        if (record?.agent !== agent) {
-          record?.dispose();
-          record = {agent,selection:{current:undefined}};
-          const selectionDisposer = installModelSelection(agent.ctx,record.selection);
-          const requestDisposer = agent.ctx.on("agent/request",async (_payload,next)=>{
-            const result=await next(),selected=record.selection.assembled;
-            return selected ? {...result,...selected} : result;
-          },{prepend:true});
-          record.dispose=()=>{selectionDisposer();requestDisposer();};
-          this.#ordinarySelections.set(binding.sessionId,record);
-        }
+        // Ordinary configuration belongs to the receiving Agent, including across plugin reloads.
+        record = this.#ordinarySelection(agent);
       }
-      requireCondition(record?.agent === agent, "resource_identity_unknown");
+      requireCondition(record?.agent === agent && !record.closed, "resource_identity_unknown");
       record.model = copy(config.model);
-      record.selection.current = Object.freeze(copy(config.model));
       record.uiIntent = {provider:config.model.provider,model:config.model.model,
         ...(config.model.reasoningEffort === undefined ? {} : {reasoningEffort:config.model.reasoningEffort})};
       const event = agent.session.append("model/selection",copy(record.uiIntent));
+      record.selection.current = Object.freeze(copy(config.model));
       evidence.modelSeq = event.seq;
       evidence.model = copy(config.model);
       evidence.effective = "next-step";
@@ -962,6 +1008,11 @@ export class NativeDshAdapter {
   async #createHandle(binding, setup, { parent, descriptor, signal } = {}) {
     const model = copy(binding.model),
       presets = this.#ctx.get("agentPresets");
+    const childMeta = parent ? childSessionMeta(parent, resolveChildDepth(parent, 1), false) : {},
+      delegatedPolicies = parent ? captureDelegatedPolicyOverrides(parent) : undefined;
+    // Retain native lineage while the admitted attempt defines its own composition and location.
+    delete childMeta.cwd;
+    delete childMeta.agentPreset;
     let fork = {};
     if (binding.purpose === "contact" && binding.source?.kind === "session") {
       const source = await this.inspectSession(binding.source.sessionId, signal), boundary = binding.source.eventSeq;
@@ -976,12 +1027,10 @@ export class NativeDshAdapter {
       ...(parent ? { parentAgent: parent } : {}),
       ...(signal ? { signal } : {}),
       meta: {
+        ...childMeta,
         cwd: binding.cwd,
         ...(binding.purpose === "contact" && binding.source?.kind === "session" ? {parentSession:binding.source.sessionId,isSeeded:true} : {}),
         ...(binding.presetId ? { agentPreset: binding.presetId } : {}),
-        ...(parent
-          ? childSessionMeta(parent, resolveChildDepth(parent, 1), false)
-          : {}),
       },
       agentOptions: {
         provider: model.provider,
@@ -994,7 +1043,7 @@ export class NativeDshAdapter {
         if (parent)
           appendDelegatedPolicyOverrides(
             agent.session,
-            captureDelegatedPolicyOverrides(parent),
+            delegatedPolicies,
           );
         if (descriptor) {
           let appended = false;
@@ -1309,8 +1358,6 @@ export class NativeDshAdapter {
       for (const dispose of record.disposers.splice(0).reverse())
         await dispose();
     }
-    for (const record of this.#ordinarySelections.values()) record.dispose();
-    this.#ordinarySelections.clear();
     for (const dispose of this.#disposers.splice(0).reverse()) await dispose();
   }
 }
