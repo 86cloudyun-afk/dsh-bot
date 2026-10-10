@@ -7,6 +7,16 @@ const details=(page,title)=>page.locator('details').filter({has:page.locator('su
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
 const paint=page=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
 const requestFor=(response,action)=>{try{return response.request().postDataJSON()?.payload?.action===action;}catch{return false;}};
+const observe=promise=>Promise.resolve(promise).then(value=>({value}),error=>({error}));
+async function observed(promise) {const outcome=await promise;if(Object.hasOwn(outcome,'error'))throw outcome.error;return outcome.value;}
+async function cleanup(primary,steps) {
+  const failures=[];
+  const retain=error=>{if(!failures.includes(error))failures.push(error);};
+  if(primary!==undefined)retain(primary);
+  for(const step of steps)try {await step();} catch(error) {retain(error);}
+  if(failures.length===1)throw failures[0];
+  if(failures.length>1)throw new AggregateError(failures,'Actual UI and route cleanup failed',{cause:primary??failures[0]});
+}
 
 async function uiRpc(gui,action,interact,accept=()=>true) {
   gui.report.v112Quality.uiCommands++;
@@ -30,32 +40,40 @@ async function command(gui,action,input) {
   return {request,value:reply.value};
 }
 
+async function trackedRoute(gui,path,handle) {
+  const active=new Set(),failures=[];
+  const throwFailure=()=>{if(failures.length===1)throw failures[0];if(failures.length>1)throw new AggregateError(failures,'Actual route lifecycle failed');};
+  const drain=async()=>{while(active.size)await Promise.allSettled([...active]);};
+  const route=async route=>{
+    const work=Promise.resolve().then(()=>handle(route));
+    active.add(work);
+    // Playwright dispatches handlers without an awaitable public callback promise.
+    // Retain failures here and throw them through awaited lifecycle methods.
+    try {await work;} catch(error) {failures.push(error);}
+    finally {active.delete(work);}
+  };
+  await gui.page.route(path,route);
+  return {failures,throwFailure,drain,close:()=>cleanup(undefined,[drain,()=>gui.page.unroute(path,route),throwFailure])};
+}
+
 // Intercept only the delivery of one genuine native reply, preserving its body.
 async function holdReply(gui,path,accept=()=>true) {
-  const release=deferred(),completed=deferred(),active=new Set(),failures=[];let actual,request,claimed=false;
-  const throwFailure=()=>{if(failures.length===1)throw failures[0];if(failures.length>1)throw new AggregateError(failures,'Held actual reply lifecycle failed');};
-  const route=async route=>{
-    let selected=false;
-    const work=(async()=>{
-      const envelope=route.request().postDataJSON();
-      if(claimed||!accept(envelope))return route.continue();
-      selected=true;claimed=true;request=envelope;
+  const release=deferred(),completed=deferred();let actual,request,claimed=false;
+  const scope=await trackedRoute(gui,path,async route=>{
+    const envelope=route.request().postDataJSON();
+    if(claimed||!accept(envelope))return route.continue();
+    claimed=true;request=envelope;
+    try {
       const response=await route.fetch();actual=(await response.json()).result;
       assert.ok(actual&&typeof actual==='object','Actual held RPC response must include its result');
       await release.promise;
       await route.fulfill({response});
-    })();
-    active.add(work);
-    // Playwright dispatches handlers without an awaitable public callback promise.
-    // Retain failures here and throw them through ready/finish/close to the runner.
-    try {await work;} catch(error) {failures.push(error);}
-    finally {active.delete(work);if(selected)completed.resolve();}
-  };
-  await gui.page.route(path,route);
+    } finally {completed.resolve();}
+  });
   return {get actual(){return actual;},get request(){return request;},release:()=>release.resolve(),
-    async ready(){await waitFor(()=>actual!==undefined||failures.length,'held actual installed reply');throwFailure();assert.equal(actual.ok,true);},
-    async finish(){assert.ok(claimed,'A genuine reply must be selected before finishing');release.resolve();await completed.promise;throwFailure();await paint(gui.page);},
-    async close(){release.resolve();while(active.size)await Promise.allSettled([...active]);await gui.page.unroute(path,route);throwFailure();}};
+    async ready(){await waitFor(()=>actual!==undefined||scope.failures.length,'held actual installed reply');scope.throwFailure();assert.equal(actual.ok,true);},
+    async finish(){assert.ok(claimed,'A genuine reply must be selected before finishing');release.resolve();await completed.promise;await scope.drain();scope.throwFailure();await paint(gui.page);},
+    async close(){release.resolve();await scope.close();}};
 }
 
 async function memoryCancel(gui) {
@@ -114,27 +132,27 @@ async function materialSearch(gui) {
   const search=card(gui,'资料检索');
   await search.getByRole('heading',{name:a,exact:true}).waitFor();await search.getByRole('heading',{name:b,exact:true}).waitFor();
   const query=async text=>{await search.getByLabel('关键词',{exact:true}).fill(text);return uiRpc(gui,'material.search',()=>button(search,'搜索资料').click(),row=>row.input.query===text);};
-  let held=await holdReply(gui,'**/api/dsh.bot/command',row=>row?.payload?.action==='material.search'&&row.payload.input.query===a),earlier;
+  let held=await holdReply(gui,'**/api/dsh.bot/command',row=>row?.payload?.action==='material.search'&&row.payload.input.query===a),earlier,primary;
   try {
-    earlier=query(a);await held.ready();assert.ok(held.actual.value.some(row=>row.title===a));
+    earlier=observe(query(a));await held.ready();assert.ok(held.actual.value.some(row=>row.title===a));
     const latest=await query(b);assert.ok(latest.value.some(row=>row.title===b));
     await search.getByRole('heading',{name:b,exact:true}).waitFor();
     assert.equal(await search.getByRole('heading',{name:a,exact:true}).count(),0);
-    await held.finish();await earlier;await paint(gui.page);
+    await held.finish();await observed(earlier);await paint(gui.page);
     assert.equal(await search.getByRole('heading',{name:b,exact:true}).count(),1);
     assert.equal(await search.getByRole('heading',{name:a,exact:true}).count(),0);
     gui.check('v112OutOfOrderActualMaterialRepliesKeepLatestSearch',true);
-  } finally {await held.close();if(earlier)await earlier;}
-  held=await holdReply(gui,'**/api/dsh.bot/command',row=>row?.payload?.action==='material.search'&&row.payload.input.query===a);earlier=undefined;
+  } catch(error) {primary=error;} finally {await cleanup(primary,[()=>held.close(),()=>earlier&&observed(earlier)]);}
+  held=await holdReply(gui,'**/api/dsh.bot/command',row=>row?.payload?.action==='material.search'&&row.payload.input.query===a);earlier=undefined;primary=undefined;
   try {
-    earlier=query(a);await held.ready();await button(search,'显示全部资料').click();
+    earlier=observe(query(a));await held.ready();await button(search,'显示全部资料').click();
     await search.getByRole('heading',{name:a,exact:true}).waitFor();await search.getByRole('heading',{name:b,exact:true}).waitFor();
-    await held.finish();await earlier;await paint(gui.page);
+    await held.finish();await observed(earlier);await paint(gui.page);
     assert.equal(await search.getByRole('heading',{name:a,exact:true}).count(),1);
     assert.equal(await search.getByRole('heading',{name:b,exact:true}).count(),1);
     assert.equal(await button(search,'显示全部资料').count(),0);
     gui.check('v112ShowAllMaterialsInvalidatesHeldActualSearch',true);
-  } finally {await held.close();if(earlier)await earlier;}
+  } catch(error) {primary=error;} finally {await cleanup(primary,[()=>held.close(),()=>earlier&&observed(earlier)]);}
 }
 
 async function catalogHistory(gui) {
@@ -143,7 +161,7 @@ async function catalogHistory(gui) {
   await gui.workbench('Bots');await button(gui.page,'刷新').click();
   await gui.page.getByRole('heading',{name:created.value.name,exact:true}).waitFor();
   let original,receipt;
-  const lost=async route=>{
+  const loseReply=async route=>{
     const payload=route.request().postDataJSON()?.payload;
     if(payload?.action!=='bot.update'||payload.input.botId!==created.value.botId||original)return route.continue();
     original=payload;
@@ -152,8 +170,9 @@ async function catalogHistory(gui) {
     await route.abort('failed');
   };
   const held=await holdReply(gui,'**/api/dsh.bot/catalog');
-  await gui.page.route('**/api/dsh.bot/command',lost);
+  let lost,primary;
   try {
+    lost=await trackedRoute(gui,'**/api/dsh.bot/command',loseReply);
     await button(gui.page,'刷新').click();await held.ready();
     await gui.expand(card(gui,created.value.name),'状态管理');
     await button(card(gui,created.value.name),'暂停').click();
@@ -162,8 +181,9 @@ async function catalogHistory(gui) {
     await pending.waitFor();await held.finish();
     await pending.waitFor();assert.deepEqual(service.store.read().operations[original.operationId],receipt);
     gui.check('v112CatalogRefreshPreservesNewPendingOriginalOperation',true);
-  } finally {await held.close();await gui.page.unroute('**/api/dsh.bot/command',lost);}
+  } catch(error) {primary=error;} finally {await cleanup(primary,[()=>held.close(),()=>lost?.close()]);}
   const retained=await holdReply(gui,'**/api/dsh.bot/catalog');
+  primary=undefined;
   try {
     await button(gui.page,'刷新').click();await retained.ready();
     const pending=card(gui,'待查回的原始操作').locator('div.actions').filter({hasText:original.operationId});
@@ -176,7 +196,7 @@ async function catalogHistory(gui) {
     assert.deepEqual(cache.find(row=>row.operationId===original.operationId),original);
     assert.deepEqual(service.store.read().operations[original.operationId],receipt);
     gui.check('v112CatalogRefreshPreservesRetainedOriginalOperationHistory',true);
-  } finally {await retained.close();}
+  } catch(error) {primary=error;} finally {await cleanup(primary,[()=>retained.close()]);}
   return original.operationId;
 }
 
@@ -185,16 +205,16 @@ async function diagnostics(gui,operationId) {
   await gui.page.getByLabel('附带的原始操作（可多选）').waitFor({state:'attached'});
   const diagnostic=details(gui.page,'诊断');await gui.expand(card(gui,'原生会话管理'),'诊断');
   const selection=diagnostic.getByLabel('附带的原始操作（可多选）');await selection.selectOption([operationId]);
-  const held=await holdReply(gui,'**/api/dsh.bot/command',row=>row?.payload?.action==='diagnostics.read');let pending;
+  const held=await holdReply(gui,'**/api/dsh.bot/command',row=>row?.payload?.action==='diagnostics.read');let pending,primary;
   try {
-    pending=uiRpc(gui,'diagnostics.read',()=>button(diagnostic,'预览诊断').click());await held.ready();
+    pending=observe(uiRpc(gui,'diagnostics.read',()=>button(diagnostic,'预览诊断').click()));await held.ready();
     assert.deepEqual(held.request.payload.input.operationIds,[operationId]);
     assert.deepEqual(held.actual.value.operationIds,[operationId]);
-    await selection.selectOption([]);await held.finish();await pending;await paint(gui.page);
+    await selection.selectOption([]);await held.finish();await observed(pending);await paint(gui.page);
     assert.equal(await button(diagnostic,'复制以上诊断').count(),0);
     assert.equal(await diagnostic.locator('pre').count(),0);
     gui.check('v112ChangedDiagnosticSelectionCannotReviveHeldActualPreview',true);
-  } finally {await held.close();if(pending)await pending;}
+  } catch(error) {primary=error;} finally {await cleanup(primary,[()=>held.close(),()=>pending&&observed(pending)]);}
 }
 
 async function runningNoop(gui) {
