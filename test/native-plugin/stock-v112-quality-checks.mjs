@@ -32,20 +32,30 @@ async function command(gui,action,input) {
 
 // Intercept only the delivery of one genuine native reply, preserving its body.
 async function holdReply(gui,path,accept=()=>true) {
-  const release=deferred(),completed=deferred();let actual,request,claimed=false;
+  const release=deferred(),completed=deferred(),active=new Set(),failures=[];let actual,request,claimed=false;
+  const throwFailure=()=>{if(failures.length===1)throw failures[0];if(failures.length>1)throw new AggregateError(failures,'Held actual reply lifecycle failed');};
   const route=async route=>{
-    const envelope=route.request().postDataJSON();
-    if(claimed||!accept(envelope))return route.continue();
-    claimed=true;request=envelope;
-    const response=await route.fetch();actual=(await response.json()).result;
-    await release.promise;
-    try {await route.fulfill({response});} finally {completed.resolve();}
+    let selected=false;
+    const work=(async()=>{
+      const envelope=route.request().postDataJSON();
+      if(claimed||!accept(envelope))return route.continue();
+      selected=true;claimed=true;request=envelope;
+      const response=await route.fetch();actual=(await response.json()).result;
+      assert.ok(actual&&typeof actual==='object','Actual held RPC response must include its result');
+      await release.promise;
+      await route.fulfill({response});
+    })();
+    active.add(work);
+    // Playwright dispatches handlers without an awaitable public callback promise.
+    // Retain failures here and throw them through ready/finish/close to the runner.
+    try {await work;} catch(error) {failures.push(error);}
+    finally {active.delete(work);if(selected)completed.resolve();}
   };
   await gui.page.route(path,route);
   return {get actual(){return actual;},get request(){return request;},release:()=>release.resolve(),
-    async ready(){await waitFor(()=>actual!==undefined,'held actual installed reply');assert.equal(actual.ok,true);},
-    async finish(){release.resolve();await completed.promise;await paint(gui.page);},
-    async close(){release.resolve();await gui.page.unroute(path,route);}};
+    async ready(){await waitFor(()=>actual!==undefined||failures.length,'held actual installed reply');throwFailure();assert.equal(actual.ok,true);},
+    async finish(){assert.ok(claimed,'A genuine reply must be selected before finishing');release.resolve();await completed.promise;throwFailure();await paint(gui.page);},
+    async close(){release.resolve();while(active.size)await Promise.allSettled([...active]);await gui.page.unroute(path,route);throwFailure();}};
 }
 
 async function memoryCancel(gui) {
@@ -98,7 +108,7 @@ async function memoryCancel(gui) {
 }
 
 async function materialSearch(gui) {
-  const botId=gui.botIds[0],a='V112_MATERIAL_ALPHA',b='V112_MATERIAL_BETA';
+  const botId=gui.botIds[0],a='V112ALPHASEARCHONLY',b='V112BETASEARCHONLY';
   for(const marker of [a,b])await command(gui,'material.ingest',{botId,title:marker,text:`# ${marker}\nExact actual installed search result ${marker}`,mediaType:'text/markdown'});
   await gui.workbench('记忆');await button(gui.page,'刷新').click();await gui.page.getByLabel('所属 Bot',{exact:true}).selectOption(botId);await button(gui.page,'资料').click();
   const search=card(gui,'资料检索');
