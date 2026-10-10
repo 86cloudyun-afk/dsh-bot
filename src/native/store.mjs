@@ -7,27 +7,45 @@ export function plain(value) {return value !== null && typeof value === 'object'
 
 /** Reject non-JSON values instead of silently losing them while persisting. */
 export function canonical(value, ancestors = new Set()) {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
-  if (typeof value === 'number') {requireCondition(Number.isFinite(value) && !Object.is(value, -0), 'invalid_json'); return String(value);}
-  requireCondition(Array.isArray(value) || plain(value), 'invalid_json');
-  requireCondition(!ancestors.has(value), 'invalid_json'); ancestors.add(value);
-  let result;
-  if (Array.isArray(value)) {
-    requireCondition(Reflect.ownKeys(value).length === value.length + 1, 'invalid_json');
-    const values=[];
-    for(let index=0;index<value.length;index++) {
-      const descriptor=Object.getOwnPropertyDescriptor(value,String(index));
-      requireCondition(descriptor && 'value' in descriptor,'invalid_json');values.push(canonical(descriptor.value,ancestors));
+  const parts=[],stack=[{value}];
+  while(stack.length) {
+    const frame=stack.pop();
+    if(frame.literal!==undefined){parts.push(frame.literal);continue;}
+    if(frame.close!==undefined){parts.push(frame.close);ancestors.delete(frame.value);continue;}
+    const current=frame.value;
+    if(current===null||typeof current==='boolean'||typeof current==='string'){parts.push(JSON.stringify(current));continue;}
+    if(typeof current==='number'){requireCondition(Number.isFinite(current)&&!Object.is(current,-0),'invalid_json');parts.push(String(current));continue;}
+    const array=Array.isArray(current);requireCondition(array||plain(current),'invalid_json');
+    requireCondition(!ancestors.has(current),'invalid_json');ancestors.add(current);
+    const keys=Reflect.ownKeys(current);
+    if(array)requireCondition(keys.length===current.length+1,'invalid_json');
+    else requireCondition(keys.every(key=>typeof key==='string'),'invalid_json');
+    const ordered=array?Array.from({length:current.length},(_,index)=>String(index)):keys.sort();
+    parts.push(array?'[':'{');stack.push({close:array?']':'}',value:current});
+    for(let index=ordered.length-1;index>=0;index--) {
+      const key=ordered[index],descriptor=Object.getOwnPropertyDescriptor(current,key);
+      requireCondition(descriptor&&'value' in descriptor,'invalid_json');
+      stack.push({value:descriptor.value});
+      if(!array)stack.push({literal:`${JSON.stringify(key)}:`});
+      if(index>0)stack.push({literal:','});
     }
-    result = `[${values.join(',')}]`;
-  } else {
-    const keys = Reflect.ownKeys(value); requireCondition(keys.every(key => typeof key === 'string'), 'invalid_json');
-    result = `{${keys.sort().map(key => {const d = Object.getOwnPropertyDescriptor(value, key); requireCondition(d && 'value' in d, 'invalid_json'); return `${JSON.stringify(key)}:${canonical(d.value, ancestors)}`;}).join(',')}}`;
   }
-  ancestors.delete(value); return result;
+  return parts.join('');
 }
 export const copy = value => JSON.parse(canonical(value));
 export const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
+const nativeJsonError=(error,code='invalid_json')=>Object.assign(new Error('当前原生 JSON 存储无法编码该内容结构。',{cause:error}),{code,details:{rejectedBeforeWrite:true}});
+function nativeJsonEncodingFailure(error) {
+  if(!(error instanceof RangeError)||typeof error.stack!=='string')return false;
+  const frames=error.stack.split('\n').slice(1).map(line=>line.trim());
+  const location='\\(.*[/\\\\]@deepseek-ai[/\\\\]dsh-storage-json[/\\\\]lib[/\\\\]index\\.js:[0-9]+:[0-9]+\\)';
+  return frames[0]==='at JSON.stringify (<anonymous>)'&&new RegExp(`^at serialize ${location}$`).test(frames[1]??'')&&new RegExp(`^at SingleJsonUnit\\.publish ${location}$`).test(frames[2]??'')&&new RegExp(`^at SingleJsonUnit\\.putRecord ${location}$`).test(frames[3]??'');
+}
+/** Check the official JSON KV encoding; its deeper call stack is checked on failure too. */
+export function requireNativeJson(value,code='invalid_json') {
+  try {JSON.stringify({unit:{name:'dsh_bot_v1',version:1},global:null,tables:{state:{current:value}}},null,2);}
+  catch(error){throw nativeJsonError(error,code);}
+}
 const legacyMaps = ['bots', 'sessions', 'memories', 'grants', 'tasks', 'attempts', 'groups', 'meetings', 'operations', 'outbox'];
 const maps = [...legacyMaps, 'materials', 'schedules', 'occurrences', 'notices', 'taskInputs'];
 function fresh() {return {schema: 2, storeId: randomUUID(), revision: 0, ...Object.fromEntries(maps.map(key => [key, {}]))};}
@@ -102,11 +120,12 @@ function migrate(state) {
 }
 export class PluginStore {
   #unit; #state; #tail = Promise.resolve(); #closed = false; #broken = false; #listeners = new Set();
-  constructor(unit, state) {this.#unit = unit; this.#state = state;}
+  #kvFacet; #descriptor;
+  constructor(unit, state, {kvFacet,descriptor}={}) {this.#unit = unit; this.#state = state;this.#kvFacet=kvFacet;this.#descriptor=descriptor;}
   static async open(kvFacet,{namespace='dsh_bot_v1'}={}) {
     requireCondition(typeof namespace==='string'&&/^dsh_bot_v1(?:_[a-f0-9]{24})?$/.test(namespace),'invalid_namespace');
     requireCondition(typeof kvFacet?.open === 'function', 'storage_unavailable');
-    const unit = await kvFacet.open({name: namespace, version: 1, tables: ['state'], hasGlobal: false, layout: 'single'});
+    const descriptor={name: namespace, version: 1, tables: ['state'], hasGlobal: false, layout: 'single'},unit = await kvFacet.open(copy(descriptor));
     try {
       const data = await unit.loadAll(), table = data.tables.state;
       requireCondition(plain(table) && Object.keys(table).every(key => key === 'current') && data.global === null, 'malformed_state');
@@ -114,12 +133,28 @@ export class PluginStore {
       const persisted = existing ? copy(table.current) : null;
       requireCondition(!existing || [1,2].includes(persisted?.schema), 'unsupported_schema');
       const state = !existing ? fresh() : persisted.schema === 1 ? migrate(persisted) : validate(persisted);
-      if (!existing || persisted.schema === 1) await unit.putRecord('state', 'current', state);
-      return new PluginStore(unit, state);
-    } catch (error) {await unit.close(); throw error;}
+      if (!existing || persisted.schema === 1) {requireNativeJson(state);await unit.putRecord('state', 'current', state);}
+      return new PluginStore(unit, state,{kvFacet,descriptor});
+    } catch (error) {await unit.close(); throw nativeJsonEncodingFailure(error)?nativeJsonError(error):error;}
   }
   read({diagnostic=false}={}) {requireCondition(!this.#broken||diagnostic,'recovery_required');return copy(this.#state);}
   subscribe(listener) {this.#listeners.add(listener); return () => this.#listeners.delete(listener);}
+  async #restoreEncodingFailure(error) {
+    if(!this.#kvFacet||!nativeJsonEncodingFailure(error))return false;
+    let reopened;
+    try {
+      // rc.2 serializes before writeAtomic, but its synchronous throw leaves
+      // putRecord's cache changed. Reopen only through the public KV lifecycle.
+      await this.#unit.close();reopened=await this.#kvFacet.open(copy(this.#descriptor));
+      const data=await reopened.loadAll(),expected={global:null,tables:{state:{current:this.#state}}};
+      requireCondition(canonical(data)===canonical(expected),'recovery_required');
+      this.#unit=reopened;return true;
+    } catch(recoveryError) {
+      error.cause=recoveryError;
+      if(reopened)try{await reopened.close();}catch{/* the store remains fenced */}
+      return false;
+    }
+  }
   transact(command, mutate) {
     if (this.#closed) return Promise.reject(Object.assign(Error('插件已关闭'), {code: 'disposed'}));
     const run = async () => {
@@ -139,8 +174,9 @@ export class PluginStore {
       requireCondition(draft.storeId === this.#state.storeId, 'malformed_state');
       requireCondition(canonical(draft.migrationBackup ?? null) === canonical(this.#state.migrationBackup ?? null), 'malformed_state');
       const committed = validate(copy(draft));
+      requireNativeJson(committed);
       try {await this.#unit.putRecord('state', 'current', committed);}
-      catch (error) {this.#broken = true; throw error;}
+      catch (error) {if(await this.#restoreEncodingFailure(error))throw nativeJsonError(error);this.#broken = true; throw error;}
       const previousRevision = this.#state.revision; this.#state = committed;
       for (const listener of this.#listeners) {try {listener(committed.revision, previousRevision);} catch {/* notification cannot undo a durable commit */}}
       return copy(output);

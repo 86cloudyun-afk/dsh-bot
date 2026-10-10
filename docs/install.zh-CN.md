@@ -1,6 +1,6 @@
 # 安装 DSH Bot 原生插件
 
-插件安装在你现有的官方 DSH 内。模型凭据、工作目录、审批和原生会话沿用 DSH 配置。
+插件安装在你现有、未修改的官方 DSH 内。模型凭据、工作目录、审批和原生会话沿用 DSH 配置。
 
 ## 1. 检查宿主和安装依赖
 
@@ -23,11 +23,11 @@ dsh web
 
 ## 2. 获取并验证插件包
 
-在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.2) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/dsh-bot-1.1.2.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
+在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.3) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.3/dist/dsh-bot-1.1.3.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.3/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/dsh-bot-1.1.2.tgz
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/SHA256SUMS
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.3/dist/dsh-bot-1.1.3.tgz
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.3/dist/SHA256SUMS
 ```
 
 Linux：
@@ -42,14 +42,14 @@ macOS：
 shasum -a 256 -c SHA256SUMS
 ```
 
-应显示插件文件校验通过。Release 同时提供兼容版本、源代码身份和 [本版验收报告](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.2/docs/releases/v1.1.2-qualification.zh-CN.md)。
+应显示插件文件校验通过。Release 同时提供兼容版本、源代码身份和 [本版验收报告](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.3/docs/releases/v1.1.3-qualification.zh-CN.md)。
 
 ## 3. 安装到日常 profile
 
 以下命令使用官方 `web` profile。使用其他现有 Web profile 时，将 `web` 替换为你实际使用的名称。
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.1.2.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.1.3.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -81,7 +81,7 @@ dsh web
 4. 点击 **查看执行** 打开实际原生执行日志；需要时调整目标、接续或停止本次尝试。结果返回后用 **记录验收** 保存通过、待定或不通过及证据。
 5. 归档已结算任务或会话，再从工作台恢复，确认身份和历史保留。
 
-需要移除 Bot 时，在卡片点击 **删除 → 确认删除**。这是保留原身份的可恢复删除：原会话、记忆、任务、执行记录和操作 ID 仍保存。活动或 `UNKNOWN` 工作、未完成群／会议流程、正在回复或 inbox 中待处理的输入、outbox 中待投递或入队状态不明的结果会阻止删除；先处理或停止确切工作并等待结算，未知状态先查回。在 **Bots → 已删除的 Bot → 恢复** 后，Bot 回到暂停状态；再通过 **状态管理 → 启用** 恢复使用。
+需要移除 Bot 时，在卡片点击 **删除 → 确认删除**。这是保留原身份的可恢复删除：原会话、记忆、任务、执行记录和操作 ID 仍保存。活动或 `UNKNOWN` 工作、未完成群／会议流程、正在回复或 inbox 中待处理的输入、outbox 中待投递或入队状态不明的结果会阻止删除。重启后没有活动 Agent 的冷会话仍检查原生日志中的未结束回复和持久输入；先处理或停止确切工作并等待结算，未知状态先查回。在 **Bots → 已删除的 Bot → 恢复** 后，Bot 回到暂停状态；再通过 **状态管理 → 启用** 恢复使用。
 
 内部群、会议、持续授权和普通会话管理见 [使用手册](guide.zh-CN.md)。
 
@@ -93,12 +93,12 @@ dsh web
 
 ```bash
 dsh plugin --profile web remove dsh-bot --config.ignore-scripts=true
-dsh plugin --profile web add ./dsh-bot-1.1.2.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.1.3.tgz --ignore-scripts --strict-peer-dependencies
 ```
 
 重新启动或启用插件后，Bot ID、记忆、会话和任务读取原持久数据。卸载只移除插件依赖与入口；手动删除 DSH 存储不属于卸载步骤。
 
-从 v1.0.0、v1.0.1、v1.0.2、v1.1.0 或 v1.1.1 升级到 v1.1.2 时，请先备份原 DSH profile 并完全退出进程，再执行上述命令，启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.1.2 / 服务 1.1.2**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
+从 v1.0.0、v1.0.1、v1.0.2、v1.1.0、v1.1.1 或 v1.1.2 升级到 v1.1.3 时，请先备份原 DSH profile 并完全退出进程，再执行上述命令，启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.1.3 / 服务 1.1.3**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
 
 浏览器中已有的原始操作 ID 继续保留。在“待查回的原始操作”先点 **查回原始操作**：它只读持久回执，不执行任务，也不调用模型。找到回执后刷新原对象；没有回执时保留“未确认”。**用原 ID 接续**是单独的显式提交，并先检查原回执；已提交操作不会重复创建。不要修改原 ID 的内容或将旧操作改用于新动作。
 
@@ -131,4 +131,4 @@ dsh plugin --profile web add ./dsh-bot-1.1.2.tgz --ignore-scripts --strict-peer-
 
 从 v1.0.0／v1.0.1／v1.0.2 升级时，schema 2 在原 profile 的同一记录原子迁移，保留原始身份、回执和校验过的 schema 1 备份。旧 Bot 与旧持续授权的新增资料范围为关闭。升级后不要直接在同一份 schema 2 存储上降级旧插件；回退需使用升级前独立备份和对应旧插件包。迁移失败或未来格式不会覆盖原记录。
 
-从 v1.1.0／v1.1.1 升级到 v1.1.2 沿用 schema 2 与协议 2，不重新迁移或创建替代对象；原资料、安排、通知和已有迁移备份继续保留。
+从 v1.1.0／v1.1.1／v1.1.2 升级到 v1.1.3 沿用 schema 2 与协议 2，不重新迁移或创建替代对象；原资料、安排、通知和已有迁移备份继续保留。宿主仍为未修改的官方 DSH 0.2.0-rc.2。

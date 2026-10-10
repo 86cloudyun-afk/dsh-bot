@@ -45,9 +45,11 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind("dsh.bot"),
           listeners = new Set(),
           lifetime = new AbortController();
-        const pluginVersion = "1.1.2", clientProtocol = 2;
+        const pluginVersion = "1.1.3", clientProtocol = 2;
         let interval,
           refreshing,
+          refreshingCatalog = false,
+          readError,
           pendingLoaded = false,
           pendingStoreId;
         let state = {
@@ -77,7 +79,8 @@ window.__ModuleLoader__.load({
           retained: [],
           loading: true,
         };
-        const publish = (patch) => {
+        const publish = (patch, errorOwner) => {
+          if (Object.hasOwn(patch, "error")) readError = errorOwner;
           state = { ...state, ...patch };
           for (const listener of listeners) listener();
         };
@@ -118,7 +121,13 @@ window.__ModuleLoader__.load({
           return reply.value;
         }
         async function refresh(catalog = false) {
-          if (refreshing) return refreshing;
+          if (lifetime.signal.aborted) return;
+          if (refreshing) {
+            if (!catalog || refreshingCatalog) return refreshing;
+            await refreshing;
+            return refresh(true);
+          }
+          refreshingCatalog = catalog;
           refreshing = (async () => {
             try {
               const snapshot = await rpc("snapshot");
@@ -157,6 +166,7 @@ window.__ModuleLoader__.load({
                 });
             } finally {
               refreshing = null;
+              refreshingCatalog = false;
             }
           })();
           return refreshing;
@@ -237,8 +247,14 @@ window.__ModuleLoader__.load({
           }
         }
         async function query(action, input = {}, isActive = () => true) {
-          try { return await rpc("command", {action, input}); }
-          catch (error) { if (!lifetime.signal.aborted && isActive()) publish({error: `${error.code ?? "connection"}：${error.message}`}); }
+          const previousError = readError;
+          try {
+            const value = await rpc("command", {action, input});
+            if (!lifetime.signal.aborted && isActive() && previousError?.action === action && readError === previousError)
+              publish({error:""});
+            return value;
+          }
+          catch (error) { if (!lifetime.signal.aborted && isActive()) publish({error: `${error.code ?? "connection"}：${error.message}`}, {action}); }
         }
         function downloadText(text, name, type = "text/plain;charset=utf-8") {
           const url = URL.createObjectURL(new Blob([text], {type})), link = document.createElement("a");
@@ -776,7 +792,7 @@ window.__ModuleLoader__.load({
             const selectedKind=data.get("ruleKind"),rule={kind:selectedKind,timezone:data.get("timezone")};
             if(selectedKind==="interval"){if(!/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(data.get("anchorAt")))throw Error("首次时间需要包含时区偏移或 Z。");rule.anchorAt=new Date(data.get("anchorAt")).toISOString();rule.everyMinutes=Number(data.get("everyMinutes"));}
             else {rule.time=data.get("time");if(selectedKind==="once")rule.date=data.get("date");else if(data.get("startDate"))rule.startDate=data.get("startDate");if(selectedKind==="weekly")rule.weekdays=data.getAll("weekdays").map(Number);}
-            const ownerBotId=data.get("ownerBotId"),input={ownerBotId,kind:data.get("kind"),rule,enabled:data.get("enabled")==="on",missedPolicy:data.get("missedPolicy")};
+            const ownerBotId=base?.ownerBotId??data.get("ownerBotId"),input={ownerBotId,kind:data.get("kind"),rule,enabled:data.get("enabled")==="on",missedPolicy:data.get("missedPolicy")};
             if(input.kind==="reminder")input.message=data.get("message");
             else input.recipe={botId:ownerBotId,title:data.get("title"),goal:data.get("goal"),criteria:String(data.get("criteria")??"").split("\n").filter(Boolean),dependsOn:data.getAll("dependsOn"),...(data.get("originSessionId")?{originSessionId:data.get("originSessionId")}:{})};
             const saved=await command(base?"schedule.update":"schedule.create",{...input,...(base?{scheduleId:base.scheduleId,expectedVersion:base.version}:{})});
@@ -785,7 +801,7 @@ window.__ModuleLoader__.load({
           return h("div",null,
             latestSchedule&&latestSchedule.version!==base.version&&h("div",null,h("p",{role:"status"},"定时安排已更新。草稿保留，保存将检查原版本。"),button("重新载入最新安排",()=>{setBase(latestSchedule);setKind(latestSchedule.kind);setRuleKind(latestSchedule.rule.kind);setOwner(latestSchedule.ownerBotId);setEpoch(n=>n+1);})),
             h("div",{key:epoch},form(base?"重新确认并保存安排":"确认创建安排",data=>{submit(data).catch(error=>publish({error:error.message}));},
-              field("负责 Bot","ownerBotId",{value:owner,options:botsOptions(),onChange:event=>setOwner(event.target.value)}),
+              field("负责 Bot","ownerBotId",{value:owner,options:botsOptions(),disabled:!!base,onChange:event=>setOwner(event.target.value)}),
               kind==="task"&&h("p",{className:"muted"},`执行模型：${view.snapshot.bots.find(bot=>bot.botId===owner)?.execution?.model??"当前不可用"}`),
               field("安排类型","kind",{value:kind,options:[{value:"reminder",label:"提醒（不启动任务）"},{value:"task",label:"定时任务"}],onChange:event=>setKind(event.target.value)}),
               kind==="reminder"?field("提醒内容","message",{value:base?.message,textarea:true,maxLength:4000}):h("div",null,field("任务标题","title",{value:base?.recipe?.title,maxLength:200}),field("目标","goal",{value:base?.recipe?.goal,textarea:true,maxLength:16000}),field("验收条件（每行一项）","criteria",{value:base?.recipe?.criteria?.join("\n"),textarea:true,required:false}),advanced("前置任务与结果接收",field("前置任务（可多选）","dependsOn",{value:base?.recipe?.dependsOn??[],multiple:true,required:false,options:view.snapshot.tasks.map(row=>({value:row.taskId,label:row.title}))}),field("结果接收会话","originSessionId",{value:base?.recipe?.originSessionId??"",required:true,options:[{value:"",label:"请选择接收会话"},...view.snapshot.sessions.filter(row=>row.purpose==="contact"&&row.state==="ready"&&!row.archived).map(row=>({value:row.sessionId,label:`${view.snapshot.bots.find(bot=>bot.botId===row.botId)?.name??"Bot"} · ${row.name??row.sessionId.slice(0,8)}`}))]}))),
@@ -1033,7 +1049,7 @@ window.__ModuleLoader__.load({
             ),
             h("div",{key:formEpoch},form("保存共享上限",async data=>{
               const saved=await command("share.set",{botId:bot.botId,expectedVersion:bot.revision,share:{
-                enabled:data.get("enabled")==="on",receivers:data.getAll("receiver"),
+                enabled:data.get("enabled")==="on",receivers:receivers??bot.share.receivers,
                 scope:Object.fromEntries(["sessions","tasks","memories","materials"].map(key=>[key,data.get(key)==="on"?["*"]:[]])),
               }});
               if(saved){setBase({...bot,share:saved,revision:bot.revision+1});setReceivers(null);setFormEpoch(epoch=>epoch+1);}return saved;

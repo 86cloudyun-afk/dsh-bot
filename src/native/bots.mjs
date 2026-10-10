@@ -5,6 +5,7 @@ import {defaultShare} from './policy.mjs';
 export class BotDirectory {
   #validatedConfigs = new WeakMap();
   #memory;
+  #deletions = new Map();
   constructor(store,policy,adapter) {
     this.store=store;this.policy=policy;this.adapter=adapter;
     adapter.setContextProvider((agent,binding)=>this.context(policy.fromAgent(agent),binding,{maxChars:12000}));
@@ -103,11 +104,12 @@ export class BotDirectory {
         (!resources.known||resources.settled),
         'bot_contact_active','Bot 仍有原生回复、待处理输入或活动资源；请先完成或停止回复并处理队列。');
     }
+    return sessionIds;
   }
   #deletionPreconditions(check) {
     try {return check();}
     catch(error) {
-      if(['invalid_input','not_found','revision_conflict','bot_deleted','bot_not_deleted','bot_tasks_unsettled','bot_delivery_pending','bot_contact_unsettled','bot_contact_active'].includes(error.code))
+      if(['invalid_input','not_found','revision_conflict','bot_deleted','bot_not_deleted','bot_tasks_unsettled','bot_delivery_pending','bot_contact_unsettled','bot_contact_active','bot_deletion_pending','operation_pending'].includes(error.code))
         error.details={...error.details,rejectedBeforeWrite:true};
       throw error;
     }
@@ -117,22 +119,62 @@ export class BotDirectory {
     this.#deletionPreconditions(()=>requireCondition(plain(input)&&Object.keys(input).every(key=>['botId','expectedVersion'].includes(key))&&
       validId(input.botId)&&Number.isSafeInteger(input.expectedVersion)&&input.expectedVersion>=1,'invalid_input'));
     this.policy.require(actor,action,{kind:'bot',id:input.botId});
-    let releaseFence;
-    try {return await this.store.transact(this.policy.command(actor,command),draft=>{
-      const bot=this.#deletionPreconditions(()=>{
-        this.policy.require(actor,action,{kind:'bot',id:input.botId},draft);
-        const bot=draft.bots[input.botId];requireCondition(bot,'not_found');
-        requireCondition(input.expectedVersion===bot.revision,'revision_conflict');
-        requireCondition(value?!bot.deletedAt:!!bot.deletedAt,value?'bot_deleted':'bot_not_deleted');
-        if(value)this.#requireDeletionSettled(bot.botId,draft);
-        return bot;
-      });
+    const stamped=this.policy.command(actor,command);
+    if(Object.hasOwn(this.store.read().operations,command.operationId))return this.store.transact(stamped,()=>null);
+    const pending=this.#deletions.get(command.operationId),fingerprint=digest(stamped);
+    if(pending) {requireCondition(pending.fingerprint===fingerprint,'operation_conflict');return pending.promise;}
+    const promise=this.#commitDeleted(actor,command,value,stamped);
+    this.#deletions.set(command.operationId,{fingerprint,promise});
+    try{return await promise;}finally{this.#deletions.delete(command.operationId);}
+  }
+  async #commitDeleted(actor,command,value,stamped) {
+    const input=command.input,action=value?'bot.delete':'bot.restore';
+    let releaseFence;const releaseSessions=[],observed=new Map();
+    try {
       if(value) {
-        releaseFence=this.adapter.fenceBotAdmissions(bot.botId);
-        bot.deletedAt=new Date().toISOString();bot.lifecycle='archived';
-      }else {delete bot.deletedAt;bot.lifecycle='paused';}
-      bot.revision++;bot.epoch++;return bot;
-    });}finally{releaseFence?.();}
+        const state=this.store.read(),sessionIds=this.#deletionPreconditions(()=>{
+          this.policy.require(actor,action,{kind:'bot',id:input.botId},state);
+          const bot=state.bots[input.botId];requireCondition(bot,'not_found');
+          requireCondition(input.expectedVersion===bot.revision,'revision_conflict');
+          requireCondition(!bot.deletedAt,'bot_deleted');
+          return this.#requireDeletionSettled(bot.botId,state);
+        });
+        releaseFence=this.#deletionPreconditions(()=>this.adapter.fenceBotAdmissions(input.botId));
+        for(const sessionId of sessionIds)
+          releaseSessions.push(this.#deletionPreconditions(()=>this.adapter.fenceSessionAdmissions(sessionId)));
+        for(const sessionId of sessionIds) {
+          let native;
+          try {native=await this.adapter.inspectSession(sessionId);}
+          catch(error) {throw Object.assign(new Error('Bot 的原生日志无法确认已结算。',{cause:error}),{code:'bot_contact_unsettled',details:{rejectedBeforeWrite:true}});}
+          this.#deletionPreconditions(()=>requireCondition(native.openTurn===null&&!native.inbox['next-turn'].length&&!native.inbox['next-step'].length,
+            'bot_contact_active','Bot 的原生日志仍有未结束回复或待处理输入；请先查回确切会话。'));
+          observed.set(sessionId,{binding:state.sessions[sessionId]?digest(state.sessions[sessionId]):null,
+            agent:this.adapter.context.agents.get(sessionId),seq:native.events.at(-1)?.seq??-1});
+        }
+      }
+      return await this.store.transact(stamped,draft=>{
+        const bot=this.#deletionPreconditions(()=>{
+          this.policy.require(actor,action,{kind:'bot',id:input.botId},draft);
+          const bot=draft.bots[input.botId];requireCondition(bot,'not_found');
+          requireCondition(input.expectedVersion===bot.revision,'revision_conflict');
+          requireCondition(value?!bot.deletedAt:!!bot.deletedAt,value?'bot_deleted':'bot_not_deleted');
+          if(value) {
+            const sessionIds=this.#requireDeletionSettled(bot.botId,draft);
+            requireCondition(sessionIds.size===observed.size&&[...sessionIds].every(sessionId=>{
+              const evidence=observed.get(sessionId),binding=draft.sessions[sessionId],agent=this.adapter.context.agents.get(sessionId),
+                native=this.adapter.context.sessions.get(sessionId);
+              return evidence&&(binding?digest(binding):null)===evidence.binding&&agent===evidence.agent&&
+                (!native||native.seq-1===evidence.seq);
+            }),'revision_conflict');
+          }
+          return bot;
+        });
+        if(value) {
+          bot.deletedAt=new Date().toISOString();bot.lifecycle='archived';
+        }else {delete bot.deletedAt;bot.lifecycle='paused';}
+        bot.revision++;bot.epoch++;return bot;
+      });
+    }finally{for(const release of releaseSessions.reverse())release();releaseFence?.();}
   }
   delete(actor,command) {return this.#setDeleted(actor,command,true);}
   restore(actor,command) {return this.#setDeleted(actor,command,false);}

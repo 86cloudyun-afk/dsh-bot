@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { brokerFixture } from "./broker-fixture.mjs";
 import { deferred, eventually, textChunks } from "./official-fixture.mjs";
 
@@ -289,16 +288,10 @@ test("review: revoked derived reads fence ordinary result publication", async (t
   await f.ctx.sessions.flush(ordinary.agent.session);
   let delivered = 0;
   f.ctx.provide("sessionController", {
-    async prompt(request) {
+    async resolveAgent(sessionId) {
+      assert.equal(sessionId, ordinary.agent.id);
       delivered++;
-      ordinary.agent.followup(
-        createUserMessage({
-          content: request.content,
-          source: { kind: "user", rpcId: request.requestId },
-        }),
-      );
-      await f.ctx.sessions.flush(ordinary.agent.session);
-      return { accepted: true };
+      return { agent: ordinary.agent };
     },
   });
   await f.policy.authorizeShare(f.human, {
