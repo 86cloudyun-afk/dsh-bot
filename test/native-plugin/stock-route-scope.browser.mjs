@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
 import {createServer} from 'node:http';
-import {after,before,test} from 'node:test';
+import {after,before,beforeEach,test} from 'node:test';
 import {chromium} from 'playwright-core';
 import {createTrackedRoute,withTrackedRoute} from './stock-route-scope.mjs';
 
-const deferred=()=>{
-  let resolve;
-  const promise=new Promise(done=>{resolve=done;});
+const deferred=signal=>{
+  let finish;
+  const promise=new Promise(done=>{finish=done;});
+  const resolve=value=>{signal?.removeEventListener('abort',resolve);finish(value);};
+  signal?.addEventListener('abort',resolve,{once:true});
+  if(signal?.aborted)resolve();
   return {promise,resolve};
 };
 const observed=promise=>promise.then(value=>({value}),error=>({error}));
@@ -33,15 +36,92 @@ after(async()=>{
   await browser?.close();
   if(server)await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
 });
-const fixture=async()=>{
-  const context=await browser.newContext(),page=await context.newPage();
-  await page.goto(origin);
-  return {context,page};
+const fixtures=new Map();
+// Renderer creation and navigation have their own bounded setup budget. They
+// must not consume the shorter deadline used to verify held route behavior.
+beforeEach(async t=>{
+  const allocation=observed(browser.newContext());
+  let closing,invalidated=false;
+  const close=()=>closing??=(async()=>{
+    const allocated=await allocation;
+    if(allocated.error)return {};
+    return observed(allocated.value.close());
+  })();
+  const abort=()=>{invalidated=true;void close();};
+  t.signal.addEventListener('abort',abort,{once:true});
+  // Register ownership before awaiting allocation: a cancelled test does not
+  // immediately enter its async body's finally block.
+  t.after(async()=>{
+    invalidated=true;
+    t.signal.removeEventListener('abort',abort);
+    fixtures.delete(t.name);
+    const outcome=await close();
+    if(outcome.error)throw outcome.error;
+  },{timeout:30000});
+  try {
+    const allocated=await allocation;
+    if(allocated.error)throw allocated.error;
+    const context=allocated.value;
+    t.signal.throwIfAborted();
+    if(invalidated)throw new Error('Browser fixture setup expired before context allocation');
+    const page=await context.newPage();
+    await page.goto(origin);
+    t.signal.throwIfAborted();
+    if(invalidated)throw new Error('Browser fixture setup expired before navigation completed');
+    fixtures.set(t.name,{context,page});
+  } catch(error) {
+    const outcome=await close();
+    if(outcome.error && outcome.error!==error)throw new AggregateError([error,outcome.error],'Browser fixture failed',{cause:error});
+    throw error;
+  }
+},{timeout:30000});
+const ownCleanup=(t,cleanup)=>{
+  let closing,primary;
+  const close=error=>{
+    if(error!==undefined)primary??=error;
+    return closing??=(async()=>{
+      try {await cleanup();}
+      catch(error) {
+        if(primary && primary!==error)throw new AggregateError([primary,error],'Route fixture and cleanup failed',{cause:primary});
+        throw error;
+      }
+    })();
+  };
+  t.after(()=>close(),{timeout:10000});
+  return close;
+};
+const settleCleanup=async(context,...work)=>{
+  const outcomes=await Promise.allSettled(work);
+  const closed=await observed(context.close());
+  if(closed.error)outcomes.push({status:'rejected',reason:closed.error});
+  const errors=outcomes.filter(outcome=>outcome.status==='rejected').map(outcome=>outcome.reason);
+  if(errors.length===1)throw errors[0];
+  if(errors.length)throw new AggregateError(errors,'Route fixture cleanup failed',{cause:errors[0]});
+};
+const waitReady=async(ready,request,scope,signal)=>{
+  const first=await Promise.race([
+    ready.promise.then(()=>({ready:true})),
+    request.then(outcome=>({outcome})),
+  ]);
+  signal.throwIfAborted();
+  if(first.outcome) {
+    // The real request can fail before the callback reaches its held gate.
+    // Surface the original tracked callback failure instead of waiting forever
+    // for a ready notification that will never arrive.
+    await scope.drain();scope.throwFailure();
+    if(first.outcome.error)throw first.outcome.error;
+    throw new Error('Controlled request settled before its ready gate');
+  }
 };
 
-test('close drains a held genuine reply before reload and passes new requests through', {timeout:10000},async()=>{
-  const {context,page}=await fixture(),ready=deferred(),release=deferred();
+test('close drains a held genuine reply before reload and passes new requests through', {timeout:10000},async t=>{
+  const {context,page}=fixtures.get(t.name),ready=deferred(t.signal),release=deferred(t.signal);
   let calls=0,scope,closing,request;
+  const cleanup=ownCleanup(t,async()=>{
+    release.resolve();
+    const routeClose=closing?closing.then(outcome=>{if(outcome.error)throw outcome.error;}):scope?.close();
+    await settleCleanup(context,routeClose,request);
+  });
   try {
     scope=await createTrackedRoute(page,'**/snapshot*',async route=>{
       calls++;
@@ -52,7 +132,7 @@ test('close drains a held genuine reply before reload and passes new requests th
       await route.fulfill({response,json:body});
     });
     request=observed(page.evaluate(()=>fetch('/snapshot?held').then(response=>response.json())));
-    await ready.promise;
+    await waitReady(ready,request,scope,t.signal);
     let closed=false;
     closing=observed(scope.close().then(()=>{closed=true;}));
     const during=await page.evaluate(()=>fetch('/snapshot?closing').then(response=>response.json()));
@@ -69,18 +149,16 @@ test('close drains a held genuine reply before reload and passes new requests th
     const after=await page.evaluate(()=>fetch('/snapshot?after').then(response=>response.json()));
     assert.equal(after.result.value.clientProtocol,2);
     assert.equal(calls,1);
-  } finally {
-    release.resolve();
-    if(closing)await closing;
-    else if(scope)await scope.close();
-    if(request)await request;
-    await context.close();
-  }
+  } catch(error) {await cleanup(error);throw error;} finally {await cleanup();}
 });
 
-test('a late reply failure after premature unroute and reload is retained by awaited close', {timeout:10000},async()=>{
-  const {context,page}=await fixture(),ready=deferred(),release=deferred();
+test('a late reply failure after premature unroute and reload is retained by awaited close', {timeout:10000},async t=>{
+  const {context,page}=fixtures.get(t.name),ready=deferred(t.signal),release=deferred(t.signal);
   let scope,request,original;
+  const cleanup=ownCleanup(t,async()=>{
+    release.resolve();
+    await settleCleanup(context,scope?observed(scope.close()):undefined,request);
+  });
   try {
     scope=await createTrackedRoute(page,'**/snapshot*',async route=>{
       const response=await route.fetch();ready.resolve();await release.promise;
@@ -88,7 +166,7 @@ test('a late reply failure after premature unroute and reload is retained by awa
       catch(error) {original=error;throw error;}
     });
     request=observed(page.evaluate(()=>fetch('/snapshot?held').then(response=>response.json())));
-    await ready.promise;
+    await waitReady(ready,request,scope,t.signal);
     await page.unroute('**/snapshot*');
     await page.reload({waitUntil:'domcontentloaded'});
     release.resolve();
@@ -102,19 +180,17 @@ test('a late reply failure after premature unroute and reload is retained by awa
     const again=await observed(scope.close());
     assert.equal(again.error.cause,original);
     assert.deepEqual(again.error.errors,outcome.error.errors);
-  } finally {
-    release.resolve();
-    if(scope)await observed(scope.close());
-    if(request)await request;
-    await context.close();
-  }
+  } catch(error) {await cleanup(error);throw error;} finally {await cleanup();}
 });
 
-test('an early callback assertion actually fails the request and preserves the original error', {timeout:10000},async()=>{
-  const {context,page}=await fixture(),entered=deferred(),failed=deferred();
+test('an early callback assertion actually fails the request and preserves the original error', {timeout:10000},async t=>{
+  const {context,page}=fixtures.get(t.name),entered=deferred(t.signal),failed=deferred(t.signal);
   const before=deliveries.get('/early')??0;
   const original=new assert.AssertionError({message:'controlled early native reply assertion',actual:false,expected:true});
   let scope,request;
+  const cleanup=ownCleanup(t,async()=>{
+    await settleCleanup(context,scope?observed(scope.close()):undefined,request);
+  });
   try {
     page.on('requestfailed',request=>{if(request.url().endsWith('/early'))failed.resolve(request.failure());});
     scope=await createTrackedRoute(page,'**/early',async route=>{
@@ -122,7 +198,7 @@ test('an early callback assertion actually fails the request and preserves the o
       entered.resolve();throw original;
     });
     request=observed(page.evaluate(()=>fetch('/early').then(response=>response.json())));
-    await entered.promise;
+    await waitReady(entered,request,scope,t.signal);
     await scope.drain();
     assert.deepEqual(scope.failures,[original]);
     assert.throws(()=>scope.throwFailure(),error=>error===original);
@@ -134,81 +210,84 @@ test('an early callback assertion actually fails the request and preserves the o
     assert.equal((await observed(scope.close())).error,original);
     const next=await page.evaluate(()=>fetch('/early').then(response=>response.json()));
     assert.equal(next.result.ok,true,'cleanup must remove the failed callback');
-  } finally {
-    if(scope)await observed(scope.close());
-    if(request)await request;
-    await context.close();
-  }
+  } catch(error) {await cleanup(error);throw error;} finally {await cleanup();}
 });
 
-test('callback and UI errors are both retained without aborting an already fulfilled request', {timeout:10000},async()=>{
-  const {context,page}=await fixture(),completed=deferred();
+test('callback and UI errors are both retained without aborting an already fulfilled request', {timeout:10000},async t=>{
+  const {context,page}=fixtures.get(t.name),completed=deferred(t.signal);
   const callbackError=new assert.AssertionError({message:'controlled reply assertion',actual:1,expected:2});
   const uiError=new Error('original controlled UI failure');
+  let work;
+  const cleanup=ownCleanup(t,async()=>{await settleCleanup(context,work);});
   try {
-    const outcome=await observed(withTrackedRoute(page,'**/snapshot',async route=>{
+    work=observed(withTrackedRoute(page,'**/snapshot',async route=>{
       const response=await route.fetch();await route.fulfill({response});
       completed.resolve();throw callbackError;
     },async()=>{
       const response=await page.evaluate(()=>fetch('/snapshot').then(response=>response.json()));
       assert.equal(response.result.ok,true);
-      await completed.promise;
+      await completed.promise;t.signal.throwIfAborted();
       throw uiError;
     }));
+    const outcome=await work;
     assert.ok(outcome.error instanceof AggregateError);
     assert.deepEqual(outcome.error.errors,[callbackError,uiError]);
     assert.equal(outcome.error.cause,callbackError);
     const next=await page.evaluate(()=>fetch('/snapshot').then(response=>response.json()));
     assert.equal(next.result.value.clientProtocol,2);
-  } finally {await context.close();}
+  } catch(error) {await cleanup(error);throw error;} finally {await cleanup();}
 });
 
-test('exceptional UI cleanup waits for a held reply before preserving the UI failure', {timeout:10000},async()=>{
-  const {context,page}=await fixture(),ready=deferred(),release=deferred(),uiFailed=deferred();
+test('exceptional UI cleanup waits for a held reply before preserving the UI failure', {timeout:10000},async t=>{
+  const {context,page}=fixtures.get(t.name),ready=deferred(t.signal),release=deferred(t.signal),uiFailed=deferred(t.signal);
   const original=new Error('controlled interrupted UI work');
   let work,request;
+  const cleanup=ownCleanup(t,async()=>{
+    release.resolve();
+    await settleCleanup(context,work,request);
+  });
   try {
     work=observed(withTrackedRoute(page,'**/snapshot*',async route=>{
       const response=await route.fetch();ready.resolve();await release.promise;
       await route.fulfill({response});
     },async()=>{
       request=observed(page.evaluate(()=>fetch('/snapshot?held').then(response=>response.json())));
-      await ready.promise;uiFailed.resolve();throw original;
+      const first=await Promise.race([ready.promise.then(()=>({ready:true})),request.then(outcome=>({outcome}))]);
+      t.signal.throwIfAborted();
+      if(first.outcome?.error)throw first.outcome.error;
+      if(first.outcome)throw new Error('Controlled request settled before its ready gate');
+      uiFailed.resolve();throw original;
     }));
-    await uiFailed.promise;
+    const early=await Promise.race([uiFailed.promise.then(()=>({ready:true})),work.then(outcome=>({outcome}))]);
+    t.signal.throwIfAborted();
+    if(early.outcome)throw early.outcome.error??new Error('Controlled UI work settled before its gate');
     const during=await page.evaluate(()=>fetch('/snapshot?closing').then(response=>response.json()));
     assert.equal(during.result.ok,true);
     release.resolve();
     assert.equal((await work).error,original);
     assert.equal((await request).error,undefined);
     await page.reload({waitUntil:'domcontentloaded'});
-  } finally {
-    release.resolve();
-    if(work)await work;
-    if(request)await request;
-    await context.close();
-  }
+  } catch(error) {await cleanup(error);throw error;} finally {await cleanup();}
 });
 
-test('close reports a closed-page unregister failure through its awaited result', {timeout:10000},async()=>{
-  const {context,page}=await fixture(),ready=deferred(),release=deferred();
+test('close reports a closed-page unregister failure through its awaited result', {timeout:10000},async t=>{
+  const {context,page}=fixtures.get(t.name),ready=deferred(t.signal),release=deferred(t.signal);
   let scope,request;
+  const cleanup=ownCleanup(t,async()=>{
+    release.resolve();
+    await settleCleanup(context,scope?observed(scope.close()):undefined,request);
+  });
   try {
     scope=await createTrackedRoute(page,'**/snapshot',async route=>{
       const response=await route.fetch();ready.resolve();await release.promise;
       await route.fulfill({response});
     });
     request=observed(page.evaluate(()=>fetch('/snapshot').then(response=>response.json())));
-    await ready.promise;await page.close();release.resolve();
+    await waitReady(ready,request,scope,t.signal);await page.close();release.resolve();
     const outcome=await observed(scope.close());
     assert.ok(outcome.error instanceof Error);
     assert.match(outcome.error.message,/page\.unroute: Target page, context or browser has been closed/);
     assert.equal((await observed(scope.close())).error,outcome.error);
     assert.ok((await request).error);
-  } finally {
-    release.resolve();
-    if(scope)await observed(scope.close());
-    if(request)await request;
-    await context.close();
-  }
+  } catch(error) {await cleanup(error);throw error;} finally {await cleanup();}
 });
