@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { taskFixture } from "./task-fixture.mjs";
 import { brokerFixture } from "./broker-fixture.mjs";
 import { deferred, eventually, textChunks } from "./official-fixture.mjs";
@@ -67,20 +66,13 @@ test("review: results reach the original ordinary session", async (t) => {
   });
   t.after(() => ordinary.dispose());
   await f.ctx.sessions.flush(ordinary.agent.session);
-  // Controller facade exercises original native inbox delivery; stock GUI tests use the real controller.
+  // Resolver facade; native inbox, attachment admission and bindings remain real.
   let delivered = 0;
   f.ctx.provide("sessionController", {
-    async prompt(request, signal) {
-      signal.throwIfAborted();
+    async resolveAgent(sessionId) {
+      assert.equal(sessionId, ordinary.agent.id);
       delivered++;
-      ordinary.agent.followup(
-        createUserMessage({
-          content: request.content,
-          source: { kind: "user", rpcId: request.requestId },
-        }),
-      );
-      await f.ctx.sessions.flush(ordinary.agent.session);
-      return { accepted: true };
+      return { agent: ordinary.agent };
     },
   });
   const task = await f.tasks.create(f.human, {

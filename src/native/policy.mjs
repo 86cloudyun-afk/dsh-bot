@@ -239,7 +239,8 @@ export class PermissionPolicy {
     this.#checkActor(actor, this.#store.read());
     if (actor.kind === "schedule") return copy(this.#schedule(actor.occurrenceId,this.#store.read()).origins ?? []);
     return actor.kind === "bot"
-      ? [...(this.#reads.get(actor.agent)?.values() ?? [])].map(copy)
+      ? [...(this.#reads.get(actor.agent)?.values() ?? [])]
+        .filter(reference=>reference.kind!=='session'||reference.id!==actor.sessionId).map(copy)
       : [];
   }
   canReadDerived(actor, record, state = this.#store.read()) {
@@ -306,18 +307,18 @@ export class PermissionPolicy {
           : (record?.botId ?? record?.ownerBotId ?? null),
     };
   }
-  #visible(actor, resource, state, seen = new Set(), sourcePath = new Set()) {
+  #visible(actor, resource, state, seen = new Set(), sourcePath = new Set(), checked = new Map()) {
     if (actor.kind === "human") return true;
     const record = resource.record,
       binding = actor.kind === 'bot' ? state.sessions[actor.sessionId] : null;
     if (record?.inactive === true) return false;
     if (resource.kind === 'taskInput') {
       const sessionId=record?.attemptSessionId ?? record?.sessionId;
-      if (sessionId && !this.#readAllowed(actor,{kind:'session',id:sessionId},state,seen,sourcePath)) return false;
-      for (const artifact of [record?.result,record?.report,record?.acceptanceEvidence].filter(Boolean)) if (!this.#visible(actor,{kind:'memory',id:'input-artifact',record:artifact,botId:resource.botId},state,seen,sourcePath)) return false;
+      if (sessionId && !this.#readAllowed(actor,{kind:'session',id:sessionId},state,seen,sourcePath,false,checked)) return false;
+      for (const artifact of [record?.result,record?.report,record?.acceptanceEvidence].filter(Boolean)) if (!this.#visible(actor,{kind:'memory',id:'input-artifact',record:artifact,botId:resource.botId},state,seen,sourcePath,checked)) return false;
     }
     for (const origin of record?.origins ?? []) {
-      if (!this.#readAllowed(actor, origin, state, seen, sourcePath)) return false;
+      if (!this.#readAllowed(actor, origin, state, seen, sourcePath,true,checked)) return false;
     }
     const sources = [
       record?.lineage,
@@ -328,8 +329,8 @@ export class PermissionPolicy {
       if (source.sessionId && state.sessions[source.sessionId]?.lineage)
         sources.push(state.sessions[source.sessionId].lineage);
     for (const source of sources.filter(Boolean)) {
-      if (source.kind === 'material' && source.docId && !this.#readAllowed(actor,{kind:'material',id:source.docId},state,seen,sourcePath)) return false;
-      if (source.sessionId && state.sessions[source.sessionId] && !(resource.kind === 'session' && resource.id === source.sessionId) && !this.#sourceSessionReadable(actor,source.sessionId,state,seen,sourcePath)) return false;
+      if (source.kind === 'material' && source.docId && !this.#readAllowed(actor,{kind:'material',id:source.docId},state,seen,sourcePath,false,checked)) return false;
+      if (source.sessionId && state.sessions[source.sessionId] && !(resource.kind === 'session' && resource.id === source.sessionId) && !this.#sourceSessionReadable(actor,source.sessionId,state,seen,sourcePath,checked)) return false;
     }
     for (const lineage of sources.filter(Boolean)) {
       if (!lineage.meetingId || lineage.phase !== "independent") continue;
@@ -374,7 +375,7 @@ export class PermissionPolicy {
       );
     return true;
   }
-  #sourceSessionReadable(actor,sessionId,state,seen,sourcePath) {
+  #sourceSessionReadable(actor,sessionId,state,seen,sourcePath,checked) {
     if(sourcePath.size >= 32) return false;
     if(sourcePath.has(sessionId)) {
       // A context task may point back to this already checked source session.
@@ -394,7 +395,7 @@ export class PermissionPolicy {
     // A source session may itself have consumed this task. Its already visited
     // origins were checked on entry; preserve every other origin and barrier.
     const record={...resource.record,origins:(resource.record?.origins ?? []).filter(ref=>!seen.has(canonical(ref)))};
-    if (!this.#visible(actor,{...resource,record},state,next,nextSources)) return false;
+    if (!this.#visible(actor,{...resource,record},state,next,nextSources,checked)) return false;
     return resource.botId === actor.botId || (resource.botId ? this.#shareAllowed(actor,resource,state) : this.#grant(actor,resource,state,'read'));
   }
   #shareAllowed(actor, resource, state) {
@@ -423,23 +424,26 @@ export class PermissionPolicy {
       return false;
     }
   }
-  #readAllowed(actor, reference, state, seen, sourcePath = new Set()) {
+  #readAllowed(actor, reference, state, seen, sourcePath = new Set(), originEdge = false, checked = new Map()) {
     const key = canonical(reference);
-    if (seen.has(key) || seen.size >= 32) return false;
+    // Contexts can consume one another through normal readonly queries. Closing
+    // an origin backedge is safe only because its outer visit still checks that
+    // resource's ACL and every source/meeting barrier. Source links retain their
+    // separate fail-closed lineage traversal; they cannot use this shortcut.
+    if (seen.has(key)) return originEdge;
+    if (checked.has(key)) return checked.get(key);
+    if (seen.size >= 32) return false;
     const next = new Set(seen);
     next.add(key);
     const resource = this.resolve(reference, state);
-    if (!this.#visible(actor, resource, state, next, sourcePath)) return false;
-    if (actor.kind === "human") return true;
-    if (
-      resource.kind === "group" ||
-      resource.kind === "meeting" ||
-      resource.kind === "bot"
-    )
-      return !!resource.record;
-    if (resource.botId === actor.botId) return true;
-    if (!resource.botId) return this.#grant(actor, resource, state, "read");
-    return this.#shareAllowed(actor, resource, state);
+    let allowed=this.#visible(actor, resource, state, next, sourcePath,checked);
+    if (allowed && actor.kind !== "human") {
+      if (["group","meeting","bot"].includes(resource.kind)) allowed=!!resource.record;
+      else if (resource.botId !== actor.botId)
+        allowed=resource.botId ? this.#shareAllowed(actor,resource,state) : this.#grant(actor,resource,state,"read");
+    }
+    checked.set(key,allowed);
+    return allowed;
   }
   require(actor, action, reference, state = this.#store.read()) {
     this.#checkActor(actor, state);
