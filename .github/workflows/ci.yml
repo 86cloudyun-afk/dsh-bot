@@ -52,8 +52,10 @@ jobs:
           version: '11.19.0'
       - run: npm ci --ignore-scripts
       - run: node node_modules/playwright-core/cli.js install --with-deps chromium
-      - name: Verify awaited browser route lifecycles
-        run: node --test test/native-plugin/stock-route-scope.browser.mjs
+      - name: Verify awaited browser route and RPC lifecycles
+        run: node --test test/native-plugin/stock-route-scope.browser.mjs test/native-plugin/stock-v111-rpc-lifecycle.browser.mjs
+      - name: Verify official SDK exits in both upgrade process entry points
+        run: node --test test/native-plugin/stock-upgrade-fatal.sdk.mjs
       - uses: actions/download-artifact@v4
         with:
           name: native-plugin-package

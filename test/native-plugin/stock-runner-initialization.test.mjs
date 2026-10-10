@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {spawnSync} from 'node:child_process';
+
+for(const runner of ['gui','upgrade'])test(`actual ${runner} runner retains its current sanitized initialization failure at nonzero exit`,async t=>{
+  const evidence=await mkdtemp(join(tmpdir(),'dsh-current-runner-init-'));
+  t.after(()=>rm(evidence,{recursive:true,force:true}));
+  const observer=join(evidence,'snapshot-before-exit.mjs');
+  await writeFile(observer,`import {readFileSync,writeFileSync} from 'node:fs';import {join} from 'node:path';
+    process.on('exit',code=>{if(code!==0)writeFileSync(join(process.env.DSH_BOT_GUI_OUTPUT,'before-exit.json'),readFileSync(join(process.env.DSH_BOT_GUI_OUTPUT,'stock-gui-report.json')),{mode:0o600});});`,{mode:0o600});
+  const env={...process.env,TMPDIR:evidence,DSH_BOT_GUI_OUTPUT:evidence,DSH_BOT_UPGRADE_FROM:runner==='upgrade'?'not-a-released-source':'1.0.0'};
+  delete env.DSH_BOT_GUI_SHA256;
+  const child=spawnSync(process.execPath,['--import',observer,resolve(`test/native-plugin/stock-${runner}-run.mjs`),join(evidence,'SECRET_SENTINEL-missing-plugin.tgz')],{env,encoding:'utf8',timeout:15000});
+  assert.equal(child.status,1);assert.equal(child.signal,null);
+  const original=JSON.parse(await readFile(join(evidence,'before-exit.json'),'utf8'));
+  const bytes=await readFile(join(evidence,'stock-gui-report.json'),'utf8'),report=JSON.parse(bytes);
+  assert.equal(original.stage,runner==='gui'?'standard-profile-initialization-or-plugin-install':'upgrade-initialization');
+  assert.match(original.error.messageHash,/^[a-f\d]{64}$/);
+  assert.equal(original.error.code,runner==='gui'?'ENOENT':'ERR_ASSERTION');
+  assert.deepEqual(report.error,original.error,'The observer must retain the current caught error rather than replace it with unknown evidence');
+  assert.equal(report.stage,original.stage);
+  assert.equal(report.passed,false);assert.equal(report.testsPassed,false);assert.equal(report.teardownComplete,false);
+  assert.equal(report.fatalExit,true);assert.deepEqual(report.processExit,{code:1});
+  assert.deepEqual(report.checks,{});
+  assert.equal(report.sourceCommit,undefined);assert.equal(report.artifactSha256,undefined);
+  assert.equal(report.controlledRequests,undefined);assert.equal(report.fatal,undefined);
+  assert.equal(report.realModelRequests,runner==='gui'?0:undefined);
+  assert.equal(bytes.includes('SECRET_SENTINEL'),false);assert.equal(bytes.includes(evidence),false);
+});

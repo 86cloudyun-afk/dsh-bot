@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {readFile,writeFile,readdir,mkdir} from 'node:fs/promises';
+import {readFile,writeFile,readdir,mkdir,unlink} from 'node:fs/promises';
 import {openSync,closeSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve,join} from 'node:path';
 import {stockGui,textReply,controlledProvider,waitFor} from './stock-gui-runtime.mjs';
 import {finishStockGui,recordStockError} from './stock-report.mjs';
+import {installStockFatalReport} from './stock-fatal-report.mjs';
 import {stockSources} from './stock-qualification.mjs';
 
-let gui;
+let gui,initializationReport,childFailureReport=false;
+installStockFatalReport(()=>gui??initializationReport,{output:resolve(process.env.DSH_BOT_GUI_OUTPUT??'qualification/upgrade')});
+const replaceReport=report=>{
+  // stockGui.writeReport closes over this object; replace its contents rather
+  // than retaining the original host's requests or replacing its reference.
+  for(const key of Object.keys(gui.report))delete gui.report[key];
+  Object.assign(gui.report,report);
+};
 const canonical=value=>Array.isArray(value)?`[${value.map(canonical).join(',')}]`:value&&typeof value==='object'?`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`:JSON.stringify(value);
 const stateChecksum=value=>createHash('sha256').update(canonical(value)).digest('hex');
 try {
@@ -80,14 +88,17 @@ try {
   gui.uninstall();gui.reinstall(patch);
   // Node's ESM resolution cache survives app.shutdown in one process. A real
   // full host restart uses a new Node process, as the upgrade instructions do.
+  const childReportPath=join(gui.evidence,'stock-gui-report.json');
+  try {await unlink(childReportPath);} catch(error) {if(error.code!=='ENOENT')throw error;}
   const log=openSync(join(gui.evidence,'upgrade-fresh-host-private.log'),'w',0o600);
   try {execFileSync(process.execPath,[resolve(import.meta.filename),patch,gui.root],{
     env:{...process.env,DSH_BOT_GUI_OUTPUT:gui.evidence},stdio:['ignore',log,log],timeout:120000,
   });} catch(error) {
-    try {Object.assign(gui.report,JSON.parse(await readFile(join(gui.evidence,'stock-gui-report.json'),'utf8')));} catch {}
+    try {replaceReport(JSON.parse(await readFile(childReportPath,'utf8')));childFailureReport=true;}
+    catch(reportError) {await recordStockError(gui.report,reportError,{evidence:gui.evidence,field:'childReportError'});}
     throw error;
   } finally {closeSync(log);}
-  Object.assign(gui.report,JSON.parse(await readFile(join(gui.evidence,'stock-gui-report.json'),'utf8')));
+  replaceReport(JSON.parse(await readFile(childReportPath,'utf8')));
   } else {
   await gui.boot();
   const service=gui.app.ctx.dshBot,actor=service.policy.fromPeer(gui.app.ctx.connection.operator);
@@ -179,13 +190,37 @@ try {
   }
 } catch(error) {
   process.exitCode=1;
-  if(gui){gui.report.passed=false;await recordStockError(gui.report,error,{evidence:gui.evidence});}
+  if(gui){
+    if(childFailureReport) {
+      const failure={};await recordStockError(failure,error,{evidence:gui.evidence});
+      gui.report.parentError=failure.error;
+      if(failure.privateLogError)gui.report.parentPrivateLogError=failure.privateLogError;
+    }
+    else {gui.report.passed=false;await recordStockError(gui.report,error,{evidence:gui.evidence});}
+  }
   else {
     const evidence=resolve(process.env.DSH_BOT_GUI_OUTPUT??'qualification/upgrade');await mkdir(evidence,{recursive:true});
     const report={passed:false,testsPassed:false,teardownComplete:false,stage:'upgrade-initialization',checks:{}};
+    initializationReport={evidence,report};
     await recordStockError(report,error,{evidence});
     await writeFile(join(evidence,'stock-gui-report.json'),JSON.stringify(report,null,2),{mode:0o600});console.log(JSON.stringify(report));
   }
 } finally {
-  if(gui){if(!await finishStockGui(gui))process.exitCode=1;console.log(JSON.stringify({passed:gui.report.passed,checks:gui.report.checks,error:gui.report.error}));}
+  if(gui){
+    if(childFailureReport) {
+      let parentCleanup;
+      try {await gui.shutdown();parentCleanup={complete:true};}
+      catch(error) {
+        const failure={};await recordStockError(failure,error,{evidence:gui.evidence});
+        parentCleanup={complete:false,error:failure.error};
+        if(failure.privateLogError)gui.report.parentPrivateLogError=failure.privateLogError;
+      }
+      // This terminal marker is assigned only after shutdown settles. The
+      // failed child's own cleanup status and entire report remain unchanged.
+      gui.report.parentCleanup=parentCleanup;
+      await gui.writeReport();
+      process.exitCode=1;
+    } else if(!await finishStockGui(gui))process.exitCode=1;
+    console.log(JSON.stringify({passed:gui.report.passed,checks:gui.report.checks,error:gui.report.error,parentError:gui.report.parentError,parentCleanup:gui.report.parentCleanup}));
+  }
 }
