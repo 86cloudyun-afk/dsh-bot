@@ -111,13 +111,21 @@ jobs:
         run: |
           mkdir -p qualification/upgrade-v112
           node test/native-plugin/stock-upgrade-run.mjs qualification/package/*.tgz > qualification/stock-upgrade-v112-private.log 2>&1
-      - name: Require all seven complete stock qualification reports
+      - name: Upgrade an existing v1.1.3 candidate schema-two stock profile
+        shell: bash
+        env:
+          DSH_BOT_GUI_OUTPUT: qualification/upgrade-v113
+          DSH_BOT_UPGRADE_FROM: '1.1.3'
+        run: |
+          mkdir -p qualification/upgrade-v113
+          node test/native-plugin/stock-upgrade-run.mjs qualification/package/*.tgz > qualification/stock-upgrade-v113-private.log 2>&1
+      - name: Require all eight complete stock qualification reports
         if: always()
         shell: bash
         run: node test/native-plugin/stock-qualification.mjs qualification
       - name: Sanitized GUI qualification report
         if: always()
-        run: node -e 'const fs=require("fs");for(const p of ["qualification/gui/stock-gui-report.json","qualification/upgrade/stock-gui-report.json","qualification/upgrade-v101/stock-gui-report.json","qualification/upgrade-v102/stock-gui-report.json","qualification/upgrade-v110/stock-gui-report.json","qualification/upgrade-v111/stock-gui-report.json","qualification/upgrade-v112/stock-gui-report.json"])if(fs.existsSync(p))console.log(fs.readFileSync(p,"utf8"));'
+        run: node -e 'const fs=require("fs");for(const p of ["qualification/gui/stock-gui-report.json","qualification/upgrade/stock-gui-report.json","qualification/upgrade-v101/stock-gui-report.json","qualification/upgrade-v102/stock-gui-report.json","qualification/upgrade-v110/stock-gui-report.json","qualification/upgrade-v111/stock-gui-report.json","qualification/upgrade-v112/stock-gui-report.json","qualification/upgrade-v113/stock-gui-report.json"])if(fs.existsSync(p))console.log(fs.readFileSync(p,"utf8"));'
       - name: Publish readable qualification check
         if: always() && github.event_name == 'push'
         uses: actions/github-script@v7
@@ -142,7 +150,7 @@ jobs:
               return summary;
             };
             const summary = summarize(result.reports.gui);
-            for(const [source,key] of [['upgrade','upgrade'],['upgrade-v101','upgradeV101'],['upgrade-v102','upgradeV102'],['upgrade-v110','upgradeV110'],['upgrade-v111','upgradeV111'],['upgrade-v112','upgradeV112']])summary[key] = summarize(result.reports[source]);
+            for(const [source,key] of [['upgrade','upgrade'],['upgrade-v101','upgradeV101'],['upgrade-v102','upgradeV102'],['upgrade-v110','upgradeV110'],['upgrade-v111','upgradeV111'],['upgrade-v112','upgradeV112'],['upgrade-v113','upgradeV113']])summary[key] = summarize(result.reports[source]);
             summary.passed = result.passed;
             const text = '```json\n' + JSON.stringify(summary, null, 2) + '\n```';
             await core.summary.addHeading('官方原版 DSH 插件验收').addRaw(text).write();
@@ -165,3 +173,4 @@ jobs:
             qualification/upgrade-v110/stock-gui-report.json
             qualification/upgrade-v111/stock-gui-report.json
             qualification/upgrade-v112/stock-gui-report.json
+            qualification/upgrade-v113/stock-gui-report.json

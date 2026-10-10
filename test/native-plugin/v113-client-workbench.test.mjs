@@ -149,16 +149,25 @@ for(const otherBots of [0,1])test(`untouched sharing save preserves wildcard rec
   assert.equal(ui.find(row=>row.type==='input'&&row.props.name==='receiver'&&row.props.value==='bot_future').props.checked,true,'the saved default must still include a Bot created later');
 });
 
-test('an explicit sharing recipient change remains specific when another Bot appears',async t=>{
+test('an explicit sharing selection survives another Bot inserted before its selected receiver',async t=>{
   const snapshot=defaultSnapshot();snapshot.bots.push({...structuredClone(bot),botId:'bot_other',name:'Other Bot'});
   let request;
   const ui=browser(snapshot,(action,input)=>{if(action==='share.set'){request=structuredClone(input);return input.share;}return {};});t.after(()=>ui.dispose());await ui.ready();await ui.click('管理');
-  const recipient=ui.find(row=>row.type==='input'&&row.props.name==='receiver'&&row.props.value==='bot_other');
+  const sharingNodes=()=>{
+    const sharing=ui.find(row=>row.type==='section'&&row.props.id===`dsh-resource-${bot.botId}`),rows=[];
+    const visit=node=>{if(!node||typeof node!=='object')return;rows.push(node);for(const child of node.children??[])visit(child);};
+    visit(sharing);return rows;
+  };
+  const receivers=()=>sharingNodes().filter(row=>row.type==='input'&&row.props.name==='receiver');
+  const recipient=receivers().find(row=>row.props.value==='bot_other');
   recipient.props.onChange({target:{checked:false}});ui.render();recipient.props.onChange({target:{checked:true}});ui.render();
-  snapshot.bots.push({...structuredClone(bot),botId:'bot_new',name:'Later Bot'});snapshot.revision++;await ui.click('refresh');
-  assert.equal(ui.find(row=>row.type==='input'&&row.props.name==='receiver'&&row.props.value==='bot_new').props.checked,false);
-  await ui.submit('保存共享上限',{enabled:'on',sessions:'on',tasks:'on',memories:'on',receiver:['bot_other']});await ui.settle();
-  assert.deepEqual(request.share.receivers,['bot_other']);assert.equal(request.expectedVersion,1);
+  snapshot.bots.unshift({...structuredClone(bot),botId:'bot_000',name:'New Bot before the selected recipient'});snapshot.revision++;await ui.click('refresh');
+  assert.deepEqual(receivers().map(row=>row.props.value),['bot_000','bot_other'],'the actual refreshed controls must place the new recipient before the existing selection');
+  assert.equal(receivers().find(row=>row.props.value==='bot_000').props.checked,false);
+  assert.deepEqual(receivers().filter(row=>row.props.checked).map(row=>row.props.value),['bot_other']);
+  const form=sharingNodes().find(row=>row.type==='form');assert.ok(form,'the original owner sharing form remains available after insertion');
+  form.props.onSubmit({preventDefault(){},currentTarget:data({enabled:'on',sessions:'on',tasks:'on',memories:'on',receiver:['bot_other']})});await ui.settle();
+  assert.equal(request.botId,bot.botId);assert.deepEqual(request.share.receivers,['bot_other']);assert.equal(request.expectedVersion,1);
 });
 
 const scheduleRow=()=>({scheduleId:'schedule_existing',ownerBotId:bot.botId,kind:'reminder',message:'Saved reminder',rule:{kind:'once',timezone:'UTC',date:'2099-10-10',time:'09:00'},version:1,enabled:false});

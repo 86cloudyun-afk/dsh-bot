@@ -8,4 +8,6 @@
 
 原生插件的正式交付以 [已批准规格](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.0/docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md) 的 P01–P21 为验收条件，包括多 Bot、记忆、群、真实会议、并发联络、双平台完整安装和最终分发审计。具体版本与证据见原生插件 Release。
 
-当前版本为 **v1.1.3**，使用官方未修改的 DSH 0.2.0-rc.2，保持 schema 2 与协议 2。安装与升级以 [当前说明](../install.zh-CN.md) 和 [本版验收记录](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.3/docs/releases/v1.1.3-qualification.zh-CN.md) 为准。
+当前交付目标为 **v1.1.4**，使用官方未修改的 DSH 0.2.0-rc.2，保持 schema 2 与协议 2。安装与升级以 [当前说明](../install.zh-CN.md) 和 [本版验收记录](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.4/docs/releases/v1.1.4-qualification.zh-CN.md) 为准。
+
+v1.1.3 为未发布稳定 Release 的候选，原标签、已审查包及本地／PR 证据保留；它未通过最终 main／标签门槛。v1.1.4 的正式发布以本版冻结包与全平台验收记录为依据，不将旧候选证据改称新版通过。
