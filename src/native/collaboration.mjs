@@ -327,6 +327,7 @@ export class GroupMeetingController {
             ).messages.slice(-30);
             return `内部群 ${current.name}，群身份 ${current.groupId}，有界轮 ${intent.roundId}/${cycle + 1}。\n仅讨论本群材料：${JSON.stringify(transcript)}\n请直接给出自己的简短真实答复；勿自动循环转投，不改变权限。`;
           });
+          const actor = this.policy.fromAgent(result.handle.agent);
           await this.store.transact(
             {
               operationId: `${binding.sessionId}:reply`,
@@ -345,6 +346,13 @@ export class GroupMeetingController {
                 memberNow?.active && memberNow.epoch === member.epoch,
                 "stale_member",
               );
+              this.policy.require(actor, "group.post", {kind: "group", id: group.groupId}, draft);
+              const channel = draft.sessions[binding.sessionId];
+              requireCondition(this.policy.canReadDerived(actor, channel, draft), "access_denied");
+              const origins = [...new Map([...(channel.origins ?? []), ...this.policy.readDependencies(actor)]
+                .map(ref => [JSON.stringify(ref), copy(ref)])).values()];
+              for (const ref of origins)
+                this.policy.require(actor, `${ref.kind}.read`, ref, draft);
               group.messages.push({
                 messageId: result.reply.data.message.id,
                 groupId: group.groupId,
@@ -359,7 +367,7 @@ export class GroupMeetingController {
                   sessionId: binding.sessionId,
                   eventSeq: result.reply.seq,
                 },
-                origins: copy(draft.sessions[binding.sessionId].origins ?? []),
+                origins,
                 usage: result.usage,
               });
               return null;
@@ -1084,6 +1092,11 @@ export class GroupMeetingController {
         },
         draft,
       );
+      if (actor.kind === "bot") {
+        const meetingOrigin = {kind: "meeting", id: meeting.meetingId};
+        task.origins = [...new Map([...(task.origins ?? []), meetingOrigin]
+          .map(ref => [JSON.stringify(ref), copy(ref)])).values()];
+      }
       meeting.actions.push(task.taskId);
       return task;
     });

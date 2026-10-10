@@ -4,7 +4,12 @@ import {mkdir,realpath} from 'node:fs/promises';
 import {createUserMessage} from '@deepseek-ai/dsh-llm';
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry';
 import SessionTitleService from '@deepseek-ai/dsh-session-title';
+import SessionController from '@deepseek-ai/dsh-api-session-controller';
+import AgentDefaultModel from '@deepseek-ai/dsh-agent-default-model';
+import Fs from '@deepseek-ai/dsh-fs';
+import ProjectionCache from '@deepseek-ai/dsh-session-projection-cache';
 import {businessFixture} from './business-fixture.mjs';
+import {brokerFixture} from './broker-fixture.mjs';
 import {BotService} from '../../src/native/service.mjs';
 import {deferred,eventually,textChunks} from './official-fixture.mjs';
 const cmd=(action,input,operationId=crypto.randomUUID())=>({action,input,operationId});
@@ -12,6 +17,11 @@ const message=text=>createUserMessage({content:[{type:'text',text}],source:{kind
 async function contact(f,bot,input={}){return f.sessions.create(f.human,cmd('session.create',{botId:bot.botId,...input}));}
 async function presets(f){await f.ctx.plugin(AgentPresets,{default:'alpha'});await f.ctx.agentPresets.register({id:'alpha',plugins:[]});await f.ctx.agentPresets.register({id:'beta',plugins:[]});}
 async function reply(f,row,text='Historical source'){const agent=f.ctx.agents.get(row.sessionId);agent.followup(message(text));await eventually(()=>agent.status==='idle'&&f.events.get(agent.id)?.some(e=>e.type==='turn/end'));await f.ctx.sessions.flush(agent.session);}
+async function ordinaryFixture(t){
+ const f=await brokerFixture(t);await f.ctx.plugin(Fs).await();await f.ctx.plugin(AgentDefaultModel,{provider:'controlled',model:'model-a'}).await();
+ await f.ctx.plugin(SessionController,{nativeOpen:false}).await();await f.ctx.plugin(ProjectionCache,{writeEveryEvents:20,writeIntervalMs:1000}).await();
+ assert.ok(f.ctx.sessionController instanceof SessionController);return f;
+}
 
 test('v1.1 Bot updates its own configuration with CAS while cross-Bot updates remain denied',async t=>{
  const f=await businessFixture(t),a=await f.bot('A'),b=await f.bot('B'),row=await contact(f,a),actor=f.policy.fromAgent(f.ctx.agents.get(row.sessionId));
@@ -89,7 +99,7 @@ test('v1.1 self-pause publishes its exact Bot receipt and blocks subsequent nati
 });
 
 test('v1.1 exact ordinary-session grant configures native title/model without adopting Bot identity',async t=>{
- const f=await businessFixture(t),bot=await f.bot(),own=await contact(f,bot),actor=f.policy.fromAgent(f.ctx.agents.get(own.sessionId)),handle=await f.ctx.agents.create({sessionId:'ordinary-configured',meta:{cwd:f.dir},agentOptions:{provider:'controlled',model:'model-a'}});f.beforeClose.push(()=>handle.dispose());await f.ctx.sessions.flush(handle.agent.session);
+ const f=await ordinaryFixture(t),bot=await f.bot(),own=await contact(f,bot),actor=f.policy.fromAgent(f.ctx.agents.get(own.sessionId)),handle=await f.ctx.agents.create({sessionId:'ordinary-configured',meta:{cwd:f.dir},agentOptions:{provider:'controlled',model:'model-a'}});f.beforeClose.push(()=>handle.dispose());await f.ctx.sessions.flush(handle.agent.session);
  const command=cmd('session.configure',{sessionId:handle.agent.id,expectedVersion:1,name:'Ordinary target',model:{provider:'controlled',model:'model-b'}});
  await assert.rejects(f.sessions.configure(actor,command),{code:'access_denied'});
  const grant={grantId:'ordinary-config',ownerBotId:null,recipientBotId:bot.botId,scope:{sessions:[handle.agent.id]},level:'control',active:true};await f.policy.authorizeShare(f.human,cmd('grant.set',grant));
@@ -120,10 +130,10 @@ test('v1.1 lost native fork receipt keeps original native ID and never substitut
 });
 
 test('v1.1 granted ordinary title/model remains native after cold management without identity adoption',async t=>{
- const f=await businessFixture(t),bot=await f.bot(),own=await contact(f,bot),actor=f.policy.fromAgent(f.ctx.agents.get(own.sessionId)),handle=await f.ctx.agents.create({sessionId:'cold-ordinary-config',meta:{cwd:f.dir},agentOptions:{provider:'controlled',model:'model-a'}});await f.ctx.sessions.flush(handle.agent.session);await handle.dispose();
+ const f=await ordinaryFixture(t),bot=await f.bot(),own=await contact(f,bot),actor=f.policy.fromAgent(f.ctx.agents.get(own.sessionId)),handle=await f.ctx.agents.create({sessionId:'cold-ordinary-config',meta:{cwd:f.dir},agentOptions:{provider:'controlled',model:'model-a'}});await reply(f,{sessionId:handle.agent.id},'Persist the original cold ordinary target');await handle.dispose();assert.equal(f.ctx.agents.get(handle.agent.id),undefined);
  await f.policy.authorizeShare(f.human,cmd('grant.set',{grantId:'cold-control',ownerBotId:null,recipientBotId:bot.botId,scope:{sessions:['cold-ordinary-config']},level:'control',active:true}));
  const row=await f.sessions.configure(actor,cmd('session.configure',{sessionId:'cold-ordinary-config',expectedVersion:1,name:'Cold native title',model:{provider:'controlled',model:'model-c'}}));assert.equal(row.botId,null);assert.equal(f.ctx.agents.get(row.sessionId).session.header.id,'cold-ordinary-config');await reply(f,row,'Cold ordinary request');assert.equal(f.requests.at(-1).model,'model-c');
- await f.adapter.disposeOwned(row.sessionId);const renamed=await f.sessions.configure(actor,cmd('session.configure',{sessionId:row.sessionId,expectedVersion:2,name:'Again cold'}));assert.equal(renamed.revision,3);await reply(f,renamed,'Cold retained model');assert.equal(f.requests.at(-1).model,'model-c');
+ const ordinaryAgent=f.ctx.agents.get(row.sessionId);await f.adapter.disposeOwned(row.sessionId);assert.ok(f.ctx.agents.get(row.sessionId)===ordinaryAgent,'ordinary Agent remains owned by its native controller');const renamed=await f.sessions.configure(actor,cmd('session.configure',{sessionId:row.sessionId,expectedVersion:2,name:'Again cold'}));assert.equal(renamed.revision,3);assert.equal(renamed.sessionId,row.sessionId);await reply(f,renamed,'Cold retained model');assert.equal(f.requests.at(-1).model,'model-c');
 });
 
 test('v1.1 create/fork replay retains original committed receipt after a later configuration',async t=>{
@@ -145,7 +155,7 @@ test('review P1: ordinary active native tool blocks configure before writing eve
 });
 
 test('review P1: ordinary configuration intent fences new native tools and model work',async t=>{
- const entered=deferred(),release=deferred();t.after(()=>release.resolve());const f=await businessFixture(t),agent=await ordinary(f,'ordinary-fenced-native-tool'),apply=f.adapter.configureOwned.bind(f.adapter);let calls=0;
+ const entered=deferred(),release=deferred();t.after(()=>release.resolve());const f=await ordinaryFixture(t),agent=await ordinary(f,'ordinary-fenced-native-tool'),apply=f.adapter.configureOwned.bind(f.adapter);let calls=0;
  t.after(f.ctx.tools.register({name:'owned-review-quick-tool',description:'Count a harmless native call',parameters:{type:'object',properties:{},additionalProperties:false},output:{schema:{type:'boolean'},render:()=>[{type:'text',text:'done'}]},execute:async()=>{calls++;return true;}}));
  f.adapter.configureOwned=async(...args)=>{entered.resolve();await release.promise;return apply(...args);};
  const pending=f.sessions.configure(f.human,cmd('session.configure',{sessionId:agent.id,expectedVersion:1,name:'Fenced configure'}));await entered.promise;assert.equal(f.store.read().sessions[agent.id].state,'configuring');

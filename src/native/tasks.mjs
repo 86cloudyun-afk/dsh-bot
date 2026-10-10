@@ -654,6 +654,28 @@ export class TaskController {
       .finally(() => this.#watching.delete(attemptId));
     this.#watching.set(attemptId, run);
   }
+  #stopInDraft(task, attempt, operationId, draft) {
+    const forest = [attempt, ...Object.values(draft.attempts).filter(row =>
+      row.parentAttemptId === attempt.attemptId && row.reservationHeld)];
+    for (const row of forest) if (row.reservationHeld) {
+      row.state = "stop_requested";
+      row.stopOperationId = operationId;
+      draft.sessions[row.sessionId].state = "stopping";
+    }
+    task.state = attempt.reservationHeld ? "stopping" : task.state;
+    return {accepted: true, taskId: task.taskId, attemptId: attempt.attemptId,
+      epoch: attempt.epoch, operationId, attemptIds: forest.map(row => row.attemptId),
+      settled: !attempt.reservationHeld};
+  }
+  #dispatchStop(receipt) {
+    for (const id of receipt.attemptIds) {
+      const attempt = this.store.read().attempts[id];
+      if (attempt?.reservationHeld && attempt.stopOperationId === receipt.operationId) {
+        void this.adapter.stopResources(attempt.sessionId).catch(() => {});
+        this.#watch(id);
+      }
+    }
+  }
   async stop(actor, command) {
     command = copy(command);
     const input = command.input;
@@ -675,38 +697,10 @@ export class TaskController {
             attempt.epoch === input.epoch,
           "stale_attempt",
         );
-        const forest = [
-          attempt,
-          ...Object.values(draft.attempts).filter(
-            (row) =>
-              row.parentAttemptId === attempt.attemptId && row.reservationHeld,
-          ),
-        ];
-        for (const row of forest)
-          if (row.reservationHeld) {
-            row.state = "stop_requested";
-            row.stopOperationId = command.operationId;
-            draft.sessions[row.sessionId].state = "stopping";
-          }
-        task.state = attempt.reservationHeld ? "stopping" : task.state;
-        return {
-          accepted: true,
-          taskId: task.taskId,
-          attemptId: attempt.attemptId,
-          epoch: attempt.epoch,
-          operationId: command.operationId,
-          attemptIds: forest.map((row) => row.attemptId),
-          settled: !attempt.reservationHeld,
-        };
+        return this.#stopInDraft(task, attempt, command.operationId, draft);
       },
     );
-    for (const id of receipt.attemptIds) {
-      const attempt = this.store.read().attempts[id];
-      if (attempt.reservationHeld) {
-        void this.adapter.stopResources(attempt.sessionId).catch(() => {});
-        this.#watch(id);
-      }
-    }
+    this.#dispatchStop(receipt);
     return receipt;
   }
   dependencyStatus(actor, task, state = this.store.read()) {
@@ -780,9 +774,9 @@ export class TaskController {
   }
   async adjust(actor, command) {
     command = copy(command);
-    const input = command.input;
+    const input = command.input, stamped = this.policy.command(actor, command);
     const changed = await this.store.transact(
-      this.policy.command(actor, command),
+      stamped,
       (draft) => {
         const task = draft.tasks[input.taskId];
         requireCondition(task, "not_found");
@@ -821,32 +815,47 @@ export class TaskController {
           task.acceptance = "unknown";
           task.state = "adjusted";
           const attempt = draft.attempts[task.currentAttemptId];
-          if (attempt?.reservationHeld)
+          if (attempt?.reservationHeld) {
             task.adjustStop = {
               operationId: command.operationId,
               stopOperationId: randomUUID(),
               attemptId: attempt.attemptId,
               epoch: attempt.epoch,
             };
-          else delete task.adjustStop;
+            const stopCommand = {operationId: task.adjustStop.stopOperationId, action: "task.stop",
+              input: {taskId: task.taskId, attemptId: attempt.attemptId, epoch: attempt.epoch}, callerKey: stamped.callerKey};
+            const receipt = this.#stopInDraft(task, attempt, stopCommand.operationId, draft);
+            draft.operations[stopCommand.operationId] = {action: stopCommand.action, fingerprint: digest(stopCommand), result: receipt};
+          } else delete task.adjustStop;
         }
         task.version++;
         return task;
       },
     );
-    const stop = changed.adjustStop, state = this.store.read(),
-      attempt = stop && state.attempts[stop.attemptId];
-    if (stop?.operationId === command.operationId && attempt?.reservationHeld &&
-        attempt.epoch === stop.epoch && state.tasks[changed.taskId].currentAttemptId === stop.attemptId)
-      await this.stop(actor, {
-        operationId: stop.stopOperationId,
-        action: "task.stop",
-        input: {
-          taskId: changed.taskId,
-          attemptId: stop.attemptId,
-          epoch: stop.epoch,
-        },
+    const stop = changed.adjustStop;
+    if (stop?.operationId === command.operationId) {
+      const stopCommand = {operationId: stop.stopOperationId, action: "task.stop",
+        input: {taskId: changed.taskId, attemptId: stop.attemptId, epoch: stop.epoch}, callerKey: stamped.callerKey};
+      const state = this.store.read(), saved = state.operations[stop.stopOperationId];
+      let receipt = saved?.result;
+      if (saved) requireCondition(saved.action === "task.stop" && saved.fingerprint === digest(stopCommand), "operation_conflict");
+      const canRepair = draft => {
+        const attempt = draft.attempts[stop.attemptId], binding = draft.sessions[attempt?.sessionId];
+        return attempt?.reservationHeld && attempt.taskId === changed.taskId && attempt.epoch === stop.epoch &&
+          attempt.runtimeId === this.runtimeId && ["running", "stop_requested"].includes(attempt.state) &&
+          draft.tasks[changed.taskId]?.currentAttemptId === attempt.attemptId && binding?.attemptId === attempt.attemptId &&
+          binding.epoch === attempt.epoch && this.adapter.context.agents.get(attempt.sessionId) && this.adapter.resources(attempt.sessionId).known;
+      };
+      // Repair an original partial adjustment only when its exact live attempt is still known.
+      if (!saved && canRepair(state)) receipt = await this.store.transact(stopCommand, draft => {
+        const original = draft.operations[command.operationId];
+        requireCondition(original?.action === "task.adjust" && original.fingerprint === digest(stamped) &&
+          digest(original.result?.adjustStop) === digest(stop), "operation_conflict");
+        requireCondition(canRepair(draft), "recovery_required");
+        return this.#stopInDraft(draft.tasks[changed.taskId], draft.attempts[stop.attemptId], stop.stopOperationId, draft);
       });
+      if (receipt) this.#dispatchStop(receipt);
+    }
     return this.store.read().tasks[changed.taskId];
   }
   async submit(actor, command) {

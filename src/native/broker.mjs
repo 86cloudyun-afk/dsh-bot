@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { createUserMessage, freezeMessage } from "@deepseek-ai/dsh-llm";
 import { copy, plain, requireCondition, validId } from "./store.mjs";
 
 /** Native delivery has its own durable identity; uncertain inputs are never replayed. */
@@ -178,6 +178,12 @@ export class ConversationBroker {
         this.#targets.delete(row.sessionId);
     }
   }
+  #requireSender(actor, row, state) {
+    this.policy.require(actor, "session.send", {kind:"session",id:row.sessionId}, state);
+    requireCondition(this.policy.canReadDerived(actor, row, state), "access_denied");
+    for (const ref of row.origins ?? [])
+      this.policy.require(actor, `${ref.kind}.read`, ref, state);
+  }
   async #authorize(row) {
     requireCondition(
       !this.#closed && row.runtimeId === this.runtimeId,
@@ -190,13 +196,7 @@ export class ConversationBroker {
       !this.adapter.isArchived(row.sessionId),
       "session_not_ready",
     );
-    if (actor)
-      this.policy.require(
-        actor,
-        "session.send",
-        { kind: "session", id: row.sessionId },
-        state,
-      );
+    if (actor) this.#requireSender(actor, row, state);
     else {
       requireCondition(row.kind === "result", "recovery_required");
       this.policy.requireTaskResultDelivery(row, state);
@@ -234,14 +234,13 @@ export class ConversationBroker {
       !this.adapter.isArchived(row.sessionId),
       "session_not_ready",
     );
-    if (actor)
-      this.policy.require(
-        actor,
-        "session.send",
-        { kind: "session", id: row.sessionId },
-        state,
-      );
+    if (actor) this.#requireSender(actor, row, state);
     else this.policy.requireTaskResultDelivery(row, state);
+    if (target.ordinary)
+      requireCondition(
+        this.adapter.context.agents.get(row.sessionId) === target.agent,
+        "session_not_ready",
+      );
     if (target.recipient) {
       const binding = state.sessions[row.sessionId];
       requireCondition(
@@ -296,13 +295,7 @@ export class ConversationBroker {
             "delivery_not_queued",
           );
           const actor = this.#actors.get(row.outboxId);
-          if (actor)
-            this.policy.require(
-              actor,
-              "session.send",
-              { kind: "session", id: row.sessionId },
-              draft,
-            );
+          if (actor) this.#requireSender(actor, current, draft);
           else this.policy.requireTaskResultDelivery(current, draft);
           if (target.recipient) {
             requireCondition(
@@ -331,24 +324,35 @@ export class ConversationBroker {
         },
       );
       await this.#authorize(row);
-      this.#fenceTarget(row, target);
-      nativeAdmission = true;
       if (target.ordinary) {
-        const controller = this.adapter.context.get("sessionController");
-        requireCondition(controller, "native_controller_unavailable");
-        await controller.prompt(
-          {
-            requestId: row.message.id,
-            sessionId: row.sessionId,
-            mode: row.mode,
-            content: row.message.content,
-          },
-          this.#lifetime.signal,
-        );
-        const live = this.adapter.context.sessions.get(row.sessionId);
-        requireCondition(live, "native_session_unavailable");
-        await this.adapter.context.sessions.flush(live);
+        const ctx = this.adapter.context,
+          controller = ctx.get("sessionController"),
+          attachments = ctx.get("attachments"),
+          fileUploads = ctx.get("fileUploads");
+        requireCondition(typeof controller?.resolveAgent === "function" &&
+          typeof ctx.agents.withoutInitiator === "function", "native_controller_unavailable");
+        requireCondition(typeof attachments?.admitPromptContent === "function" &&
+          typeof fileUploads?.bindPrompt === "function", "native_attachment_unavailable");
+        const found = await ctx.agents.withoutInitiator(() => controller.resolveAgent(row.sessionId));
+        if ("error" in found) throw found.error;
+        target.agent = found.agent;
+        const message = freezeMessage({...row.message,
+          content: await attachments.admitPromptContent(row.message.content),
+          source: {kind: "user", rpcId: row.message.id},
+        });
+        const binding = fileUploads.bindPrompt(target.agent, [], row.message.id);
+        try {
+          this.#fenceTarget(row, target);
+          nativeAdmission = true;
+          target.agent[row.mode === "steer" ? "steer" : "followup"](message);
+          binding.commit();
+        } finally {
+          binding[Symbol.dispose]();
+        }
+        await ctx.sessions.flush(target.agent.session);
       } else {
+        this.#fenceTarget(row, target);
+        nativeAdmission = true;
         target.agent[row.mode === "steer" ? "steer" : "followup"](row.message);
         await this.adapter.context.sessions.flush(target.agent.session);
       }
