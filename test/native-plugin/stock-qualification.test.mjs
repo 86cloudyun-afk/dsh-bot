@@ -25,7 +25,7 @@ function report(module,source='gui',expected=target) {
 
 test('actual workflow gate rejects truncated reports previously marked Passed',async t=>{
   const scratch=await mkdtemp(join(tmpdir(),'stock-gate-test-'));t.after(()=>rm(scratch,{recursive:true,force:true}));
-  for(const source of ['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110','upgrade-v111','upgrade-v112']) {
+  for(const source of ['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110','upgrade-v111','upgrade-v112','upgrade-v113']) {
     const dir=join(scratch,'qualification',source);await mkdir(dir,{recursive:true});
     await writeFile(join(dir,'stock-gui-report.json'),JSON.stringify({passed:true,teardownComplete:true,checks:{oneArbitraryCheck:true}}));
   }
@@ -60,6 +60,9 @@ test('actual shared CLI gate accepts complete reports and rejects lost checks or
     assert.notEqual(run().status,0,'The real CLI must reject incomplete or mismatched qualification');
   }
   await write('gui',report(module,'gui',expected));
+  await rm(join(directory,'upgrade-v113','stock-gui-report.json'));
+  assert.notEqual(run().status,0,'The seventh immutable upgrade source is mandatory');
+  await write('upgrade-v113',report(module,'upgrade-v113',expected));
   await rm(join(directory,'upgrade-v112','stock-gui-report.json'));
   assert.notEqual(run().status,0,'The sixth immutable upgrade source is mandatory');
   await write('upgrade-v112',report(module,'upgrade-v112',expected));
@@ -69,9 +72,10 @@ test('actual shared CLI gate accepts complete reports and rejects lost checks or
 
 test('complete named reports retain all supported stock and schema upgrade paths',async()=>{
   const module=await validator();
-  assert.deepEqual(Object.keys(module.stockSources),['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110','upgrade-v111','upgrade-v112']);
+  assert.deepEqual(Object.keys(module.stockSources),['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110','upgrade-v111','upgrade-v112','upgrade-v113']);
   assert.equal(module.stockSources['upgrade-v111'].sha256,target.artifactSha256);
   assert.equal(module.stockSources['upgrade-v112'].sha256,'426a244ae02927129e315420907ab4b2f9acf16414144e0e6792b7f25bfe48ff');
+  assert.equal(module.stockSources['upgrade-v113'].sha256,'55c192a3837d36ff6dd78fa5f34c36d2375a648258ddd499f793d6e3a47ae289');
   for(const source of Object.keys(module.stockSources))assert.doesNotThrow(()=>module.validateStockReport(report(module,source),{source,target}));
   const readable=report(module,'upgrade-v110');delete readable.requests;readable.controlledRequests=0;
   assert.doesNotThrow(()=>module.validateStockReport(readable,{source:'upgrade-v110',target}),'The existing readable report projection remains valid');
@@ -139,6 +143,15 @@ test('schema-two v1.1.2 upgrade requires exact retained rows and its immutable s
   assert.throws(()=>module.validateStockReport(row,{source:'upgrade-v112',target}));
   const foreign=report(module,'upgrade-v112');foreign.previousArtifactSha256=module.stockSources['upgrade-v111'].sha256;
   assert.throws(()=>module.validateStockReport(foreign,{source:'upgrade-v112',target}));
+});
+
+test('schema-two v1.1.3 candidate upgrade retains exact original rows and immutable candidate bytes',async()=>{
+  const module=await validator(),row=report(module,'upgrade-v113');
+  assert.doesNotThrow(()=>module.validateStockReport(row,{source:'upgrade-v113',target}));
+  row.upgradeSchemaTwo.exactV11RowsRetained=false;
+  assert.throws(()=>module.validateStockReport(row,{source:'upgrade-v113',target}));
+  const foreign=report(module,'upgrade-v113');foreign.previousArtifactSha256=module.stockSources['upgrade-v112'].sha256;
+  assert.throws(()=>module.validateStockReport(foreign,{source:'upgrade-v113',target}));
 });
 
 test('frozen package identity binds target version as well as checksum',async t=>{

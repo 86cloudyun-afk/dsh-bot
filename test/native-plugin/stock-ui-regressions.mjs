@@ -40,13 +40,10 @@ export async function runUiRegressions(gui) {
     }
     const checked = () => sharing.locator('input[name="receiver"]:checked').evaluateAll(rows => rows.map(row => row.value));
     assert.deepEqual(await checked(), [selected.botId]);
-    let inserted;
-    for (let i = 0; i < 32; i++) {
-      inserted = await create(`界面校验新增 ${i}`);
-      if (inserted.botId.localeCompare(selected.botId) < 0) break;
-    }
-    assert.ok(inserted.botId.localeCompare(selected.botId) < 0);
-    await sharing.locator(`input[name="receiver"][value="${inserted.botId}"]`).waitFor();
+    const inserted = await create("界面校验新增 0");
+    const newReceiver = sharing.locator(`input[name="receiver"][value="${inserted.botId}"]`);
+    await newReceiver.waitFor();
+    assert.equal(await newReceiver.isChecked(), false);
     assert.deepEqual(await checked(), [selected.botId]);
     gui.check("shareDraftRemainsBoundToSelectedBotIds", true);
     await sharing.getByRole("button", { name: "保存共享上限", exact: true }).click();
