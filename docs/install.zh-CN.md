@@ -4,7 +4,7 @@
 
 ## 1. 检查宿主和安装依赖
 
-首版兼容基线：Linux／macOS、官方 `@deepseek-ai/dsh@0.2.0-rc.2`、Node `^22.19.0 || >=24`。官方插件管理器通过 `pnpm` 安装依赖；验收固定使用 `pnpm@11.19.0`。
+兼容基线：Linux／macOS、官方 `@deepseek-ai/dsh@0.2.0-rc.2`、Node `^22.19.0 || >=24`。官方插件管理器通过 `pnpm` 安装依赖；验收固定使用 `pnpm@11.19.0`。
 
 ```bash
 node --version
@@ -23,11 +23,11 @@ dsh web
 
 ## 2. 获取并验证插件包
 
-在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.1) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.1/dist/dsh-bot-1.1.1.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.1/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
+在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.2) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/dsh-bot-1.1.2.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.1/dist/dsh-bot-1.1.1.tgz
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.1/dist/SHA256SUMS
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/dsh-bot-1.1.2.tgz
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.2/dist/SHA256SUMS
 ```
 
 Linux：
@@ -42,14 +42,14 @@ macOS：
 shasum -a 256 -c SHA256SUMS
 ```
 
-应显示插件文件校验通过。Release 同时提供兼容版本、源代码身份和验收报告。
+应显示插件文件校验通过。Release 同时提供兼容版本、源代码身份和 [本版验收报告](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.2/docs/releases/v1.1.2-qualification.zh-CN.md)。
 
 ## 3. 安装到日常 profile
 
 以下命令使用官方 `web` profile。使用其他现有 Web profile 时，将 `web` 替换为你实际使用的名称。
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.1.1.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.1.2.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -87,22 +87,22 @@ dsh web
 
 ## 6. 升级、禁用与卸载
 
-关闭插件开关会停止插件管理的运行、结算资源并移除工作台入口；原生历史和长期记忆仍保存。重新启用后读取原账本，未明确结算的工作保留未知状态。
+关闭插件开关会请求停止插件管理的运行并移除工作台入口，资源是否结算以真实证据为准；原生历史和长期记忆仍保存。重新启用后读取原账本，并重新绑定仍由 DSH 管理的既有 Bot 联络会话；活动不明的资源和未明确结算的工作保留未知状态，不自动重放。
 
 官方 rc.2 的插件管理器升级方式是先卸载，再安装新版。先让工作结算或明确停止，并使用 DSH 自己的备份方式保存现有 profile 数据，然后：
 
 ```bash
 dsh plugin --profile web remove dsh-bot --config.ignore-scripts=true
-dsh plugin --profile web add ./dsh-bot-1.1.1.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.1.2.tgz --ignore-scripts --strict-peer-dependencies
 ```
 
 重新启动或启用插件后，Bot ID、记忆、会话和任务读取原持久数据。卸载只移除插件依赖与入口；手动删除 DSH 存储不属于卸载步骤。
 
-从 v1.0.0、v1.0.1、v1.0.2 或 v1.1.0 升级到 v1.1.1 时，请先备份原 DSH profile 并完全退出进程，再执行上述命令，启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.1.1 / 服务 1.1.1**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
+从 v1.0.0、v1.0.1、v1.0.2、v1.1.0 或 v1.1.1 升级到 v1.1.2 时，请先备份原 DSH profile 并完全退出进程，再执行上述命令，启动同一 profile 并刷新浏览器。工作台标题下方应同时显示 **插件 1.1.2 / 服务 1.1.2**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
 
 浏览器中已有的原始操作 ID 继续保留。在“待查回的原始操作”先点 **查回原始操作**：它只读持久回执，不执行任务，也不调用模型。找到回执后刷新原对象；没有回执时保留“未确认”。**用原 ID 接续**是单独的显式提交，并先检查原回执；已提交操作不会重复创建。不要修改原 ID 的内容或将旧操作改用于新动作。
 
-已拒绝或不再接续的请求可以 **保留并收起**，原 ID 与完整请求仍在折叠的历史中可查。目录中暂时消失的模型或 preset 显示“当前不可用”，已保存和当前草稿选择都保留；选择替代项或默认配置必须由你明确操作。
+已拒绝或不再接续的请求可以 **保留并收起**，原 ID 与完整请求仍在折叠的历史中可查。目录刷新不会清除刷新期间新产生的待查回记录或已保留历史；取消页面读取也不会丢弃已接受写入的原始回执。目录中暂时消失的模型或 preset 显示“当前不可用”，已保存和当前草稿选择都保留；选择替代项或默认配置必须由你明确操作。
 
 ## 7. 故障处理
 
@@ -127,8 +127,8 @@ dsh plugin --profile web add ./dsh-bot-1.1.1.tgz --ignore-scripts --strict-peer-
 
 [旧独立软件版及其安装器已作废](history/standalone-void.md)。它们不作为本插件的安装步骤或依赖。
 
-### v1.1 存储升级
+### schema 2 存储与升级
 
 从 v1.0.0／v1.0.1／v1.0.2 升级时，schema 2 在原 profile 的同一记录原子迁移，保留原始身份、回执和校验过的 schema 1 备份。旧 Bot 与旧持续授权的新增资料范围为关闭。升级后不要直接在同一份 schema 2 存储上降级旧插件；回退需使用升级前独立备份和对应旧插件包。迁移失败或未来格式不会覆盖原记录。
 
-从 v1.1.0 升级到 v1.1.1 沿用 schema 2 与协议 2，不重新迁移或创建替代对象；原资料、安排、通知和已有迁移备份继续保留。
+从 v1.1.0／v1.1.1 升级到 v1.1.2 沿用 schema 2 与协议 2，不重新迁移或创建替代对象；原资料、安排、通知和已有迁移备份继续保留。

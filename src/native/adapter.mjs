@@ -51,6 +51,7 @@ export class NativeDshAdapter {
   #ordinarySelections = new Map();
   #nativeActivities = new Map();
   #nativeToolActivities = new Map();
+  #starting;
   constructor(ctx, { store, policy } = {}) {
     this.#ctx = ctx;
     this.#store = store;
@@ -315,9 +316,24 @@ export class NativeDshAdapter {
     } else if (activity.agent !== agent) {
       // Retain still-running callbacks from a previous exact identity.
       activity.agent=agent;
-      activity.known=published && activity.known;
+      activity.known=published;
+    } else if (published) {
+      activity.known=true;
     }
     return activity;
+  }
+  start() {
+    if(this.#starting)return this.#starting;
+    this.#starting=(async()=>{
+      for(const agent of this.#ctx.agents.list()) {
+        requireCondition(!this.#closed&&!this.#closing,"disposed");
+        const binding=this.#store.read().sessions[agent.id];
+        if(binding?.botId&&binding.state==="ready"&&!this.isArchived(agent.id)&&this.#ctx.agents.get(agent.id)===agent)
+          await this.bindAgent(agent,binding);
+      }
+      requireCondition(!this.#closed&&!this.#closing,"disposed");
+    })();
+    return this.#starting;
   }
   get context() {
     return this.#ctx;
@@ -1001,33 +1017,40 @@ export class NativeDshAdapter {
   async resumeOwned(binding) {
     requireCondition(
       !this.#closed &&
+        !this.#closing &&
         binding.state === "ready" &&
         !this.isArchived(binding.sessionId),
       "session_not_ready",
     );
-    const live = this.#ctx.agents.get(binding.sessionId);
-    if (live) return live;
     if (this.#creating.has(binding.sessionId))
       return (await this.#creating.get(binding.sessionId)).agent;
-    const native = await this.inspectSession(binding.sessionId);
-    const pending = this.#ctx.agents.resume({
-      resumeSessionId: binding.sessionId,
-      agentOptions: {
-        provider: binding.model.provider,
-        model: binding.model.model,
-      },
-      setup: async (agentCtx, agent) => {
-        const presets = this.#ctx.get("agentPresets");
-        if (presets)
-          await presets.mount(agentCtx, native.presetId ?? undefined);
-        await this.bindAgent(agent, binding);
-      },
-    });
+    const live = this.#ctx.agents.get(binding.sessionId);
+    if (live) return live;
+    const pending = (async()=>{
+      const native = await this.inspectSession(binding.sessionId);
+      requireCondition(!this.#closed&&!this.#closing,"disposed");
+      requireCondition(!this.isArchived(binding.sessionId),"session_not_ready");
+      const current=this.#ctx.agents.get(binding.sessionId);
+      if(current)return {agent:current};
+      const handle=await this.#ctx.agents.resume({
+        resumeSessionId: binding.sessionId,
+        agentOptions: {
+          provider: binding.model.provider,
+          model: binding.model.model,
+        },
+        setup: async (agentCtx, agent) => {
+          const presets = this.#ctx.get("agentPresets");
+          if (presets)
+            await presets.mount(agentCtx, native.presetId ?? undefined);
+          await this.bindAgent(agent, binding);
+        },
+      });
+      this.#handles.set(binding.sessionId,handle);
+      return handle;
+    })();
     this.#creating.set(binding.sessionId, pending);
     try {
-      const handle = await pending;
-      this.#handles.set(binding.sessionId, handle);
-      return handle.agent;
+      return (await pending).agent;
     } finally {
       this.#creating.delete(binding.sessionId);
     }
@@ -1213,9 +1236,11 @@ export class NativeDshAdapter {
         ?.list(sessionId)
         .filter((row) => row.owner === sessionId) ?? [];
     const terminals = this.#ctx.get("terminals");
+    const known=native?.known!==false;
     return {
-      known: true,
+      known,
       settled:
+        known &&
         (record.disposed || record.agent.status === "idle") &&
         !record.stopPending &&
         record.models.size === 0 &&
@@ -1234,7 +1259,9 @@ export class NativeDshAdapter {
   async close() {
     if (this.#closed || this.#closing) return;
     this.#closing = true;
+    await Promise.allSettled([this.#starting].filter(Boolean));
     await Promise.allSettled([...this.#creating.values()]);
+    const ownedAgents=new Set([...this.#handles.values()].map(handle=>handle.agent));
     await Promise.allSettled(
       [...this.#records.values()]
         .filter(
@@ -1248,7 +1275,13 @@ export class NativeDshAdapter {
     if (this.#store)
       for (const record of this.#records.values()) {
         const evidence = this.resources(record.agent.id);
-        if (!evidence.settled)
+        // Historical external uncertainty is not a new shutdown failure.
+        // Keep resources unknown for mutations, and persist actual unresolved work.
+        const externalUnknownOnly=evidence.known===false&&record.binding.purpose==='contact'&&!record.binding.attemptId&&
+          !ownedAgents.has(record.agent)&&this.#ctx.agents.get(record.agent.id)===record.agent&&record.agent.status==='idle'&&
+          !record.stopPending&&!evidence.models&&!evidence.tools&&!evidence.terminalActive&&!evidence.resourceFaults?.length&&
+          !evidence.jobs.some(job=>['running','stopping','UNKNOWN'].includes(job.status));
+        if (!evidence.settled&&!externalUnknownOnly)
           await this.#store.transact(
             {
               operationId: randomUUID(),

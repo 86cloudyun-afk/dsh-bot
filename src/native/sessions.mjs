@@ -403,70 +403,20 @@ export class SessionOwnership {
           !this.store.read().attempts[previous.attemptId]?.reservationHeld,
         "attempt_unsettled",
       );
-    if (value && resources.known)
+    if (value) {
+      requireCondition(resources.known,"resource_identity_unknown");
       requireCondition(resources.settled, "session_active");
-    let createdIntent = false;
-    const intent = await this.store.transact(
-      stamped,
-      (draft) => {
-        this.policy.require(
-          actor,
-          value ? "session.archive" : "session.restore",
-          reference,
-          draft,
-        );
-        const row = draft.sessions[input.sessionId] ?? {
-          sessionId: input.sessionId,
-          botId: null,
-          purpose: "ordinary",
-          epoch: 0,
-          state: "ready",
-          archived: false,
-        };
-        requireCondition(row.state !== "UNKNOWN", "recovery_required");
-        requireCondition(
-          !["configuring", "archiving", "restoring"].includes(row.state),
-          "operation_pending",
-        );
-        if (value) {
-          const currentResources = this.adapter.resources(input.sessionId);
-          if (currentResources.known)
-            requireCondition(currentResources.settled, "session_active");
-        }
-        createdIntent = true;
-        row.archiveOperationId = command.operationId;
-        row.archiveStatusId = randomUUID();
-        row.previousState =
-          row.state === "UNKNOWN" ? (row.previousState ?? "ready") : row.state;
-        row.state = value ? "archiving" : "restoring";
-        draft.sessions[input.sessionId] = row;
-        return {
-          sessionId: row.sessionId,
-          statusOperationId: row.archiveStatusId,
-          archived: value,
-        };
-      },
-    );
-    this.policy.require(
-      actor,
-      value ? "session.archive" : "session.restore",
-      reference,
-    );
-    if (Object.hasOwn(this.store.read().operations, intent.statusOperationId))
-      return this.store.read().operations[intent.statusOperationId].result;
-    // A concurrent invocation may have recorded this intent during the native read.
-    requireCondition(createdIntent, "session_outcome_unknown");
-    const workspaces = this.adapter.context.get("workspaceRegistry");
-    requireCondition(workspaces, "workspace_unavailable");
+    }
+    // A duplicate may have committed its original intent during the native read.
+    if(Object.hasOwn(this.store.read().operations,command.operationId)) {
+      const intent=await this.store.transact(stamped,()=>null),receipt=this.store.read().operations[intent.statusOperationId]?.result;
+      requireCondition(receipt,"session_outcome_unknown");return receipt;
+    }
+    const release=this.adapter.fenceSessionAdmissions(input.sessionId);
     try {
-      if (value) await workspaces.archiveSession(input.sessionId);
-      else await workspaces.unarchiveSession(input.sessionId);
-      return await this.store.transact(
-        {
-          operationId: intent.statusOperationId,
-          action: "session.archive-settled",
-          input: intent,
-        },
+      let createdIntent = false;
+      const intent = await this.store.transact(
+        stamped,
         (draft) => {
           this.policy.require(
             actor,
@@ -474,45 +424,106 @@ export class SessionOwnership {
             reference,
             draft,
           );
-          const row = draft.sessions[input.sessionId];
+          const row = draft.sessions[input.sessionId] ?? {
+            sessionId: input.sessionId,
+            botId: null,
+            purpose: "ordinary",
+            epoch: 0,
+            state: "ready",
+            archived: false,
+          };
+          requireCondition(row.state !== "UNKNOWN", "recovery_required");
           requireCondition(
-            row.archiveOperationId === command.operationId,
-            "stale_operation",
+            !["configuring", "archiving", "restoring"].includes(row.state),
+            "operation_pending",
           );
-          row.archived = value;
-          row.state = row.previousState;
-          delete row.previousState;
-          return row;
+          if (value) {
+            const currentResources = this.adapter.resources(input.sessionId);
+            requireCondition(currentResources.known,"resource_identity_unknown");
+            requireCondition(currentResources.settled, "session_active");
+            requireCondition(!row.attemptId||!draft.attempts[row.attemptId]?.reservationHeld,"attempt_unsettled");
+          }
+          createdIntent = true;
+          row.archiveOperationId = command.operationId;
+          row.archiveStatusId = randomUUID();
+          row.previousState =
+            row.state === "UNKNOWN" ? (row.previousState ?? "ready") : row.state;
+          row.state = value ? "archiving" : "restoring";
+          draft.sessions[input.sessionId] = row;
+          return {
+            sessionId: row.sessionId,
+            statusOperationId: row.archiveStatusId,
+            archived: value,
+          };
         },
       );
-    } catch (error) {
-      await this.store
-        .transact(
+      this.policy.require(
+        actor,
+        value ? "session.archive" : "session.restore",
+        reference,
+      );
+      if (Object.hasOwn(this.store.read().operations, intent.statusOperationId))
+        return this.store.read().operations[intent.statusOperationId].result;
+      // A concurrent invocation may have recorded this intent during the native read.
+      requireCondition(createdIntent, "session_outcome_unknown");
+      const workspaces = this.adapter.context.get("workspaceRegistry");
+      requireCondition(workspaces, "workspace_unavailable");
+      try {
+        if (value) await workspaces.archiveSession(input.sessionId);
+        else await workspaces.unarchiveSession(input.sessionId);
+        return await this.store.transact(
           {
-            operationId: randomUUID(),
-            action: "session.archive-unknown",
-            input: {
-              sessionId: input.sessionId,
-              error: error.code ?? error.name,
-            },
+            operationId: intent.statusOperationId,
+            action: "session.archive-settled",
+            input: intent,
           },
           (draft) => {
+            this.policy.require(
+              actor,
+              value ? "session.archive" : "session.restore",
+              reference,
+              draft,
+            );
             const row = draft.sessions[input.sessionId];
-            if (row.archiveOperationId === command.operationId) {
-              row.state = [
-                "WorkspaceActiveSessionError",
-                "WorkspaceUnknownSessionError",
-              ].includes(error.name)
-                ? row.previousState
-                : "UNKNOWN";
-              row.error = error.code ?? error.name;
-            }
-            return null;
+            requireCondition(
+              row.archiveOperationId === command.operationId,
+              "stale_operation",
+            );
+            row.archived = value;
+            row.state = row.previousState;
+            delete row.previousState;
+            return row;
           },
-        )
-        .catch(() => {});
-      throw error;
-    }
+        );
+      } catch (error) {
+        await this.store
+          .transact(
+            {
+              operationId: randomUUID(),
+              action: "session.archive-unknown",
+              input: {
+                sessionId: input.sessionId,
+                error: error.code ?? error.name,
+              },
+            },
+            (draft) => {
+              const row = draft.sessions[input.sessionId];
+              if (row.archiveOperationId === command.operationId) {
+                row.state = [
+                  "WorkspaceActiveSessionError",
+                  "WorkspaceUnknownSessionError",
+                ].includes(error.name)
+                  ? row.previousState
+                  : "UNKNOWN";
+                row.error = error.code ?? error.name;
+              }
+              return null;
+            },
+          )
+          .catch(() => {});
+        throw error;
+      }
+    } finally {release();}
   }
   archive(actor, command) {
     return this.#archive(actor, command, true);

@@ -6,6 +6,11 @@ const categories=['fact','preference','decision','responsibility'];
 const sourceFields=['kind','storeId','operationId','sessionId','eventSeq','partIndex','startOffset','endOffset','headerVersion','eventHash','fullPartHash','docId','chunkId','contentHash','derived','meetingId','groupId','roundId','epoch','memberEpoch','phase','botId','attemptId','taskId','description','fileDigest','sourceStoreId'];
 const lineageFields=['sessionId','meetingId','groupId','roundId','epoch','memberEpoch','phase','botId','attemptId','taskId'];
 const sourceKinds=['human','session','material','import','external','task','meeting','group'];
+const maxFileBytes=4*1024*1024;
+// The shortest accepted source is {"kind":"human"} (16 UTF-8 bytes).
+// File and storage byte quotas bound attribution more tightly than this count.
+const maxProvenanceItems=Math.floor(maxFileBytes/16);
+const importDescription=memoryId=>`dsh-bot-memory:${memoryId}`;
 const sourceIdentity=(source,storeId)=>digest([source?.storeId??storeId,source?.kind??(source?.sessionId?'session':'human'),source?.sessionId??source?.docId??null,source?.eventSeq??source?.chunkId??null]);
 const dedupKey=entry=>digest([entry.text.normalize('NFKC').trim(),entry.category]);
 const binary=(a,b)=>a<b?-1:a>b?1:0;
@@ -33,8 +38,8 @@ function validateProvenance(provenance,depth=0) {
   for(const key of ['originalMemoryId','memoryId'])if(provenance[key]!==undefined)requireCondition(validId(provenance[key]),'invalid_import');
   if(provenance.source!==undefined)validateSource(provenance.source);
   if(provenance.lineage!==undefined)scalarDescription(provenance.lineage,lineageFields);
-  if(provenance.contentSources!==undefined){requireCondition(Array.isArray(provenance.contentSources)&&provenance.contentSources.length<=64,'invalid_import');for(const source of provenance.contentSources)validateSource(source);}
-  if(provenance.origins!==undefined){requireCondition(Array.isArray(provenance.origins)&&provenance.origins.length<=64,'invalid_import');for(const ref of provenance.origins){strictObject(ref,['kind','id'],'invalid_import');requireCondition(['session','memory','task','taskInput','material','meeting','group','bot'].includes(ref.kind)&&validId(ref.id),'invalid_import');}}
+  if(provenance.contentSources!==undefined){requireCondition(Array.isArray(provenance.contentSources)&&provenance.contentSources.length<=maxProvenanceItems,'invalid_import');for(const source of provenance.contentSources)validateSource(source);}
+  if(provenance.origins!==undefined){requireCondition(Array.isArray(provenance.origins)&&provenance.origins.length<=maxProvenanceItems,'invalid_import');for(const ref of provenance.origins){strictObject(ref,['kind','id'],'invalid_import');requireCondition(['session','memory','task','taskInput','material','meeting','group','bot'].includes(ref.kind)&&validId(ref.id),'invalid_import');}}
   if(provenance.originalProvenance!==undefined)validateProvenance(provenance.originalProvenance,depth+1);
   return copy(provenance);
 }
@@ -45,13 +50,15 @@ function boundedSource(source) {
   return validateSource(result);
 }
 function description(record,storeId) {
-  const provenance={storeId,originalMemoryId:record.memoryId,protected:!!(record.inactive||(record.origins??[]).length||record.lineage?.meetingId||record.source?.sessionId||record.source?.kind==='material'),source:boundedSource(record.source),origins:copy(record.origins??[]),contentSources:(record.contentSources??[]).map(boundedSource)};
+  const source=boundedSource(record.source);
+  if(source.kind==='import')source.description=importDescription(record.memoryId);
+  const provenance={storeId,originalMemoryId:record.memoryId,protected:!!(record.inactive||(record.origins??[]).length||record.lineage?.meetingId||record.source?.sessionId||record.source?.kind==='material'),source,origins:copy(record.origins??[]),contentSources:(record.contentSources??[]).map(boundedSource)};
   if(record.lineage)provenance.lineage=scalarDescription(record.lineage,lineageFields);
   if(record.originalProvenance)provenance.originalProvenance=copy(record.originalProvenance);
   return validateProvenance(provenance);
 }
 function parseFile(input) {
-  requireCondition(typeof input.fileText==='string'&&validUnicode(input.fileText)&&Buffer.byteLength(input.fileText)<=4*1024*1024,'invalid_import');
+  requireCondition(typeof input.fileText==='string'&&Buffer.byteLength(input.fileText)<=maxFileBytes&&validUnicode(input.fileText),'invalid_import');
   requireCondition(typeof input.fileDigest==='string'&&/^[a-f0-9]{64}$/.test(input.fileDigest)&&utf8Hash(input.fileText)===input.fileDigest,'file_digest_mismatch');
   let file;try {file=JSON.parse(input.fileText);}catch {requireCondition(false,'invalid_import');}
   strictObject(file,['format','formatVersion','storeId','botName','entries'],'invalid_import');
@@ -122,10 +129,29 @@ export class MemoryController {
     requireCondition(rows.length<=500,'export_batch_required');
     for(const row of rows)requireCondition(row&&row.botId===input.botId&&!row.forgotten&&this.policy.canRead(actor,{kind:'memory',id:row.memoryId},undefined,state),'export_unavailable');
     const file={format:'dsh-bot-memory',formatVersion:1,storeId:state.storeId,botName:state.bots[input.botId].name,entries:rows.map(row=>({text:row.text,category:row.category??'fact',pinned:!!row.pinned,provenance:description(row,state.storeId)}))},fileText=JSON.stringify(file,null,2);
-    requireCondition(Buffer.byteLength(fileText)<=4*1024*1024,'export_batch_required');
+    requireCondition(Buffer.byteLength(fileText)<=maxFileBytes,'export_batch_required');
     for(const row of rows)this.policy.noteRead(actor,{kind:'memory',id:row.memoryId});return {fileText,fileDigest:utf8Hash(fileText),fileName:`${input.botId}-memories.json`,memoryIds:rows.map(r=>r.memoryId)};
   }
-  async #verifySource(actor,source,state) {
+  #localImportSource(source,state,root,memoryId) {
+    if(!plain(root)||!validId(source.operationId)||!validId(source.sourceStoreId))return null;
+    const receipt=state.operations[source.operationId],result=receipt?.result;
+    if(receipt?.action!=='memory.import'||!plain(result)||result.fileDigest!==source.fileDigest||!Array.isArray(result.addedIds)||!Array.isArray(result.inactiveIds))return null;
+    const describedId=typeof source.description==='string'&&source.description.startsWith('dsh-bot-memory:')?source.description.slice('dsh-bot-memory:'.length):undefined;
+    if((source.description!==undefined&&!validId(describedId))||(describedId&&memoryId&&describedId!==memoryId))return null;
+    const key=canonical(source),rootKey=canonical(root),matches=[];
+    const {description,...legacySource}=source;
+    for(const id of describedId?[describedId]:memoryId?[memoryId]:result.addedIds) {
+      const row=state.memories[id];
+      if(!result.addedIds.includes(id)||!row||row.botId!==result.botId||!row.originalProvenance||row.originalProvenance.storeId!==source.sourceStoreId)continue;
+      const actual=canonical(row.source),sourceMatches=actual===key||describedId&&row.source.description===undefined&&actual===canonical(legacySource);
+      if(sourceMatches&&canonical(row.originalProvenance)===rootKey)matches.push(row);
+    }
+    // Legacy wrappers lacked a row ID: never borrow an active sibling when
+    // the same operation/root describes more than one original memory.
+    const row=matches.length===1?matches[0]:null;
+    return row&&!row.forgotten&&!row.inactive&&!result.inactiveIds.includes(row.memoryId)?row:null;
+  }
+  async #verifySource(actor,source,state,proof) {
     if(source.kind==='human')return true;
     if(source.kind==='material') {
       const row=state.materials?.[source.docId],chunk=row?.chunks.find(c=>c.chunkId===source.chunkId);
@@ -135,9 +161,14 @@ export class MemoryController {
       if(source.storeId!==state.storeId||!source.eventHash)return false;
       try {const range=source.fullPartHash!==undefined,keys=range?['sessionId','eventSeq','partIndex','startOffset','endOffset']:['sessionId','eventSeq'];const ref=Object.fromEntries(keys.map(k=>[k,source[k]])),evidence=await readSessionEvidence(this,actor,ref,{range});return evidence.source.eventHash===source.eventHash&&(!range||evidence.source.fullPartHash===source.fullPartHash);}catch{return false;}
     }
-    // A derived body has no native text proof; the matching immutable local memory
-    // descriptor checked by #provenance is its evidence, with live session ACL.
+    // A derived body uses the matching local descriptor, guarded again after
+    // source I/O, and the live session ACL as its evidence.
     if(source.kind==='session'&&source.derived)return source.storeId===state.storeId&&this.policy.canRead(actor,{kind:'session',id:source.sessionId},undefined,state);
+    if(source.kind==='import') {
+      const row=this.#localImportSource(source,state,proof.root,canonical(source)===canonical(proof.original.source)?proof.original.memoryId:undefined);
+      if(!row)return false;
+      proof.guards.set(row.memoryId,{memoryId:row.memoryId,fingerprint:digest(row)});proof.importSources.set(canonical(source),row.memoryId);return true;
+    }
     return false;
   }
   #originAllowed(actor,reference,state) {
@@ -148,16 +179,42 @@ export class MemoryController {
   }
   async #provenance(actor,entry,state) {
     const provenance=entry.provenance,protectedSource=carriesProtection(provenance),originalId=provenance.originalMemoryId??provenance.memoryId;
-    if(!protectedSource)return {verified:false,inactive:false,reason:'external_description'};
-    if(provenance.storeId!==state.storeId)return {verified:false,inactive:true,reason:'external_protected_source'};
+    const descriptive={verified:false,inactive:false,reason:'external_description'},unavailable=()=>protectedSource?{verified:false,inactive:true,reason:'source_unverified'}:descriptive;
+    if(provenance.storeId!==state.storeId)return protectedSource?{verified:false,inactive:true,reason:'external_protected_source'}:descriptive;
     const original=state.memories[originalId];
-    if(!original||original.inactive||original.forgotten||original.text!==entry.text||(original.category??'fact')!==entry.category||!this.policy.canRead(actor,{kind:'memory',id:originalId},undefined,state))return {verified:false,inactive:true,reason:'source_unverified'};
+    if(!original||original.inactive||original.forgotten||original.text!==entry.text||(original.category??'fact')!==entry.category||!this.policy.canRead(actor,{kind:'memory',id:originalId},undefined,state))return unavailable();
     const expected=description(original,state.storeId),claimed={...provenance};if(claimed.memoryId){claimed.originalMemoryId=claimed.memoryId;delete claimed.memoryId;}
-    if(canonical(claimed)!==canonical(expected))return {verified:false,inactive:true,reason:'source_unverified'};
+    // Existing format 1 files predate annotations. The actual legacy row still
+    // pins this source to originalId; no caller-supplied row label is trusted.
+    if(original.source?.kind==='import'&&original.source.description===undefined&&claimed.source?.description===undefined)delete expected.source.description;
+    if(canonical(claimed)!==canonical(expected))return unavailable();
+    const proof={original,root:provenance.originalProvenance,guards:new Map([[original.memoryId,{memoryId:original.memoryId,fingerprint:digest(original)}]]),importSources:new Map()};
     for(const ref of provenance.origins??[])if(ref.kind==='taskInput'&&!Object.hasOwn(state.taskInputs??{},ref.id))return {verified:false,inactive:true,reason:'source_unverified'};
-    for(const source of [provenance.source,...(provenance.contentSources??[])].filter(Boolean))if(!await this.#verifySource(actor,source,state))return {verified:false,inactive:true,reason:'source_unverified'};
+    for(const source of [provenance.source,...(provenance.contentSources??[])].filter(Boolean))if(!await this.#verifySource(actor,source,state,proof))return {verified:false,inactive:true,reason:'source_unverified'};
     for(const ref of provenance.origins??[])if(!this.#originAllowed(actor,ref,this.store.read()))return {verified:false,inactive:true,reason:'source_revoked'};
-    return {verified:true,inactive:false,reason:'verified_local_source'};
+    return {verified:true,inactive:false,reason:'verified_local_source',guards:[...proof.guards.values()],importSources:[...proof.importSources]};
+  }
+  #currentProvenance(actor,entry,verification,state) {
+    if(!verification.verified)return verification;
+    const unavailable=()=>({verified:false,inactive:true,reason:'source_unverified'});
+    for(const guard of verification.guards) {
+      const row=state.memories[guard.memoryId];
+      if(!row||row.forgotten||row.inactive||digest(row)!==guard.fingerprint||!this.policy.canRead(actor,{kind:'memory',id:guard.memoryId},undefined,state))return unavailable();
+      if(row.source.kind==='import'&&!this.#localImportSource(row.source,state,row.originalProvenance,row.memoryId))return unavailable();
+    }
+    for(const source of [entry.provenance.source,...(entry.provenance.contentSources??[])].filter(Boolean)) {
+      if(source.kind==='material') {
+        const row=state.materials[source.docId],chunk=row?.chunks?.find(c=>c.chunkId===source.chunkId);
+        if(source.storeId!==state.storeId||!row||!chunk||row.contentHash!==source.contentHash||chunk.startOffset!==source.startOffset||chunk.endOffset!==source.endOffset)return unavailable();
+        if(!this.policy.canRead(actor,{kind:'material',id:source.docId},undefined,state))return {verified:false,inactive:true,reason:'source_revoked'};
+      }
+      if(source.kind==='session') {
+        if(source.storeId!==state.storeId||!state.sessions[source.sessionId])return unavailable();
+        if(!this.policy.canRead(actor,{kind:'session',id:source.sessionId},undefined,state))return {verified:false,inactive:true,reason:'source_revoked'};
+      }
+    }
+    if(!(entry.provenance.origins??[]).every(ref=>this.#originAllowed(actor,ref,state)))return {verified:false,inactive:true,reason:'source_revoked'};
+    return verification;
   }
   #decisions(file,verified,state,botId,unpinned=[]) {
     const existing=new Map(Object.values(state.memories).filter(r=>r.botId===botId&&!r.forgotten).map(r=>[dedupKey({...r,category:r.category??'fact'}),r.memoryId])),seen=new Map(),entries=[];
@@ -170,7 +227,7 @@ export class MemoryController {
   async preview(actor,input) {
     this.policy.actorKey(actor);strictObject(input,['botId','fileText','fileDigest']);this.#human(actor,input.botId);const file=parseFile(input),state=this.store.read(),verified=[];
     for(const entry of file.entries)verified.push(await this.#provenance(actor,entry,state));this.#human(actor,input.botId);
-    const current=this.store.read(),decisions=this.#decisions(file,verified,current,input.botId);
+    const current=this.store.read(),live=verified.map((verification,index)=>this.#currentProvenance(actor,file.entries[index],verification,current)),decisions=this.#decisions(file,live,current,input.botId);
     return {botId:input.botId,memoryRevision:current.bots[input.botId].memoryRevision??0,fileDigest:input.fileDigest,...decisions,entries:decisions.entries.map(decision=>({...decision,text:file.entries[decision.index].text,category:file.entries[decision.index].category}))};
   }
   async import(actor,command) {
@@ -180,7 +237,7 @@ export class MemoryController {
     const state=this.store.read(),verified=[];for(const entry of file.entries)verified.push(await this.#provenance(actor,entry,state));
     return this.store.transact(stamped,draft=>{
       this.#human(actor,input.botId,draft);requireCondition((draft.bots[input.botId].memoryRevision??0)===input.expectedMemoryRevision,'memory_revision_conflict');
-      const before=copy(draft),decisions=this.#decisions(file,verified,draft,input.botId,unpinned);requireCondition(!decisions.pinConflict,'pin_quota');
+      const before=copy(draft),live=verified.map((verification,index)=>this.#currentProvenance(actor,file.entries[index],verification,draft)),decisions=this.#decisions(file,live,draft,input.botId,unpinned);requireCondition(!decisions.pinConflict,'pin_quota');
       const addedIds=[],skippedIds=[],inactiveIds=[],indexIds=new Map(),createdAt=new Date().toISOString();
       for(const decision of decisions.entries) {
         const entry=file.entries[decision.index];
@@ -188,9 +245,17 @@ export class MemoryController {
         const memoryId=`memory_${randomUUID()}`,provenance=copy(entry.provenance);let active=decision.verified;
         // Read privileges are rechecked in the atomic mutation after all source I/O.
         if(active&&!(provenance.origins??[]).every(ref=>this.#originAllowed(actor,ref,draft)))active=false;
-        const inactive=verified[decision.index].inactive||decision.verified&&!active,source={kind:'import',operationId:command.operationId,fileDigest:input.fileDigest,sourceStoreId:provenance.storeId};
-        const row={memoryId,botId:input.botId,text:entry.text,category:entry.category,pinned:decision.pinned,forgotten:false,inactive,version:1,createdAt,updatedAt:createdAt,source,contentSources:active?[...(provenance.source?[provenance.source]:[]),...(provenance.contentSources??[])]:[],origins:active?copy(provenance.origins??[]):[],originalProvenance:provenance};
-        if(active&&provenance.lineage)row.lineage=copy(provenance.lineage);if(inactive)row.inactiveReason=verified[decision.index].reason;
+        // Live sources retain every wrapper and lineage; the root descriptor is
+        // kept once instead of nesting a new full descriptor for every copy.
+        const retained=active&&provenance.source?.kind==='import'&&provenance.originalProvenance?copy(provenance.originalProvenance):provenance;
+        const inactive=live[decision.index].inactive||decision.verified&&!active,source={kind:'import',operationId:command.operationId,fileDigest:input.fileDigest,sourceStoreId:retained.storeId,description:importDescription(memoryId)},imports=new Map(live[decision.index].importSources??[]);
+        const sources=active?[...(provenance.source?[provenance.source]:[]),...(provenance.contentSources??[])].map(source=>{
+          if(source.kind!=='import')return source;
+          const originalMemoryId=imports.get(canonical(source));requireCondition(validId(originalMemoryId),'source_unverified');
+          return {...source,description:importDescription(originalMemoryId)};
+        }):[];
+        const row={memoryId,botId:input.botId,text:entry.text,category:entry.category,pinned:decision.pinned,forgotten:false,inactive,version:1,createdAt,updatedAt:createdAt,source,contentSources:uniqueReferences(sources),origins:active?copy(provenance.origins??[]):[],originalProvenance:retained};
+        if(active&&provenance.lineage)row.lineage=copy(provenance.lineage);if(inactive)row.inactiveReason=live[decision.index].reason;
         draft.memories[memoryId]=row;addedIds.push(memoryId);indexIds.set(decision.index,memoryId);if(inactive)inactiveIds.push(memoryId);
       }
       enforceQuota(draft,'memories',input.botId,{perBot:2000,profile:10000},before);const memoryRevision=addedIds.length?this.#revision(draft,input.botId):draft.bots[input.botId].memoryRevision??0;

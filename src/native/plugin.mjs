@@ -46,6 +46,7 @@ export async function apply(ctx) {
       assistant=new AssistantController({store,policy,adapter,tasks});broker.setNoticeSink(assistant);
       service=new BotService({store,policy,adapter,bots,sessions,tasks,broker,collaboration,recovery,knowledge,memory,templates,assistant});adapter.setService(service);
       await recovery.reconcile(policy.fromPeer(ctx.connection.operator),{operationId:randomUUID(),action:'recovery.reconcile',input:{}});
+      await adapter.start();
       await assistant.start();
       unprovide=ctx.provide('dshBot',service);
       unrpc=await mountBotRoutes(ctx,{policy,service,isClosed:()=>closed});
