@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {waitFor} from './stock-gui-runtime.mjs';
+import {createTrackedRoute} from './stock-route-scope.mjs';
 
 const button=(scope,name)=>scope.getByRole('button',{name,exact:true});
 const details=(scope,title)=>{
@@ -46,17 +47,7 @@ async function command(gui,action,input) {
 }
 
 async function trackedRoute(gui,path,handle) {
-  const active=new Set(),failures=[];
-  const throwFailure=()=>{if(failures.length===1)throw failures[0];if(failures.length>1)throw new AggregateError(failures,'Actual route lifecycle failed');};
-  const drain=async()=>{while(active.size)await Promise.allSettled([...active]);};
-  const handler=async route=>{
-    const work=Promise.resolve().then(()=>handle(route));active.add(work);
-    // Playwright dispatches route callbacks without an awaitable public promise.
-    // Awaited lifecycle methods surface failures while preserving the first error.
-    try {await work;} catch(error) {failures.push(error);} finally {active.delete(work);}
-  };
-  await gui.page.route(path,handler);
-  return {failures,throwFailure,drain,close:()=>cleanup(undefined,[()=>gui.page.unroute(path,handler),drain,throwFailure])};
+  return createTrackedRoute(gui.page,path,handle);
 }
 
 // Hold delivery of one genuine installed reply; never replace its body.

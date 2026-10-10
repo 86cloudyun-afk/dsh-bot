@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {controlledProvider} from './stock-gui-runtime.mjs';
+import {withTrackedRoute} from './stock-route-scope.mjs';
 
 export async function runRepairChecks(gui) {
   const service=gui.app.ctx.dshBot, actor=service.policy.fromPeer(gui.app.ctx.connection.operator);
@@ -15,13 +16,13 @@ export async function runRepairChecks(gui) {
     delete body.result.value.clientProtocol;
     await route.fulfill({response,json:body});
   };
-  await gui.page.route('**/api/dsh.bot/snapshot',mismatch);
-  await editor.getByLabel('名称',{exact:true}).fill('受版本检查保护');
-  await editor.getByRole('button',{name:'创建 Bot',exact:true}).click();
-  await gui.page.getByRole('alert').filter({hasText:'plugin_version_mismatch'}).waitFor();
-  assert.equal(service.snapshot(actor).bots.length,before);
-  gui.check('mixedReleaseRefusesFirstBotWrite',true);
-  await gui.page.unroute('**/api/dsh.bot/snapshot',mismatch);
+  await withTrackedRoute(gui.page,'**/api/dsh.bot/snapshot',mismatch,async()=>{
+    await editor.getByLabel('名称',{exact:true}).fill('受版本检查保护');
+    await editor.getByRole('button',{name:'创建 Bot',exact:true}).click();
+    await gui.page.getByRole('alert').filter({hasText:'plugin_version_mismatch'}).waitFor();
+    assert.equal(service.snapshot(actor).bots.length,before);
+    gui.check('mixedReleaseRefusesFirstBotWrite',true);
+  });
   await refresh();
 
   let original;
@@ -34,11 +35,11 @@ export async function runRepairChecks(gui) {
       await route.abort('failed');
     } else await route.continue();
   };
-  await gui.page.route('**/api/dsh.bot/command',lostReply);
-  await editor.getByLabel('名称',{exact:true}).fill('丢失回执仅创建一次');
-  await editor.getByRole('button',{name:'创建 Bot',exact:true}).click();
-  await gui.page.getByRole('alert').filter({hasText:'结果未确认'}).waitFor();
-  await gui.page.unroute('**/api/dsh.bot/command',lostReply);
+  await withTrackedRoute(gui.page,'**/api/dsh.bot/command',lostReply,async()=>{
+    await editor.getByLabel('名称',{exact:true}).fill('丢失回执仅创建一次');
+    await editor.getByRole('button',{name:'创建 Bot',exact:true}).click();
+    await gui.page.getByRole('alert').filter({hasText:'结果未确认'}).waitFor();
+  });
   assert.ok(original?.operationId);
   const pending=gui.card('待查回的原始操作').locator('div.actions').filter({hasText:original.operationId});
   await pending.getByRole('button',{name:'查回原始操作',exact:true}).click();
@@ -77,13 +78,14 @@ export async function runRepairChecks(gui) {
     provider.models=provider.models.filter(row=>!['model-a','model-b'].includes(row.id));
     await route.fulfill({response,json:body});
   };
-  await gui.page.route('**/api/dsh.bot/catalog',removeModels);await refresh();
-  assert.equal(await editing.getByLabel('模型',{exact:true}).inputValue(),contactChoice);
-  assert.equal(await editing.getByLabel('执行模型',{exact:true}).inputValue(),executionChoice);
-  await editing.getByRole('button',{name:'保存配置',exact:true}).click();
-  await gui.until(snapshot=>snapshot.bots.find(row=>row.botId===bot.botId)?.contact.model==='model-b','unsaved model choices after catalog refresh');
-  assert.equal(service.store.read().bots[bot.botId].execution.model,'model-a');
-  await gui.page.unroute('**/api/dsh.bot/catalog',removeModels);
+  await withTrackedRoute(gui.page,'**/api/dsh.bot/catalog',removeModels,async()=>{
+    await refresh();
+    assert.equal(await editing.getByLabel('模型',{exact:true}).inputValue(),contactChoice);
+    assert.equal(await editing.getByLabel('执行模型',{exact:true}).inputValue(),executionChoice);
+    await editing.getByRole('button',{name:'保存配置',exact:true}).click();
+    await gui.until(snapshot=>snapshot.bots.find(row=>row.botId===bot.botId)?.contact.model==='model-b','unsaved model choices after catalog refresh');
+    assert.equal(service.store.read().bots[bot.botId].execution.model,'model-a');
+  });
   gui.check('unsavedContactAndExecutionChoicesSurviveCatalogRemoval',true);
   const task=await dispatch('task.create',{botId:bot.botId,title:'并发目标草稿',goal:'Initial goal',criteria:[]});
   await gui.workbench('任务');await refresh();

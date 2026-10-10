@@ -804,7 +804,9 @@ try {
   );
   mark("ui-sharing-and-concurrent-draft-regressions");
   await runSimpleUiChecks(gui);
+  mark("ui-original-operation-and-configuration-recovery");
   await runRepairChecks(gui);
+  mark("ui-sharing-and-concurrent-draft-regressions");
   await runUiRegressions(gui);
   mark("chat-identity-and-recoverable-bot-delete");
   await runChatIdentityChecks(gui);
