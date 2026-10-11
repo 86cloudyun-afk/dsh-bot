@@ -84,9 +84,9 @@ export class BotService {
         .map(([id, row]) => {
           this.policy.noteRead(actor, { kind, id },state);
           return kind === "group" && this.collaboration
-            ? this.collaboration.viewGroup(actor, row)
+            ? this.collaboration.viewGroup(actor, row, {}, state)
             : kind === "meeting" && this.collaboration
-              ? this.collaboration.viewMeeting(actor, row)
+              ? this.collaboration.viewMeeting(actor, row, state)
               : kind === "session"
                 ? { ...copy(row), archived: this.adapter.isArchived(id) }
                 : kind === "task" ? {

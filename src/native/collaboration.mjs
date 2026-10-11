@@ -486,10 +486,12 @@ export class GroupMeetingController {
             },
           );
           const result = await this.#turn(binding, (actor) => {
+            const state = this.store.read();
             const transcript = this.viewGroup(
               actor,
-              this.store.read().groups[intent.groupId],
+              state.groups[intent.groupId],
               { messageLimit: 30 },
+              state,
             ).messages;
             return `内部群 ${current.name}，群身份 ${current.groupId}，有界轮 ${intent.roundId}/${cycle + 1}。\n仅讨论本群材料：${JSON.stringify(transcript)}\n请直接给出自己的简短真实答复；勿自动循环转投，不改变权限。`;
           });
@@ -873,28 +875,28 @@ export class GroupMeetingController {
       };
     });
   }
-  viewGroup(actor, group, { messageLimit } = {}) {
+  viewGroup(actor, group, { messageLimit } = {}, state = this.store.read()) {
     const output = copy(group);
     output.messages = output.messages.filter((row) =>
-      this.policy.canReadDerived(actor, row),
+      this.policy.canReadDerived(actor, row, state),
     );
     if (messageLimit !== undefined)
       output.messages = output.messages.slice(
         Math.max(0, output.messages.length - messageLimit),
       );
     for (const row of output.messages)
-      this.policy.noteDerivedRead(actor, row);
+      this.policy.noteDerivedRead(actor, row, {}, state);
     return output;
   }
-  viewMeeting(actor, meeting) {
+  viewMeeting(actor, meeting, state = this.store.read()) {
     const output = copy(meeting);
     for (const key of ["opinions", "discussion"])
       output[key] = Object.fromEntries(
         Object.entries(output[key] ?? {}).filter(([, row]) =>
-          this.policy.canReadDerived(actor, row),
+          this.policy.canReadDerived(actor, row, state),
         ),
       );
-    if (output.decision && !this.policy.canReadDerived(actor, output.decision))
+    if (output.decision && !this.policy.canReadDerived(actor, output.decision, state))
       output.decision = null;
     if (actor.kind !== "human") output.history = [];
     for (const row of [
@@ -907,7 +909,7 @@ export class GroupMeetingController {
         ...(row.source?.sessionId
           ? [{ kind: "session", id: row.source.sessionId }]
           : []),
-      ]);
+      ], state);
     return output;
   }
   async advance(actor, command) {
