@@ -43,6 +43,7 @@ const contracts = {
   "task.archive": [["taskId", "expectedVersion"], [], "归档已结算任务。"],
   "task.restore": [["taskId", "expectedVersion"], [], "恢复同一任务；不自动重跑。"],
   "group.post": [["groupId", "text"], [], "在有权参与的既有内部群发送消息。"],
+  "group.round.stop": [["groupId", "roundId"], [], "人类停止确切群轮；接受后阻止新成员请求与迟到回复，资源未结算保持 stopping，查 snapshot 确认 stopped 或 UNKNOWN。原操作 ID 查回不重复停止。", "human"],
   "meeting.opinion": [["meetingId", "epoch", "memberEpoch", "text", "source"], [], "当前原生会议参与者提交意见；source 为 {sessionId,eventSeq}，必须对应实际模型答复。"],
   "meeting.action": [["meetingId", "epoch", "botId", "title", "goal", "criteria"], [], "从已有真实决定登记并链接行动任务；之后用 task.start 执行。"],
   "outbox.reconcile": [["outboxId"], [], "查回原始结果投递；UNKNOWN 不重放。明确从未入队且被阻止的投递只在当前授权有效后重试。"],

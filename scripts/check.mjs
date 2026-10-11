@@ -2,6 +2,7 @@ import {execFileSync} from 'node:child_process';
 import {readdirSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 const root=resolve(import.meta.dirname,'..');
+execFileSync(process.execPath,[resolve(root,'scripts/build-client.mjs'),'--check'],{stdio:'inherit'});
 for(const directory of ['src/native','src/client','scripts']) for(const entry of readdirSync(resolve(root,directory),{withFileTypes:true})) {
  if(entry.isFile() && /\.(mjs|js)$/.test(entry.name))execFileSync(process.execPath,['--check',resolve(root,directory,entry.name)],{stdio:'inherit'});
 }

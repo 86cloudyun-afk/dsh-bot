@@ -1,14 +1,16 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, cp, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
-import * as stock from '../native-plugin/stock-qualification.mjs';
-import {parseOwnerCommand, executePublication, PublicationFailure} from '../../scripts/publish-v120.mjs';
+import {createV120Fixture} from './v120-fixture.mjs';
 
 // Independent stateful API model: the authority can change while otherwise valid
 // qualification artifacts are downloaded, or a write can commit before timing out.
-const root=resolve(import.meta.dirname,'../..');
+const historical=await createV120Fixture({repositoryRoot:resolve(import.meta.dirname,'../..')});
+after(historical.cleanup);
+const {root,stock}=historical;
+const {parseOwnerCommand,executePublication,PublicationFailure}=historical.publisher;
 const repositoryName='86cloudyun-afk/dsh-bot';
 const prefix=`/repos/${repositoryName}`;
 const source='a'.repeat(40), tagSha='b'.repeat(40), otherTagSha='f'.repeat(40);

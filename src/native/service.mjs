@@ -84,9 +84,9 @@ export class BotService {
         .map(([id, row]) => {
           this.policy.noteRead(actor, { kind, id },state);
           return kind === "group" && this.collaboration
-            ? this.collaboration.viewGroup(actor, row)
+            ? this.collaboration.viewGroup(actor, row, {}, state)
             : kind === "meeting" && this.collaboration
-              ? this.collaboration.viewMeeting(actor, row)
+              ? this.collaboration.viewMeeting(actor, row, state)
               : kind === "session"
                 ? { ...copy(row), archived: this.adapter.isArchived(id) }
                 : kind === "task" ? {
@@ -338,6 +338,7 @@ export class BotService {
         "session.send": [this.broker, "enqueue"],
         "group.create": [this.collaboration, "createGroup"],
         "group.post": [this.collaboration, "post"],
+        "group.round.stop": [this.collaboration, "stopRound"],
         "group.members": [this.collaboration, "changeMembers"],
         "meeting.start": [this.collaboration, "startMeeting"],
         "meeting.opinion": [this.collaboration, "submitOpinion"],
