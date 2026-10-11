@@ -129,7 +129,14 @@ export const guiCheckNames=Object.freeze([
   "v113MaterialSearchRetryClearsOnlyItsOwnError",
   "v113UntouchedSharingPreservesWildcardForFutureBotRead",
   "v113ScheduleOwnerReadOnlyOnEditAndSelectableOnCreate",
-  "v113QualityUsesNoExternalModelRequests"
+  "v113QualityUsesNoExternalModelRequests",
+  "v120ExistingContactOpensOriginalIdentityWithoutNewOperation",
+  "v120BrowserStorageFailureRefusesMutationAndKeepsOriginalRequest",
+  "v120RefreshRecoveryClearsOnlyOwnedConnectionError",
+  "v120MaterialSeamSearchReturnsExistingExactChunks",
+  "v120EditedPausedOnceReminderKeepsOriginalDueAndNotifiesOnce",
+  "v120GroupReplySourceRevocationHidesLaterDerivedMaterial",
+  "v120QualityUsesNoExternalModelRequests"
 ]);
 const prior=(version,sha256,schema)=>Object.freeze({version,sha256,schema});
 export const stockSources=Object.freeze({
@@ -141,6 +148,7 @@ export const stockSources=Object.freeze({
   'upgrade-v111':prior('1.1.1','cf651bff75f9fa144e05b0db7fd6284038c50bcafb8a44ccfa8b0d4d66bb9c92',2),
   'upgrade-v112':prior('1.1.2','426a244ae02927129e315420907ab4b2f9acf16414144e0e6792b7f25bfe48ff',2),
   'upgrade-v113':prior('1.1.3','55c192a3837d36ff6dd78fa5f34c36d2375a648258ddd499f793d6e3a47ae289',2),
+  'upgrade-v114':prior('1.1.4','3fb396f44120881c5f9fbf6d40b278e8614ffa765e29c04a6c49ccf8000f5677',2),
 });
 const stableVersion=version=>typeof version==='string'&&/^\d+\.\d+\.\d+$/.test(version);
 const hex=(value,size)=>typeof value==='string'&&new RegExp(`^[a-f\\d]{${size}}$`).test(value);

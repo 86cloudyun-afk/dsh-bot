@@ -661,8 +661,10 @@ export class TaskController {
       row.state = "stop_requested";
       row.stopOperationId = operationId;
       draft.sessions[row.sessionId].state = "stopping";
+      const currentTask = draft.tasks[row.taskId];
+      if (currentTask?.currentAttemptId === row.attemptId)
+        currentTask.state = "stopping";
     }
-    task.state = attempt.reservationHeld ? "stopping" : task.state;
     return {accepted: true, taskId: task.taskId, attemptId: attempt.attemptId,
       epoch: attempt.epoch, operationId, attemptIds: forest.map(row => row.attemptId),
       settled: !attempt.reservationHeld};
