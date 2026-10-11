@@ -1,0 +1,41 @@
+name: Qualified v1.2.0 publication
+run-name: v1.2.0 publication comment ${{ github.event.comment.id }}
+on:
+  issue_comment:
+    types: [created]
+permissions: {}
+jobs:
+  publish:
+    concurrency:
+      group: dsh-bot-v120-publication
+      cancel-in-progress: false
+    if: >-
+      github.run_attempt == 1 &&
+      github.repository == '86cloudyun-afk/dsh-bot' &&
+      github.repository_owner_id == '269269188' &&
+      github.event.action == 'created' &&
+      github.event.sender.id == 269269188 &&
+      github.event.sender.type == 'User' &&
+      github.event.comment.user.id == 269269188 &&
+      github.event.comment.user.type == 'User' &&
+      github.event.issue.number == 11 &&
+      github.event.issue.pull_request &&
+      (startsWith(github.event.comment.body, '/dsh-bot-tag v1.2.0 ') ||
+       startsWith(github.event.comment.body, '/dsh-bot-publish v1.2.0 '))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Qualify frozen evidence and execute the exact owner command
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/publish-v120.mjs

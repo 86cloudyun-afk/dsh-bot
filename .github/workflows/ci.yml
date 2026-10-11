@@ -1,11 +1,37 @@
 name: Native plugin checks
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.publication_comment != '' && format('Native plugin checks v1.2.0 publication comment {0} run {1}', inputs.publication_comment, inputs.publication_run) || 'Native plugin checks' }}
 permissions:
   contents: read
   checks: write
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      publication_comment:
+        description: Qualified publication comment ID
+        type: string
+        required: false
+      publication_run:
+        description: Qualified publication workflow run ID
+        type: string
+        required: false
 jobs:
+  publication-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Bind publication dispatch to the actual tag
+        if: github.event_name == 'workflow_dispatch' && (inputs.publication_comment != '' || inputs.publication_run != '')
+        env:
+          PUBLICATION_COMMENT: ${{ inputs.publication_comment }}
+          PUBLICATION_RUN: ${{ inputs.publication_run }}
+        run: |
+          node --input-type=module -e 'import assert from "node:assert/strict"; assert.equal(process.env.GITHUB_REF,"refs/tags/v1.2.0"); for (const key of ["PUBLICATION_COMMENT","PUBLICATION_RUN"]) { const value = process.env[key]; assert.match(value, /^[1-9]\d*$/); assert.ok(Number.isSafeInteger(Number(value))); }'
+      - run: node --test test/publication/*.test.mjs
   plugin:
     strategy:
       matrix:
