@@ -34,7 +34,7 @@ async function fixture(t,mode='tag'){
   const m=await publisher();assert.equal(typeof m.executePublication,'function','Guard must independently qualify real artifacts before any write');
   const scratch=await mkdtemp(join(tmpdir(),'publication-test-'));t.after(()=>rm(scratch,{recursive:true,force:true}));
   const target=await stock.readStockTarget({root,sourceCommit:sha});
-  const state={mainSha:sha,repo:structuredClone(repository),workflow:{id:1001,path:'.github/workflows/ci.yml',name:'Native plugin checks',state:'active'},pr:{number:11,state:'closed',merged:true,merged_at:'2026-10-11T09:00:00Z',merge_commit_sha:'d'.repeat(40),base:{ref:'main',repo:repository}},runs:{[mainId]:run(),[tagId]:run(tagId),987:{id:987,path:'.github/workflows/publish-v120.yml',event:'issue_comment',head_branch:'main',head_sha:sha,repository,head_repository:repository,run_attempt:1,display_title:'v1.2.0 publication comment 6106000000'}},jobs:names.map(name=>({name,status:'completed',conclusion:'success'})),tag:mode==='publish'?tagObject():null,release:null,priorPublisherRuns:[],tagRuns:[],writes:[],downloads:[],mutateReport:()=>{},mutatePackage:()=>{},writeFailure:null,leaseChanges:false,liveComment:null,originalComment:{...event().comment,id:6105999999,created_at:'2026-10-11T11:30:00Z',updated_at:'2026-10-11T11:30:00Z'}};state.runs[986]={...state.runs[987],id:986,display_title:'v1.2.0 publication comment 6105999999',status:'completed',conclusion:'success'};
+  const state={mainSha:sha,repo:structuredClone(repository),workflow:{id:1001,path:'.github/workflows/ci.yml',name:'Native plugin checks',state:'active'},pr:{number:11,state:'closed',merged:true,merged_at:'2026-10-11T09:00:00Z',merge_commit_sha:'d'.repeat(40),base:{ref:'main',repo:repository}},runs:{[mainId]:run(),[tagId]:run(tagId),987:{id:987,path:'.github/workflows/publish-v120.yml',event:'issue_comment',head_branch:'main',head_sha:sha,repository,head_repository:repository,run_attempt:1,display_title:'v1.2.0 publication comment 6106000000'}},jobs:names.map((name,index)=>({id:10000+index,name,status:'completed',conclusion:'success'})),readableJobs:[{id:114404933414,name:'原生 GUI (macos-latest)',status:'completed',conclusion:'success'},{id:114405271354,name:'原生 GUI (ubuntu-latest)',status:'completed',conclusion:'success'}],jobReads:[],tag:mode==='publish'?tagObject():null,release:null,priorPublisherRuns:[],tagRuns:[],writes:[],downloads:[],mutateReport:()=>{},mutatePackage:()=>{},writeFailure:null,leaseChanges:false,liveComment:null,originalComment:{...event().comment,id:6105999999,created_at:'2026-10-11T11:30:00Z',updated_at:'2026-10-11T11:30:00Z'}};state.runs[986]={...state.runs[987],id:986,display_title:'v1.2.0 publication comment 6105999999',status:'completed',conclusion:'success'};
   const api={async request(method,path,body){
     if(method!=='GET'){state.writes.push({method,path,body});if(state.writeFailure?.(path))throw new Error('private bearer secret https://signed.invalid/?token=private');}
     if(path===`/repos/${repo}/issues/comments/6105999999`)return state.originalComment;
@@ -47,7 +47,7 @@ async function fixture(t,mode='tag'){
     if(path.startsWith(`/repos/${repo}/actions/workflows/publish-v120.yml/runs?`))return {total_count:state.priorPublisherRuns.length,workflow_runs:state.priorPublisherRuns};
     if(path.startsWith(`/repos/${repo}/actions/workflows/ci.yml/runs?`))return {total_count:state.tagRuns.length,workflow_runs:state.tagRuns};
     const runMatch=new RegExp(`/actions/runs/(\\d+)$`).exec(path);if(runMatch)return state.runs[runMatch[1]];
-    if(path.includes('/jobs?'))return {total_count:state.jobs.length,jobs:state.jobs};
+    if(path.includes('/jobs?')){const runId=Number(/\/runs\/(\d+)/.exec(path)[1]);const records=runId===mainId?[...state.jobs,...state.readableJobs]:state.jobs;const jobs=records.map(job=>({run_id:runId,head_sha:state.runs[runId].head_sha,run_attempt:state.runs[runId].run_attempt,...job}));state.jobReads.push({runId,count:jobs.length});return {total_count:jobs.length,jobs};}
     if(path.includes('/artifacts?')){const n=Number(/\/runs\/(\d+)/.exec(path)[1]);return {total_count:3,artifacts:['native-plugin-package','stock-gui-ubuntu-latest','stock-gui-macos-latest'].map((name,i)=>({id:2000+i,name,expired:false,workflow_run:{id:n,head_sha:sha,head_branch:state.runs[n].head_branch}}))};}
     if(path===`/repos/${repo}/git/ref/tags/v1.2.0`)return state.tag?{object:{type:'tag',sha:state.tag.sha}}:null;
     if(method==='GET'&&path===`/repos/${repo}/git/tags/${'b'.repeat(40)}`)return state.tag;
@@ -65,7 +65,7 @@ async function fixture(t,mode='tag'){
 }
 async function refused(t,mutate,mode='tag'){const f=await fixture(t,mode);await mutate(f);await assert.rejects(()=>f.m.executePublication(f.options));assert.deepEqual(f.state.writes,[],'Unqualified evidence must not cause a write');}
 
-test('qualified tag creates an annotated immutable ref and explicitly dispatches native CI',async t=>{const f=await fixture(t),result=await f.m.executePublication(f.options);assert.equal(result.status,'tagged-and-dispatched');assert.deepEqual(f.state.writes.map(x=>x.path.split('/').at(-1)),['tags','refs','dispatches']);assert.equal(f.state.writes[0].body.type,'commit');assert.equal(f.state.writes[0].body.object,sha);assert.equal(f.state.writes[1].body.sha,'b'.repeat(40));assert.deepEqual(f.state.writes[2].body,{ref:'v1.2.0',return_run_details:true,inputs:{publication_comment:'6106000000',publication_run:'987'}});assert.deepEqual(f.state.downloads.map(x=>x.name).sort(),['native-plugin-package','stock-gui-macos-latest','stock-gui-ubuntu-latest']);assert.equal(result.reports,18);assert.equal(result.checksPerPlatform,184);assert.equal((await stat(f.options.reportDirectory)).mode&0o777,0o700);assert.equal((await stat(join(f.options.reportDirectory,'publication.json'))).mode&0o777,0o600);});
+test('actual ten-record main qualification creates an annotated immutable ref and explicitly dispatches native CI',async t=>{const f=await fixture(t),result=await f.m.executePublication(f.options);assert.equal(result.status,'tagged-and-dispatched');assert.deepEqual(f.state.jobReads,[{runId:mainId,count:10}]);assert.deepEqual(f.state.writes.map(x=>x.path.split('/').at(-1)),['tags','refs','dispatches']);assert.equal(f.state.writes[0].body.type,'commit');assert.equal(f.state.writes[0].body.object,sha);assert.equal(f.state.writes[1].body.sha,'b'.repeat(40));assert.deepEqual(f.state.writes[2].body,{ref:'v1.2.0',return_run_details:true,inputs:{publication_comment:'6106000000',publication_run:'987'}});assert.deepEqual(f.state.downloads.map(x=>x.name).sort(),['native-plugin-package','stock-gui-macos-latest','stock-gui-ubuntu-latest']);assert.equal(result.reports,18);assert.equal(result.checksPerPlatform,184);assert.equal((await stat(f.options.reportDirectory)).mode&0o777,0o700);assert.equal((await stat(join(f.options.reportDirectory,'publication.json'))).mode&0o777,0o600);});
 for(const [name,mutate] of [
   ['untrusted checkout',f=>{f.options.checkoutSha='f'.repeat(40);}],['stale main',f=>{f.state.mainSha='f'.repeat(40);}],
   ['wrong default branch',f=>{f.state.repo.default_branch='next';}],['unmerged native PR',f=>{f.state.pr.merged=false;}],
@@ -85,7 +85,7 @@ for(const [name,mutate] of [
   ['foreign existing tag target',f=>{f.state.tag=tagObject();f.state.tag.object.sha='f'.repeat(40);}],
 ])test(`no write for ${name}`,async t=>refused(t,mutate));
 
-test('publish uses fresh correlated actual tag qualification and creates stable latest notes with zero assets',async t=>{const f=await fixture(t,'publish'),result=await f.m.executePublication(f.options);assert.equal(result.status,'published');assert.equal(result.releaseId,12345);assert.equal(f.state.writes.length,1);const body=f.state.writes[0].body;assert.equal(body.tag_name,'v1.2.0');assert.equal(body.target_commitish,sha);assert.equal(body.draft,false);assert.equal(body.prerelease,false);assert.equal(body.make_latest,'true');assert.ok(body.body.includes(String(tagId)));assert.ok(body.body.includes(String(mainId)));assert.ok(body.body.includes('38113821247 38113823988'));assert.ok(!body.body.includes('{{'));assert.deepEqual(f.state.release.assets,[]);});
+test('publish qualifies exact main ten and tag eight before creating stable latest notes with zero assets',async t=>{const f=await fixture(t,'publish'),result=await f.m.executePublication(f.options);assert.equal(result.status,'published');assert.deepEqual(f.state.jobReads,[{runId:mainId,count:10},{runId:tagId,count:8}]);assert.equal(result.releaseId,12345);assert.equal(f.state.writes.length,1);const body=f.state.writes[0].body;assert.equal(body.tag_name,'v1.2.0');assert.equal(body.target_commitish,sha);assert.equal(body.draft,false);assert.equal(body.prerelease,false);assert.equal(body.make_latest,'true');assert.ok(body.body.includes(String(tagId)));assert.ok(body.body.includes(String(mainId)));assert.ok(body.body.includes('38113821247 38113823988'));assert.ok(!body.body.includes('{{'));assert.deepEqual(f.state.release.assets,[]);});
 for(const [name,mutate] of [
   ['old tag run',f=>{f.state.runs[tagId].created_at='2026-10-11T11:59:59Z';}],
   ['push masquerading as tag',f=>{f.state.runs[tagId].event='push';}],
@@ -129,3 +129,24 @@ test('unrelated comments cannot cancel an authorized queued publication job',asy
 test('default branch moving during artifact review revokes the write lease',async t=>refused(t,f=>{f.state.mutateReport=()=>{f.state.repo.default_branch='next';};}));
 
 test('a stalled REST response is bounded without retrying the write',async()=>{const m=await publisher();let calls=0;const api=m.createGitHubApi({token:'public-test-placeholder',timeoutMs:5,fetchImpl:async(url,{signal})=>{calls++;return new Promise((resolve,reject)=>signal?.addEventListener('abort',()=>reject(signal.reason),{once:true}));}});let timer;try{await assert.rejects(Promise.race([api.request('POST',`/repos/${repo}/git/tags`,{}),new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(new Error('REST did not abort within its budget')),50);})]),{name:'TimeoutError'});assert.equal(calls,1);}finally{clearTimeout(timer);}});
+
+for(const [name,mutate] of [
+  ['missing fixed native GUI check',f=>{f.state.readableJobs.pop();}],
+  ['both native GUI checks absent',f=>{f.state.readableJobs=[];}],
+  ['duplicate native GUI check',f=>{f.state.readableJobs[1]={...f.state.readableJobs[0]};}],
+  ['unknown replacement native GUI check',f=>{f.state.readableJobs[0].name='unrecognized native check';}],
+  ['failed native GUI check',f=>{f.state.readableJobs[0].conclusion='failure';}],
+  ['skipped native GUI check',f=>{f.state.readableJobs[0].conclusion='skipped';}],
+  ['incomplete native GUI check',f=>{f.state.readableJobs[0].status='in_progress';}],
+])test(`main ten-record contract rejects ${name}`,async t=>refused(t,mutate));
+
+test('tag dispatch rejects push-only native GUI records before any write',async t=>refused(t,f=>{f.state.jobs.push(...f.state.readableJobs);f.state.readableJobs=[];},'publish'));
+
+for(const [name,mutate] of [
+  ['foreign core job run',f=>{f.state.jobs[0].run_id=mainId+99;}],
+  ['foreign core job source',f=>{f.state.jobs[0].head_sha='f'.repeat(40);}],
+  ['foreign core job attempt',f=>{f.state.jobs[0].run_attempt=2;}],
+  ['duplicate core job ID',f=>{f.state.jobs[0].id=f.state.jobs[1].id;}],
+  ['nonpositive core job ID',f=>{f.state.jobs[0].id=0;}],
+  ['string core job ID',f=>{f.state.jobs[0].id='10000';}],
+])test(`CI row provenance rejects ${name}`,async t=>refused(t,mutate));

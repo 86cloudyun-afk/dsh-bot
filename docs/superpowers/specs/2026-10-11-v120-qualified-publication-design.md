@@ -12,6 +12,8 @@
 
 命令绑定准确的 main SHA 与实际验收 run ID。流程核对当前 main、默认分支、工作流路径、实际事件／分支／源码、终态、七个成功原生 CI job 与新增发布守卫 job、两平台九份严格报告、最终清理、零外部模型请求及冻结包 `43e837624194596a9ff679e86b68f416ea7977152f480191c208fc5eae726d94`。未完成、未知或不一致的证据拒绝发布。
 
+实际 GitHub `jobs` 接口还返回 push 阶段创建的两项中文验收摘要：`原生 GUI (ubuntu-latest)` 与 `原生 GUI (macos-latest)`。因此 main/push 严格要求八项 CI 加这两项摘要，共十条唯一成功记录；标签的 workflow_dispatch 严格要求八项 CI，不带 push 摘要。每条记录的正整数 ID 必须唯一，并绑定同一 run ID、源码 SHA 与当前 attempt。缺项、重复、未知名称或任一未成功记录均拒绝；完整原始报告仍单独核验。
+
 ## 两阶段
 
 1. `/dsh-bot-tag v1.2.0 <mainSHA> <mainRunId>`：在完成并独立复审 main 验收后建立不可移动的注释标签。已有标签只读核对，任何不一致拒绝。由 `GITHUB_TOKEN` 创建的标签不会触发 push CI，因此显式 dispatch 既有原生 CI，ref 为 `v1.2.0`；CI 增加 `workflow_dispatch`，原 push／PR 和所有检查保持。
