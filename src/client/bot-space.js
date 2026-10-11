@@ -122,7 +122,7 @@ export function createBotSpace(deps) {
     const sessionsSource=ctx.sessions.list;
     const nativeSessions=useSyncExternalStore(listener=>sessionsSource?.subscribe(listener)??(()=>{}),()=>sessionsSource?.getSnapshot()??absentSessions,()=>absentSessions);
     const known=useRef({storeId,generation,groupId:null,cards:new Map()}),projectionBaseline=useRef({storeId,generation,ids:new Map()});
-    const selected=selection?.storeId===storeId&&selection.generation===generation?selection:null;
+    const selected=selection&&selection.storeId===storeId&&selection.generation===generation?selection:null;
     const bot=selected?.kind==='bot'?snapshot.bots?.find(row=>row.botId===selected.id&&!row.deletedAt):null;
     const group=selected?.kind==='group'?snapshot.groups?.find(row=>row.groupId===selected.id):null;
     const validSession=bot&&selected.sessionId?contact(snapshot,bot.botId,selected.sessionId):null;
@@ -341,7 +341,7 @@ export function createBotSpace(deps) {
       if(previous?.key!==groupKey||follow.current){if(scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight;setUnread(false);}
       else if(messages.length>previous.count)setUnread(true);
     },[groupKey,messages.length]);
-    const reference=owned?.storeId===storeId&&owned.botId===bot?.botId&&owned.sessionId===sessionId?owned.reference:undefined;
+    const reference=owned&&owned.storeId===storeId&&owned.botId===bot?.botId&&owned.sessionId===sessionId?owned.reference:undefined;
     const filteredBots=rows(snapshot.bots).filter(bot=>!bot.deletedAt&&`${bot.name} ${bot.botId}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
     const filteredGroups=rows(snapshot.groups).filter(group=>`${group.name} ${group.groupId}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
     const effectiveModel=validSession?.model??bot?.contact;

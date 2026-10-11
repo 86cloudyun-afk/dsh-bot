@@ -15,9 +15,9 @@ assert.ok(sdkQuestionsStart>0&&sdkQuestionsEnd>sdkQuestionsStart,'installed offi
 const sdkQuestions=vm.runInNewContext(sdkQuestionsSource.slice(sdkQuestionsStart,sdkQuestionsEnd)+';({PendingQuestion,createWaterfallRequest});',{crypto:webcrypto,Uint8Array,Promise,setInterval,clearInterval});
 const group=id=>({groupId:id,name:`群 ${id}`,members:[{botId:'a',active:true},{botId:'b',active:true}],coordinatorBotId:'a',messages:[],rounds:[]});
 function fixture(){return {storeId:'profile-a',bots:[bot('a'),bot('b')],sessions:[contact('sa','a'),contact('sb','b')],groups:[group('ga'),group('gb')],meetings:[],tasks:[],attempts:[],memories:[],materials:[]};}
-function harness({snapshot=fixture(),query,command,retain,onRetain,refreshProjections,status=new Map(),sessionList={byId:{},projectionsBySession:{}}}={}) {
+function harness({snapshot=fixture(),loading=false,query,command,retain,onRetain,refreshProjections,status=new Map(),sessionList={byId:{},projectionsBySession:{}}}={}) {
   assert.equal(typeof module.createBotSpace,'function','createBotSpace must implement the dedicated space');
-  let view={snapshot,catalog:{defaultModel:{provider:'local',model:'controlled'},providers:[{id:'local',models:[{id:'controlled'}]}]},busy:false,pending:[],error:''};
+  let view={snapshot,loading,catalog:{defaultModel:{provider:'local',model:'controlled'},providers:[{id:'local',models:[{id:'controlled'}]}]},busy:false,pending:[],error:''};
   let generation={id:'generation-1'};
   let active='root',index=0,tree,seen;
   const hooks=new Map(),effects=new Map(),queued=[],disposers=[],writes=[],reads=[],leases=[],activated=[],managed=[],opened=[],revealed=[],projectionReads=[],slotShadows=[];let notifications=0;
@@ -57,6 +57,26 @@ test('dedicated panel and session-scoped child coexist with the original workben
   assert.ok(rows.some(r=>r.spec.name==='dsh.bot-space.conversation'));
   assert.ok(rows.some(r=>r.spec.name==='sidebar.panellist'&&r.spec.id==='dsh-bot.space'));
   assert.equal(rows.filter(r=>r.spec.name==='sidebar.footer.action'&&r.spec.id==='dsh-bot.space').length,0,'one canonical space sidebar entry');
+});
+
+function coldSnapshot(){return {bots:[],tasks:[],sessions:[],memories:[],grants:[],groups:[],meetings:[],outbox:[],attempts:[],materials:[],schedules:[],notices:[]};}
+
+test('cold initial space renders the actual unready snapshot with null selection and owner before hydration',async t=>{
+  const ui=harness({snapshot:coldSnapshot(),loading:true});t.after(()=>ui.dispose());
+  assert.equal(ui.view().snapshot.storeId,undefined);assert.ok(ui.find(n=>n.props.className==='dsh-bot-space'));assert.ok(ui.find(n=>n.props.className==='bs-main'));assert.ok(ui.find(n=>n.props.className==='bs-empty'));assert.equal(ui.find(n=>n.type==='native-provider'),null);assert.equal(ui.leases.length,0);assert.equal(ui.writes.length,0);
+  ui.replaceSnapshot(fixture());await ui.flush();await ui.click('同名 Bot · b');await ui.click('历史 sb · sb');assert.equal(ui.leases.length,1);assert.equal(ui.leases[0].id,'sb');assert.equal(ui.find(n=>n.type==='native-provider').props['data-reference'],'sb');assert.equal(ui.find(n=>n.props['data-session-id']==='sa'),null);
+});
+
+test('unready reset hides and releases the previous exact session before a later snapshot restores data',async t=>{
+  const ui=harness();t.after(()=>ui.dispose());await ui.click('同名 Bot · a');await ui.click('历史 sa · sa');const prior=ui.leases[0];assert.ok(ui.find(n=>n.type==='native-provider'));
+  ui.replaceSnapshot(coldSnapshot());await ui.flush();assert.ok(ui.find(n=>n.props.className==='dsh-bot-space'));assert.equal(ui.find(n=>n.type==='native-provider'),null);assert.equal(prior.ref.releaseCount,1);prior.gate.resolve({id:'sa'});await ui.flush();assert.deepEqual(ui.activated,[]);assert.equal(ui.leases.length,1);
+  ui.replaceSnapshot({...fixture(),storeId:'new-profile'});await ui.flush();assert.equal(ui.find(n=>n.type==='native-provider'),null);await ui.click('同名 Bot · b');await ui.click('历史 sb · sb');assert.equal(ui.leases[1].id,'sb');assert.equal(ui.leases[0].ref.releaseCount,1);assert.equal(ui.writes.length,0);
+});
+
+test('hot re-apply starts with a null selection and owner while retired references stay retired',async t=>{
+  const prior=harness();t.after(()=>prior.dispose());await prior.click('群 ga');prior.change('群消息','previous apply draft');await prior.click('同名 Bot · a');await prior.click('历史 sa · sa');const old=prior.leases[0];prior.dispose();assert.equal(old.ref.releaseCount,1);
+  const fresh=harness({snapshot:coldSnapshot(),loading:true});t.after(()=>fresh.dispose());assert.ok(fresh.find(n=>n.props.className==='dsh-bot-space'));assert.equal(fresh.find(n=>n.type==='native-provider'),null);assert.equal(fresh.leases.length,0);old.gate.resolve({id:'sa'});await tick();assert.deepEqual(prior.activated,[]);
+  fresh.replaceSnapshot(fixture());await fresh.flush();assert.equal(fresh.find(n=>n.type==='native-provider'),null);await fresh.click('群 ga');assert.equal(fresh.find(n=>n.props['aria-label']==='群消息').props.value,'');await fresh.click('同名 Bot · b');await fresh.click('历史 sb · sb');assert.equal(fresh.leases.length,1);assert.equal(fresh.leases[0].id,'sb');assert.notEqual(fresh.leases[0].ref,old.ref);assert.equal(old.ref.releaseCount,1);assert.equal(fresh.writes.length,0);assert.equal(prior.writes.length,0);
 });
 
 test('browsing same-name Bots never writes; selecting owned history embeds the exact reference and official factory',async t=>{
