@@ -1,16 +1,19 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,mkdtemp,mkdir,writeFile,rm,stat,cp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
-import * as stock from '../native-plugin/stock-qualification.mjs';
+import {createV120Fixture} from './v120-fixture.mjs';
 
-const root=resolve(import.meta.dirname,'../..');
+const repositoryRoot=resolve(import.meta.dirname,'../..');
+const historical=await createV120Fixture({repositoryRoot});
+after(historical.cleanup);
+const {root,stock}=historical;
 const repo='86cloudyun-afk/dsh-bot',sha='a'.repeat(40),mainId=38114000001,tagId=38114000002;
 const user={id:269269188,login:'86cloudyun-afk',type:'User'};
 function event(mode='tag',run=mainId){return {action:'created',repository:{full_name:repo,owner:user},sender:user,issue:{number:11,pull_request:{}},comment:{id:6106000000,issue_url:`https://api.github.com/repos/${repo}/issues/11`,body:`/dsh-bot-${mode} v1.2.0 ${sha} ${run}`,user,created_at:mode==='publish'?'2026-10-11T14:00:00Z':'2026-10-11T12:00:00Z',updated_at:mode==='publish'?'2026-10-11T14:00:00Z':'2026-10-11T12:00:00Z'}};}
-async function publisher(){const m=await import('../../scripts/publish-v120.mjs').catch(e=>{if(e.code!=='ERR_MODULE_NOT_FOUND')throw e;return {};});assert.equal(typeof m.parseOwnerCommand,'function','Publish guard must validate exact owner-created commands');return m;}
+async function publisher(){const m=historical.publisher;assert.equal(typeof m.parseOwnerCommand,'function','Publish guard must validate exact owner-created commands');return m;}
 
 test('exact owner-created commands bind the current source and explicit run',async()=>{const m=await publisher();assert.deepEqual(m.parseOwnerCommand(event()),{mode:'tag',sha,runId:mainId,commentId:6106000000});assert.equal(m.parseOwnerCommand(event('publish',tagId)).mode,'publish');});
 for(const [name,mutate] of [
@@ -108,7 +111,7 @@ test('authenticated REST adapter uses fixed origin/version and never follows red
 
 test('REST failure text excludes response bodies and unauthorized 404 does not become absence',async()=>{const m=await publisher();assert.equal(typeof m.createGitHubApi,'function');let calls=0;const api=m.createGitHubApi({token:'public-test-placeholder',fetchImpl:async()=>{calls++;return {ok:false,status:401,text:async()=> 'Bearer private https://signed.invalid'};}});await assert.rejects(()=>api.request('POST',`/repos/${repo}/git/tags`,{}),error=>!error.message.includes('private')&&!error.message.includes('signed.invalid'));assert.equal(calls,1);const missing=m.createGitHubApi({token:'public-test-placeholder',fetchImpl:async()=>({ok:false,status:404})});assert.equal(await missing.request('GET',`/repos/${repo}/git/ref/tags/v1.2.0`),null);await assert.rejects(()=>missing.request('GET',`/repos/${repo}/actions/runs/${mainId}`));});
 
-test('privileged workflow gates new owner PR comments and checks out exact trusted default SHA',async()=>{const text=await readFile(join(root,'.github/workflows/publish-v120.yml'),'utf8').catch(error=>{if(error.code!=='ENOENT')throw error;return '';});assert.ok(text.includes('types: [created]'),'Only created comments trigger publication');assert.ok(text.includes('github.run_attempt == 1'));assert.ok(text.includes('github.event.sender.id == 269269188'));assert.ok(text.includes("github.event.sender.type == 'User'"));assert.ok(text.includes('github.event.comment.user.id == 269269188'));assert.ok(text.includes('github.event.issue.number == 11'));assert.ok(text.includes('github.event.issue.pull_request'));assert.ok(text.includes('contents: write')&&text.includes('actions: write'));assert.ok(!text.includes('write-all'));assert.ok(text.includes('persist-credentials: false'));assert.ok(text.includes('ref: ${{ github.sha }}'));assert.ok(text.includes('actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683'));assert.ok(text.includes('actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020'));assert.ok(text.includes("node-version: '24'"));assert.ok(text.includes('run: node scripts/publish-v120.mjs'));assert.ok(!/run:[^\n]*\$\{\{/.test(text),'Untrusted values cannot become shell code');});
+test('privileged workflow gates new owner PR comments and checks out exact trusted default SHA',async()=>{const text=await readFile(join(repositoryRoot,'.github/workflows/publish-v120.yml'),'utf8').catch(error=>{if(error.code!=='ENOENT')throw error;return '';});assert.ok(text.includes('types: [created]'),'Only created comments trigger publication');assert.ok(text.includes('github.run_attempt == 1'));assert.ok(text.includes('github.event.sender.id == 269269188'));assert.ok(text.includes("github.event.sender.type == 'User'"));assert.ok(text.includes('github.event.comment.user.id == 269269188'));assert.ok(text.includes('github.event.issue.number == 11'));assert.ok(text.includes('github.event.issue.pull_request'));assert.ok(text.includes('contents: write')&&text.includes('actions: write'));assert.ok(!text.includes('write-all'));assert.ok(text.includes('persist-credentials: false'));assert.ok(text.includes('ref: ${{ github.sha }}'));assert.ok(text.includes('actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683'));assert.ok(text.includes('actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020'));assert.ok(text.includes("node-version: '24'"));assert.ok(text.includes('run: node scripts/publish-v120.mjs'));assert.ok(!/run:[^\n]*\$\{\{/.test(text),'Untrusted values cannot become shell code');});
 
 test('GitHub normalized main target metadata still binds the immutable verified tag',async t=>{const f=await fixture(t,'publish');await f.m.executePublication(f.options);f.state.release.target_commitish='main';f.state.writes=[];const result=await f.m.executePublication(f.options);assert.equal(result.status,'existing-release');assert.deepEqual(f.state.writes,[]);});
 
@@ -124,7 +127,7 @@ for(const [name,mutate] of [
   ['replayed original publisher',f=>{f.state.runs[986].run_attempt=2;}],
 ])test(`annotation provenance rejects ${name}`,async t=>refused(t,mutate,'publish'));
 
-test('unrelated comments cannot cancel an authorized queued publication job',async()=>{const workflow=await readFile(join(root,'.github/workflows/publish-v120.yml'),'utf8');assert.ok(!/^concurrency:/m.test(workflow),'Global issue-comment concurrency allows unrelated runs to replace an authorized pending run');assert.ok(workflow.includes('    concurrency:\n      group: dsh-bot-v120-publication\n      cancel-in-progress: false'),'Only the gated publisher job enters its serialization queue');});
+test('unrelated comments cannot cancel an authorized queued publication job',async()=>{const workflow=await readFile(join(repositoryRoot,'.github/workflows/publish-v120.yml'),'utf8');assert.ok(!/^concurrency:/m.test(workflow),'Global issue-comment concurrency allows unrelated runs to replace an authorized pending run');assert.ok(workflow.includes('    concurrency:\n      group: dsh-bot-v120-publication\n      cancel-in-progress: false'),'Only the gated publisher job enters its serialization queue');});
 
 test('default branch moving during artifact review revokes the write lease',async t=>refused(t,f=>{f.state.mutateReport=()=>{f.state.repo.default_branch='next';};}));
 
