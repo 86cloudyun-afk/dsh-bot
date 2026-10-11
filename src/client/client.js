@@ -45,13 +45,14 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind("dsh.bot"),
           listeners = new Set(),
           lifetime = new AbortController();
-        const pluginVersion = "1.1.4", clientProtocol = 2;
+        const pluginVersion = "1.2.0", clientProtocol = 2;
         let interval,
           refreshing,
           refreshingCatalog = false,
           readError,
           pendingLoaded = false,
-          pendingStoreId;
+          pendingStoreId,
+          existingChatIntent = 0;
         let state = {
           snapshot: {
             bots: [],
@@ -69,6 +70,7 @@ window.__ModuleLoader__.load({
           },
           catalog: { providers: [], presets: [] },
           error: "",
+          storageNotice: "",
           busy: false,
           chooser: false,
           deleting: null,
@@ -95,12 +97,32 @@ window.__ModuleLoader__.load({
           );
         const storageKey = () =>
           `dsh-bot.pending.v1.${pendingStoreId ?? state.snapshot.storeId ?? "unknown"}`;
-        function savePending() {
+        function savePending(pending = state.pending) {
           try {
-            localStorage.setItem(storageKey(), JSON.stringify(state.pending));
+            localStorage.setItem(storageKey(), JSON.stringify(pending));
           } catch {
-            /* live original ids remain visible in this workbench */
+            throw Object.assign(Error("无法保存完整原始请求到浏览器存储；请恢复存储后用原 ID 接续。当前草稿和原请求仍保留在此页面。"), {code:"browser_storage",beforeWrite:true});
           }
+        }
+        function loadPending(storeId) {
+          if (pendingLoaded || !storeId || (pendingStoreId && pendingStoreId !== storeId)) return;
+          pendingStoreId = storeId;
+          let pending = state.pending, retained = state.retained;
+          const merge = (cached, live) => [...cached, ...live.filter(row=>!cached.some(saved=>saved.operationId===row.operationId))];
+          try {
+            const stored = JSON.parse(localStorage.getItem(storageKey()) ?? "[]");
+            if (Array.isArray(stored) && stored.length <= 30) pending = merge(stored,pending);
+          } catch {
+            /* invalid browser cache cannot modify host state */
+          }
+          try {
+            const history = JSON.parse(localStorage.getItem(`${storageKey()}.retained`) ?? "[]");
+            if (Array.isArray(history)) retained = merge(history,retained);
+          } catch {
+            /* pending originals remain available if history cannot be read */
+          }
+          pendingLoaded = true;
+          publish({pending,retained});
         }
         async function rpc(endpoint, payload = {}) {
           const signal = AbortSignal.any([
@@ -127,43 +149,29 @@ window.__ModuleLoader__.load({
             await refreshing;
             return refresh(true);
           }
+          const previousError = readError;
           refreshingCatalog = catalog;
           refreshing = (async () => {
             try {
               const snapshot = await rpc("snapshot");
-              let pending = state.pending, retained = state.retained;
-              if (!pendingLoaded && snapshot.storeId) {
-                pendingLoaded = true;
-                pendingStoreId = snapshot.storeId;
-                try {
-                  const stored = JSON.parse(
-                    localStorage.getItem(
-                      `dsh-bot.pending.v1.${snapshot.storeId}`,
-                    ) ?? "[]",
-                  );
-                  if (Array.isArray(stored) && stored.length <= 30)
-                    pending = stored;
-                  const history=JSON.parse(localStorage.getItem(`${storageKey()}.retained`)??"[]");
-                  if(Array.isArray(history))retained=history;
-                } catch {
-                  /* invalid browser cache cannot modify host state */
-                }
-              }
-              // Load cached originals before awaiting the catalog. Reads must not
-              // restore an older pending/retained array over a live command.
-              publish({pending,retained});
+              if (lifetime.signal.aborted) return;
+              // Load originals synchronously, before catalog awaits or any command
+              // can save this profile. Later reads cannot restore an older array.
+              loadPending(snapshot.storeId);
               const nextCatalog = catalog ? await rpc("catalog") : undefined;
+              if (lifetime.signal.aborted) return;
               publish({
                 snapshot,
                 loading: false,
                 ...(catalog ? { catalog: nextCatalog } : {}),
+                ...(previousError?.kind === "refresh" && readError === previousError ? {error:""} : {}),
               });
             } catch (error) {
               if (!lifetime.signal.aborted)
                 publish({
                   error: `${error.code ?? "connection"}：${error.message}`,
                   loading: false,
-                });
+                }, {kind:"refresh"});
             } finally {
               refreshing = null;
               refreshingCatalog = false;
@@ -177,11 +185,27 @@ window.__ModuleLoader__.load({
             throw Object.assign(Error(`Bot 插件版本不一致：界面 ${pluginVersion}，运行服务 ${snapshot.pluginVersion ?? "旧候选／未知"}。请安装同一新版插件，完全重启 DSH 后刷新此页面。`), {code:"plugin_version_mismatch",beforeWrite:true});
           if ((pendingStoreId ?? state.snapshot.storeId) && (pendingStoreId ?? state.snapshot.storeId) !== snapshot.storeId)
             throw Object.assign(Error("当前 DSH profile 已改变。原始操作仍保留在原 profile，请刷新页面后再操作。"), {code:"profile_changed",beforeWrite:true});
+          loadPending(snapshot.storeId);
           return snapshot;
         }
-        function forgetPending(operationId) {
-          publish({pending:state.pending.filter(row=>row.operationId !== operationId)});
-          savePending();
+        async function refreshAfterCommand() {
+          // An in-flight poll may have read before the mutation committed.
+          // Preserve its catalog intent, then fetch a fresh post-commit snapshot.
+          if (refreshing) await refreshing;
+          return refresh();
+        }
+        function forgetPending(operationId, committed = false) {
+          const pending = state.pending.filter(row=>row.operationId !== operationId);
+          try {
+            savePending(pending);
+            publish({pending,storageNotice:""});
+            return true;
+          } catch {
+            publish({storageNotice: committed
+              ? `原始操作 ${operationId} 已收到确定的已提交回执。浏览器记录清理失败；原 ID 仍保留，可只读查回。`
+              : "历史已保存，但待查回记录未能从浏览器存储移除；原 ID 仍保留，请恢复存储后重试。"});
+            return false;
+          }
         }
         function retainPending(request) {
           if(state.busy)return;
@@ -200,8 +224,8 @@ window.__ModuleLoader__.load({
             await requireCompatible();
             const receipt = await readOperation(request);
             if (receipt.state === "committed") {
-              forgetPending(request.operationId);
-              await refresh();
+              forgetPending(request.operationId, true);
+              await refreshAfterCommand();
               return receipt.result;
             }
             publish({error:`原始操作 ${request.operationId} 暂无已提交回执，结果仍未确认。原请求已保留；查回不会执行任务或发送模型请求。`});
@@ -224,19 +248,21 @@ window.__ModuleLoader__.load({
               if (state.pending.length >= 30)
                 throw Object.assign(Error("待查回操作已达 30 条，请先查回，或将不再接续的请求“保留并收起”；原 ID 均保留在历史中。"),{code:"pending_limit",beforeWrite:true});
               publish({pending:[...state.pending,request]});
-              savePending();
             }
+            // Even an original loaded from history must be saved again before
+            // continuation; the browser may have lost write permission.
+            savePending();
             if (original) {
               const receipt = await readOperation(request);
               if (receipt.state === "committed") {
-                forgetPending(request.operationId);
-                await refresh();
+                forgetPending(request.operationId, true);
+                await refreshAfterCommand();
                 return receipt.result;
               }
             }
             const value = await rpc("command", request);
-            forgetPending(request.operationId);
-            await refresh();
+            forgetPending(request.operationId, true);
+            await refreshAfterCommand();
             return value;
           } catch (error) {
             publish({
@@ -411,12 +437,13 @@ window.__ModuleLoader__.load({
             claimed:"已认领，待准入",
             missed:"已错过",
           })[value] ?? value;
-        const openSession = async (sessionId, nativeRow) => {
+        const openSession = async (sessionId, nativeRow, isActive = () => true) => {
           const row =
             nativeRow ??
             state.snapshot.sessions.find((row) => row.sessionId === sessionId);
           try {
             await ctx.sessions.refresh();
+            if (lifetime.signal.aborted || !isActive()) return;
             const parentSessionId =
               row?.parentSessionId ?? row?.header?.parentSession;
             ctx.uiWorkspace.openSession(
@@ -429,7 +456,7 @@ window.__ModuleLoader__.load({
                 : sessionId,
             );
           } catch (error) {
-            publish({ error: `无法打开原生会话：${error.message}` });
+            if (!lifetime.signal.aborted && isActive()) publish({ error: `无法打开原生会话：${error.message}` });
           }
         };
         function BotEditor({ bot: latestBot }) {
@@ -568,9 +595,42 @@ window.__ModuleLoader__.load({
               },...template.roles.map(row=>{const recipe=templates.find(item=>item.templateId===row.botTemplateId)??template;return h("section",{className:"card",key:row.roleKey},h("h3",null,recipe.name),field("Bot 名称",`${row.roleKey}.name`,{value:recipe.suggestedName??recipe.name,maxLength:100}),field("身份与分工",`${row.roleKey}.role`,{value:recipe.role,textarea:true,required:false,maxLength:8192}),field("聊天模型",`${row.roleKey}.model`,{value:selections[`${row.roleKey}.model`]??initialRoute.current,options:templateModels(selections[`${row.roleKey}.model`]??initialRoute.current),onChange:event=>setSelections(draft=>({...draft,[`${row.roleKey}.model`]:event.target.value}))}),advanced("更多设置",field("执行模型",`${row.roleKey}.execution`,{value:selections[`${row.roleKey}.execution`]??"",options:[{value:"",label:"与聊天模型相同"},...templateModels(selections[`${row.roleKey}.execution`])],required:false,onChange:event=>setSelections(draft=>({...draft,[`${row.roleKey}.execution`]:event.target.value}))}),field("工作目录",`${row.roleKey}.cwd`,{value:view.catalog.defaultCwd??"",required:false}),field("原生会话配置",`${row.roleKey}.preset`,{value:selections[`${row.roleKey}.preset`]??"",required:false,options:[{value:"",label:"使用 DSH 默认配置"},...templatePresets(selections[`${row.roleKey}.preset`])],onChange:event=>setSelections(draft=>({...draft,[`${row.roleKey}.preset`]:event.target.value}))})));}),
                 teamOnly&&field("内部群名称","groupName",{value:template.name,maxLength:100}),teamOnly&&advanced("群设置",field("成员轮数","groupRounds",{type:"number",value:template.group?.rounds??1,min:1,max:3}),field("每次群轮的请求预算","groupRequests",{type:"number",value:template.group?.maxRequests??12,min:1,max:60})))));
         }
+        const resumableContact = (snapshot, botId, sessionId) =>
+          snapshot.bots.some(bot=>bot.botId===botId && !bot.deletedAt) &&
+          snapshot.sessions.find(row=>row.sessionId===sessionId && row.botId===botId && row.purpose==="contact" && row.state==="ready" && !row.archived);
+        function ExistingChats({botId,onClose}) {
+          const view=useView(),[opening,setOpening]=useState(false),generation=useRef(0),mounted=useRef(true);
+          useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;generation.current++;};},[]);
+          const close=()=>{generation.current++;onClose();};
+          const choose=async sessionId=>{
+            if(opening || state.busy || lifetime.signal.aborted)return;
+            const attempt=++generation.current,intent=existingChatIntent,isActive=()=>mounted.current && attempt===generation.current && intent===existingChatIntent && !lifetime.signal.aborted;
+            setOpening(true);
+            try {
+              const snapshot=await rpc("snapshot");
+              if(!isActive())return;
+              const row=resumableContact(snapshot,botId,sessionId);
+              if(!row || !resumableContact(state.snapshot,botId,sessionId)){
+                publish({snapshot,error:"此聊天已归档、状态已改变或 Bot 已删除，请重新选择已有聊天。"});
+                return;
+              }
+              publish({snapshot});
+              await openSession(sessionId,row,()=>isActive() && !!resumableContact(state.snapshot,botId,sessionId));
+              if(isActive())close();
+            } catch(error) {
+              if(isActive())publish({error:`无法读取已有聊天：${error.message}`});
+            } finally {if(isActive())setOpening(false);}
+          };
+          const rows=view.snapshot.sessions.filter(row=>resumableContact(view.snapshot,botId,row.sessionId));
+          return h("section",{"aria-label":"选择已有聊天"},
+            h("h3",null,"继续已有聊天"),
+            rows.length ? h("div",{className:"actions"},...rows.map(row=>button(`${row.name || "未命名聊天"} · ${row.sessionId}`,()=>choose(row.sessionId),{key:row.sessionId,disabled:view.busy||opening})))
+              : h("p",{role:"status"},"没有可继续的已有聊天。可点击“开始聊天”创建新会话。"),
+            button("关闭继续聊天",close,{disabled:false}));
+        }
         function BotsPane() {
           const [editing, setEditing] = useState(null),
-            view = useView();
+            [continuing,setContinuing]=useState(null),view = useView();
           const selected = view.snapshot.bots.find(
             (bot) => bot.botId === editing && !bot.deletedAt,
           );
@@ -597,6 +657,7 @@ window.__ModuleLoader__.load({
                   const contact = await command("session.create", {botId: bot.botId});
                   if (contact?.state === "ready") await openSession(contact.sessionId);
                 }, {className: "primary", disabled: view.busy || bot.lifecycle !== "active"}),
+                button("继续聊天",()=>{if(continuing!==bot.botId){existingChatIntent++;setContinuing(bot.botId);}},{"aria-expanded":continuing===bot.botId}),
                 button("编辑", () => setEditing(bot.botId)),
                 button("删除", event => publish({deleting:{botId:bot.botId,expectedVersion:bot.revision,name:botLabel(bot),returnFocus:event.currentTarget},error:""})),
                 advanced("状态管理", button(bot.lifecycle === "active" ? "暂停" : "启用", () =>
@@ -606,6 +667,8 @@ window.__ModuleLoader__.load({
                   }),
                 )),
               ),
+              h("small",null,"“开始聊天”创建新会话；“继续聊天”打开已保存的原会话。"),
+              continuing===bot.botId && h(ExistingChats,{key:bot.botId,botId:bot.botId,onClose:()=>setContinuing(null)}),
             ),
           );
           return h(
@@ -822,7 +885,7 @@ window.__ModuleLoader__.load({
           useEffect(()=>{let active=true;Promise.all([query("schedule.list",{},()=>active),query("notice.list",{},()=>active)]).then(([s,n])=>{if(active){if(s)setRows(Array.isArray(s)?s:s.items??[]);if(n)setNotices(Array.isArray(n)?n:n.notices??[]);}});return()=>{active=false;};},[view.snapshot.revision]);
           const selected=rows.find(row=>row.scheduleId===editing);
           return advanced("提醒与定时",h(NoticeList,{notices}),...rows.map(row=>h("article",{className:"card",key:row.scheduleId},h("h3",null,row.kind==="task"?row.recipe?.title:row.message),h("p",null,`${view.snapshot.bots.find(bot=>bot.botId===row.ownerBotId)?.name??"Bot"} · ${row.archived?"已归档":row.enabled?"已启用":"已暂停"} · ${row.rule.timezone} · 下次 ${updatedName(row.nextDueAt)}`),button("编辑并重新确认",()=>setEditing(row.scheduleId)),!row.archived&&button(row.enabled?"暂停安排":"启用安排",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:!row.enabled})),!row.archived&&button("归档安排",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:false,archived:true})),row.archived&&button("恢复安排（保持暂停）",()=>command("schedule.state",{scheduleId:row.scheduleId,expectedVersion:row.version,enabled:false,archived:false})),h(ScheduleHistory,{scheduleId:row.scheduleId}))),
-            editing&&button("创建新的安排",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(ScheduleEditor,{schedule:selected,onSaved:saved=>{setRows(previous=>[...previous.filter(row=>row.scheduleId!==saved.scheduleId),saved]);setEditing(saved.scheduleId);},key:selected?.scheduleId??`new-schedule:${creationEpoch}`}));
+            editing&&button("创建新的安排",()=>{setEditing(null);setCreationEpoch(epoch=>epoch+1);}),h(ScheduleEditor,{schedule:selected,onSaved:saved=>{setRows(previous=>[...previous.filter(row=>row.scheduleId!==saved.scheduleId),saved]);setEditing(saved.scheduleId);},key:selected?`edit-schedule:${selected.scheduleId}`:`new-schedule:${creationEpoch}`}));
         }
         function TasksPane() {
           const view = useView();
@@ -1575,6 +1638,7 @@ window.__ModuleLoader__.load({
             ),
             view.error &&
               h("p", { role: "alert", className: "error" }, view.error),
+            view.storageNotice && h("p",{role:"status","aria-label":"浏览器存储提示"},view.storageNotice),
             view.pending.length > 0 &&
               card(
                 "待查回的原始操作",
@@ -1583,6 +1647,7 @@ window.__ModuleLoader__.load({
                     "div",
                     { className: "actions", key: row.operationId },
                     h("small", null, `${row.action} · ${row.operationId}`),
+                    advanced("查看完整原始请求",h("pre",null,JSON.stringify(row,null,2))),
                     button("查回原始操作", () => lookupOperation(row)),
                     button("用原 ID 接续", () =>
                       command(row.action, row.input, row),
@@ -1595,6 +1660,7 @@ window.__ModuleLoader__.load({
               h("p",{className:"muted"},"收起只改变浏览器记录的显示；原始请求和 ID 保留，任务和未知状态不受影响。"),
               ...view.retained.map(row=>h("div",{className:"actions",key:row.operationId},
                 h("small",null,`${row.action} · ${row.operationId}`),
+                advanced("查看完整原始请求",h("pre",null,JSON.stringify(row,null,2))),
                 button("查回原始操作",()=>lookupOperation(row)),
                 button("用原 ID 接续",()=>command(row.action,row.input,row)),
               )),
@@ -1609,7 +1675,7 @@ window.__ModuleLoader__.load({
                 collaboration: "协作",
                 manage: "管理",
               }).map(([key, label]) =>
-                button(label, () => setTab(key), {
+                button(label, () => {if(tab!==key)existingChatIntent++;setTab(key);}, {
                   "aria-selected": tab === key,
                 }),
               ),

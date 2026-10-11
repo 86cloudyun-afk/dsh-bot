@@ -39,6 +39,29 @@ export function lexicalScore(query,{body='',title='',section=''}={}) {
   const score=(field,weight,phraseWeight)=>{const s=normalize(field),fieldTerms=new Set(terms(field));return weight*ts.filter(term=>singleton?s.includes(term):fieldTerms.has(term)).length+(phrase&&s.includes(q)?phraseWeight:0);};
   return score(body,1,4)+score(section,2,8)+score(title,3,12);
 }
+// Score only occurrences using text on both sides of an existing chunk boundary.
+function boundaryScore(query,left,right,before='',after='') {
+  const ts=terms(query);if(!ts.length)return 0;
+  const q=normalize(query),joint=(left+right).normalize('NFKC'),body=joint.toLowerCase(),a=left.normalize('NFKC'),b=right.normalize('NFKC');
+  // Locate composition before casing: contextual sigma casing can change
+  // entirely left-side text, whereas NFKC can combine sources across the seam.
+  let prefix=0,suffix=0;
+  while(prefix<a.length&&a[prefix]===joint[prefix])prefix++;
+  while(suffix<b.length&&b[b.length-1-suffix]===joint[joint.length-1-suffix])suffix++;
+  // Casing can expand a code point (İ), so translate both seam offsets too.
+  const start=joint.slice(0,prefix).toLowerCase().length,end=joint.slice(0,joint.length-suffix).toLowerCase().length,crosses=(from,to)=>from<end&&to>start;
+  const word=ch=>!!ch&&!cjk.test(ch)&&/[\p{L}\p{N}]/u.test(ch);
+  const previous=n=>n?[...body.slice(0,n)].at(-1):[...normalize(before)].at(-1);
+  const following=n=>n<body.length?String.fromCodePoint(body.codePointAt(n)):[...normalize(after)][0];
+  const hasCrossing=text=>{
+    for(let from=body.indexOf(text);from!==-1;from=body.indexOf(text,from+1)) {
+      const to=from+text.length;
+      if(crosses(from,to)&&(!word([...text][0])||!word(previous(from)))&&(!word([...text].at(-1))||!word(following(to))))return true;
+    }
+    return false;
+  };
+  return ts.filter(term=>hasCrossing(term)).length+([...q].length>=2&&hasCrossing(q)?4:0);
+}
 function linesOf(text) {
   const lines=[];let start=0;const re=/\r\n|\r|\n/g;let match;
   while((match=re.exec(text))){lines.push({start,end:match.index+match[0].length,body:text.slice(start,match.index)});start=re.lastIndex;}
@@ -132,7 +155,13 @@ export class KnowledgeController {
     const state=this.store.read(),hits=[];
     for(const doc of Object.values(state.materials??{})) {
       if(doc.archived||input.botId&&doc.botId!==input.botId||!this.policy.canRead(actor,{kind:'material',id:doc.docId},undefined,state))continue;
-      for(const chunk of doc.chunks){const excerpt=doc.text.slice(chunk.startOffset,chunk.endOffset),score=lexicalScore(input.query,{body:excerpt,title:doc.title,section:chunk.section});if(score>0)hits.push({docId:doc.docId,title:doc.title,contentHash:doc.contentHash,...copy(chunk),excerpt,source:copy(doc.source),score});}
+      const excerpts=doc.chunks.map(chunk=>doc.text.slice(chunk.startOffset,chunk.endOffset)),scores=doc.chunks.map((chunk,i)=>lexicalScore(input.query,{body:excerpts[i],title:doc.title,section:chunk.section}));
+      for(let i=1;i<doc.chunks.length;i++) {
+        const left=doc.chunks[i-1],right=doc.chunks[i];if(left.endOffset!==right.startOffset)continue;
+        const score=boundaryScore(input.query,excerpts[i-1],excerpts[i],doc.text.slice(0,left.startOffset),doc.text.slice(right.endOffset));
+        scores[i-1]+=score;scores[i]+=score;
+      }
+      for(let i=0;i<doc.chunks.length;i++){const chunk=doc.chunks[i],excerpt=excerpts[i],score=scores[i];if(score>0)hits.push({docId:doc.docId,title:doc.title,contentHash:doc.contentHash,...copy(chunk),excerpt,source:copy(doc.source),score});}
     }
     const result=hits.sort((a,b)=>b.score-a.score||binary(a.docId,b.docId)||a.startOffset-b.startOffset||a.endOffset-b.endOffset).slice(0,limit);
     for(const hit of result)this.policy.noteRead(actor,{kind:'material',id:hit.docId});return result;

@@ -72,8 +72,11 @@ export class AssistantController {
     this.#authenticate(actor);command=copy(command);requireCondition(command.action==='schedule.update','invalid_command');const stamped=this.policy.command(actor,command),at=this.#now();
     return this.store.transact(stamped,draft=>{
       const current=draft.schedules[command.input.scheduleId];requireCondition(current,'not_found');this.#owner(actor,current.ownerBotId,draft);requireCondition(command.input.expectedVersion===current.version,'revision_conflict');requireCondition(!current.archived,'archived');
-      const config=this.#configuration(actor,command.input,draft,current),trigger=nextTrigger(config.rule,at,{inclusive:true});
-      const schedule={...current,...config,version:current.version+1,consentVersion:current.consentVersion+1,nextDueAt:trigger?.dueAt??null,nextTriggerKey:trigger?.triggerKey??null,origins:[...new Map([...(current.origins??[]),...this.policy.readDependencies(actor),...(actor.kind==='bot'?[{kind:'session',id:actor.sessionId}]:[])].map(r=>[canonical(r),r])).values()],source:source(actor,draft),contentSources:[...new Map([...(current.contentSources??[]),current.source,source(actor,draft)].filter(Boolean).map(r=>[canonical(r),r])).values()],updatedAt:nowISO(at)};
+      const config=this.#configuration(actor,command.input,draft,current);
+      // Content edits retain the reminder cursor, including null after its final trigger.
+      const preserveCursor=current.kind==='reminder'&&config.kind==='reminder'&&canonical(normalizeScheduleRule(current.rule))===canonical(config.rule);
+      const trigger=preserveCursor?null:nextTrigger(config.rule,at,{inclusive:true});
+      const schedule={...current,...config,version:current.version+1,consentVersion:current.consentVersion+1,nextDueAt:preserveCursor?current.nextDueAt:trigger?.dueAt??null,nextTriggerKey:preserveCursor?current.nextTriggerKey:trigger?.triggerKey??null,origins:[...new Map([...(current.origins??[]),...this.policy.readDependencies(actor),...(actor.kind==='bot'?[{kind:'session',id:actor.sessionId}]:[])].map(r=>[canonical(r),r])).values()],source:source(actor,draft),contentSources:[...new Map([...(current.contentSources??[]),current.source,source(actor,draft)].filter(Boolean).map(r=>[canonical(r),r])).values()],updatedAt:nowISO(at)};
       delete schedule.pauseReason;delete schedule.missedRange;
       if(config.recipe){schedule.recipeHash=digest(config.recipe);schedule.dependencyOrigins=config.recipe.dependsOn.map(id=>({kind:'task',id}));}else{delete schedule.recipe;delete schedule.recipeHash;delete schedule.dependencyOrigins;}
       if(trigger?.skipReason)schedule.lastSkippedLocalTimes={reason:trigger.skipReason,count:trigger.skippedLocalTimes};
