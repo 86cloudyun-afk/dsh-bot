@@ -260,6 +260,7 @@ window.__ModuleLoader__.load({
         };
         const button=(text,onClick,extra={})=>h('button',{type:'button',className:'bs-button',onClick,disabled:view.busy,...extra},text);
         const manage=(tab,target)=>onManage({tab,...(typeof target==='string'?{taskId:target}:target??{})});
+        const memberLabel=id=>{const member=rows(snapshot.bots).find(bot=>bot.botId===id);return member?botLabel(member):id;};
         const interactionLabel=target=>{
           const owner=rows(snapshot.bots).find(bot=>bot.botId===target.botId),purpose={group:'群回复',independent:'独立意见',meeting:'会议讨论'}[target.purpose];
           return `${owner?botLabel(owner):target.botId} · ${purpose} · ${target.roundId??`${target.meetingId} / 世代 ${target.epoch}`}`;
@@ -286,15 +287,15 @@ window.__ModuleLoader__.load({
         const revealedMeeting=meeting=>['discussion','decision','complete'].includes(meeting.phase)||(meeting.phase==='cancelled'&&typeof meeting.epoch==='number'&&meeting.revealedEpoch===meeting.epoch);
         const meetingCard=meeting=>h('article',{key:meeting.meetingId,className:'bs-meeting','data-meeting-id':meeting.meetingId},h('h4',null,meeting.topic),h('p',{className:'bs-meta'},`${stateName(meeting.phase)} · 世代 ${meeting.epoch}`),
           !revealedMeeting(meeting)?h('div',{className:'bs-sealed',role:'status'},`独立意见封存中 · 已收到 ${rows(meeting.opinions).length}/${rows(meeting.participants).filter(row=>row.active).length} 人；${meeting.phase==='cancelled'?'会议取消不揭示独立意见。':'进入讨论后揭示。'}`):h('div',null,
-            ...rows(meeting.opinions).map(row=>h('details',{key:row.botId,className:'bs-details'},h('summary',null,`${snapshot.bots.find(bot=>bot.botId===row.botId)?.name??row.botId} 的意见`),h('p',null,row.text))),
-            ...rows(meeting.discussion).map((row,i)=>h('p',{key:row.botId??i},`${snapshot.bots.find(bot=>bot.botId===row.botId)?.name??row.botId}：${row.text}`)),
+            ...rows(meeting.opinions).map(row=>h('details',{key:row.botId,className:'bs-details'},h('summary',null,`${memberLabel(row.botId)} 的意见`),h('p',null,row.text))),
+            ...rows(meeting.discussion).map((row,i)=>h('p',{key:row.botId??i},`${memberLabel(row.botId)}：${row.text}`)),
             meeting.decision&&h('div',{className:'bs-section'},h('strong',null,'真实协调者决定'),h('p',null,meeting.decision.text)),
           ),
           rows(meeting.absences).length>0&&h('p',{className:'bs-meta'},`缺席：${rows(meeting.absences).map(row=>row.reason).join('；')}`),
           meeting.phase==='cancelled'&&h('p',{className:'bs-meta'},'会议已逻辑取消；原通道可能仍待停止或待确认，资源结算请查看原记录。'),
           h('div',{className:'bs-task-actions'},!['complete','cancelled'].includes(meeting.phase)&&button('下一阶段',()=>command('meeting.advance',{meetingId:meeting.meetingId,epoch:meeting.epoch,phase:meeting.phase})),
             !['complete','cancelled'].includes(meeting.phase)&&button('取消会议',()=>command('meeting.cancel',{meetingId:meeting.meetingId,epoch:meeting.epoch})),
-            meeting.phase!=='independent'&&meeting.decision&&button('登记行动任务',event=>openDialog('action',event,{meetingId:meeting.meetingId,epoch:meeting.epoch,phase:meeting.phase})),button('管理会议与通道',()=>manage('meetings',{meetingId:meeting.meetingId})),
+            ['decision','complete'].includes(meeting.phase)&&meeting.decision&&button('登记行动任务',event=>openDialog('action',event,{meetingId:meeting.meetingId,epoch:meeting.epoch,phase:meeting.phase})),button('管理会议与通道',()=>manage('meetings',{meetingId:meeting.meetingId})),
           ));
         const renderDialog=()=>{
           if(!dialog||dialog.storeId!==storeId)return null;
@@ -306,8 +307,10 @@ window.__ModuleLoader__.load({
           if(preferred&&!modelOptions.some(option=>option.value===preferredValue))modelOptions.unshift({value:preferredValue,label:`当前模型 · ${preferred.model}`});
           const capturedMeeting=dialog.kind==='action'?rows(snapshot.meetings).find(row=>row.meetingId===dialog.meetingId):null;
           const conflict=capturedMeeting&&(capturedMeeting.epoch!==dialog.epoch||capturedMeeting.phase!==dialog.phase);
+          const cancelled=capturedMeeting?.phase==='cancelled';
           const submit=async event=>{
             event.preventDefault();if(view.busy||dialog.storeId!==latest.current.snapshot.storeId||!alive)return;
+            if(dialog.kind==='action'&&rows(latest.current.snapshot.meetings).find(row=>row.meetingId===dialog.meetingId)?.phase==='cancelled')return;
             const data=new FormData(event.currentTarget),kind=dialog.kind;let receipt;
             if(kind==='bot'){
               const model=JSON.parse(data.get('model'));const contactConfig=preferred&&model.provider===preferred.provider&&model.model===preferred.model?{...preferred}:model;
@@ -341,8 +344,9 @@ window.__ModuleLoader__.load({
               (dialog.kind==='task'||dialog.kind==='action')&&h('div',{className:'bs-form'},dialog.kind==='action'&&label('行动负责人','botId',{options:activeBots.map(bot=>({value:bot.botId,label:botLabel(bot)}))}),label('任务标题','title',{maxLength:200,autoFocus:true}),label('目标','goal',{textarea:true,maxLength:16000}),label('验收条件（每行一项）','criteria',{textarea:true,required:false})),
               dialog.kind==='meeting'&&h('div',{className:'bs-form'},label('议题','topic',{maxLength:1000,autoFocus:true}),label('共同材料','materials',{textarea:true,required:false,maxLength:32000})),
               conflict&&h('p',{className:'bs-error',role:'status'},'会议世代或阶段已改变，草稿仍属于原决定；提交不会改用新世代。'),
+              cancelled&&h('p',{className:'bs-error',role:'status'},'会议已取消，不再接受新行动；原草稿保留。'),
               (view.error||error)&&h('p',{className:'bs-error',role:'alert'},error||view.error),
-              h('div',{className:'bs-modal-actions'},button('取消',closeDialog,{disabled:false}),h('button',{type:'submit',className:'bs-primary',disabled:view.busy||(dialog.kind==='bot'&&!modelOptions.length)||(dialog.kind==='group'&&!members.length)},submitLabels[dialog.kind])),
+              h('div',{className:'bs-modal-actions'},button('取消',closeDialog,{disabled:false}),h('button',{type:'submit',className:'bs-primary',disabled:view.busy||cancelled||(dialog.kind==='bot'&&!modelOptions.length)||(dialog.kind==='group'&&!members.length)},submitLabels[dialog.kind])),
             ));
         };
         const messages=group?.messages??[],limit=groupKey?visible[groupKey]??40:40;
@@ -381,9 +385,12 @@ window.__ModuleLoader__.load({
             bot?h('div',{className:'bs-native','data-session-id':sessionId??''},sessionId&&SessionProvider?h(SessionProvider,{session:reference,key:`${storeId}:${sessionId}`,empty:()=>h('div',{className:'bs-empty',role:'status'},error?'请查阅会话错误，重新选择原会话。':'正在打开原会话…')},renderSlot('dsh.bot-space.conversation',{sessionId})):h('div',{className:'bs-empty'},h('div',{className:'bs-empty-art','aria-hidden':true},avatar(bot.name,bot.botId)),h('h3',null,`与 ${botLabel(bot)} 继续对话`),h('p',null,bot.role||'选择左侧已有聊天，或明确开始新对话。'),h('p',{className:'bs-meta'},`身份 ${bot.botId} · 每段聊天保留原生历史与独立输入草稿。`),bot.lifecycle!=='active'&&h('p',{role:'status'},'Bot 已暂停，不能创建新会话；已有历史仍可查看。'),button('管理此 Bot',()=>manage('bots',{botId:bot.botId}),{disabled:false}))):group?h('div',{className:'bs-group'},
               h('div',{className:'bs-transcript',ref:scroll,role:'log','aria-label':'群消息历史',onScroll:event=>{const el=event.currentTarget;follow.current=el.scrollHeight-el.scrollTop-el.clientHeight<64;if(follow.current)setUnread(false);}},messages.length>limit&&button('显示更早消息',()=>{const element=scroll.current,oldHeight=element?.scrollHeight,oldTop=element?.scrollTop;setVisible(old=>({...old,[groupKey]:limit+40}));if(element)requestAnimationFrame(()=>{element.scrollTop=oldTop+element.scrollHeight-oldHeight;});},{className:'bs-load-more',disabled:false}),
                 !messages.length&&h('div',{className:'bs-empty'},h('h3',null,'给团队一个共同起点'),h('p',null,'发送一条消息，成员会在真实独立通道中按预算回复。')),
-                ...messages.slice(-limit).map(message=>h('article',{key:message.messageId,className:'bs-message','data-message-id':message.messageId,'data-producer':message.producer.kind},h('header',{className:'bs-message-heading'},avatar(message.producer.kind==='human'?'你':snapshot.bots.find(bot=>bot.botId===message.producer.botId)?.name,message.producer.botId??'human'),h('strong',null,message.producer.kind==='human'?'你':snapshot.bots.find(bot=>bot.botId===message.producer.botId)?.name??message.producer.botId),message.time&&h('time',{dateTime:message.time,className:'bs-meta'},new Date(message.time).toLocaleString())),h('p',{className:'bs-message-body'},message.text))),
+                ...messages.slice(-limit).map(message=>{
+                  const author=snapshot.bots.find(bot=>bot.botId===message.producer.botId);
+                  return h('article',{key:message.messageId,className:'bs-message','data-message-id':message.messageId,'data-producer':message.producer.kind},h('header',{className:'bs-message-heading'},avatar(message.producer.kind==='human'?'你':author?.name,message.producer.botId??'human'),h('strong',null,message.producer.kind==='human'?'你':author?botLabel(author):message.producer.botId),message.time&&h('time',{dateTime:message.time,className:'bs-meta'},new Date(message.time).toLocaleString())),h('p',{className:'bs-message-body'},message.text));
+                }),
               ),unread&&button('查看新消息',()=>{follow.current=true;setUnread(false);if(scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight;},{className:'bs-new-messages',disabled:false}),
-              h('div',{className:'bs-rounds'},...rows(group.rounds).filter(round=>['running','stopping','UNKNOWN','stopped'].includes(round.state)).map(round=>h('div',{className:'bs-round',key:round.roundId,'data-round-id':round.roundId},h('span',null,`${stateName(round.state)} · 请求 ${round.requests}/${round.maxRequests}`),rows(round.absences).length>0&&h('span',{className:'bs-meta'},rows(round.absences).map(row=>row.reason).join('；')),round.state==='running'&&button('停止此群轮',()=>command('group.round.stop',{groupId:group.groupId,roundId:round.roundId})),round.state==='stopping'&&h('span',null,'等待真实资源结算'),round.state==='UNKNOWN'&&button('查阅原群轮',()=>manage('groups',{groupId:group.groupId,roundId:round.roundId}),{disabled:false})))),
+              h('div',{className:'bs-rounds'},...rows(group.rounds).filter(round=>['running','stopping','UNKNOWN','stopped'].includes(round.state)||(round.state==='complete'&&rows(round.absences).length>0)).map(round=>h('div',{className:'bs-round',key:round.roundId,'data-round-id':round.roundId},h('span',null,`${stateName(round.state)} · 请求 ${round.requests}/${round.maxRequests}`),rows(round.absences).length>0&&h('span',{className:'bs-meta'},rows(round.absences).map(row=>row.botId?`${memberLabel(row.botId)}：${row.reason}`:row.reason).join('；')),round.state==='running'&&button('停止此群轮',()=>command('group.round.stop',{groupId:group.groupId,roundId:round.roundId})),round.state==='stopping'&&h('span',null,'等待真实资源结算'),(round.state==='UNKNOWN'||(round.state==='complete'&&rows(round.absences).length>0))&&button('查阅原群轮',()=>manage('groups',{groupId:group.groupId,roundId:round.roundId}),{disabled:false})))),
               h('form',{className:'bs-composer',onSubmit:event=>{event.preventDefault();return sendGroup();}},h('textarea',{className:'bs-textarea','aria-label':'群消息',placeholder:'发送给群成员…',value:draft,maxLength:16000,onChange:event=>updateDraft(groupKey,event.target.value),onCompositionStart:()=>{composing.current=true;},onCompositionEnd:()=>{composing.current=false;},onKeyDown:event=>{if(event.key==='Enter'&&!event.shiftKey&&!composing.current&&!event.nativeEvent?.isComposing&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendGroup();}}}),h('div',{className:'bs-composer-footer'},h('span',{className:'bs-meta'},'Enter 发送 · Shift+Enter 换行'),button('发送消息',sendGroup,{className:'bs-primary',disabled:view.busy||!draft.trim()})))):
               h('div',{className:'bs-empty'},h('div',{className:'bs-empty-art','aria-hidden':true},'B'),h('h3',null,'把日常对话留在 Bot 空间'),h('p',null,'选择具名 Bot 继续原生聊天，或进入群与团队协作。'),button('新建第一个 Bot',event=>openDialog('bot',event),{className:'bs-primary'}))),
           h('aside',{className:'bs-context',ref:context,inert:railOpen,role:contextOpen?'dialog':undefined,'aria-modal':contextOpen?true:undefined,tabIndex:contextOpen?-1:undefined,'aria-label':'当前会话上下文'},h('header',{className:'bs-context-header'},h('h3',null,'上下文'),button('关闭上下文',()=>{if(contextOpen)closeDrawers();else setContextCollapsed(true);},{className:'bs-icon-button',disabled:false})),
