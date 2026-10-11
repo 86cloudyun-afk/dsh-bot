@@ -25,6 +25,18 @@ export function isCurrentIndependentApprovalProbe(state,binding,target) {
   return !!old&&!!current&&!!member&&old.memberEpoch===current.memberEpoch&&current.memberEpoch===lineage.memberEpoch&&member.epoch===lineage.memberEpoch;
 }
 
+export function originalTimedQuestionReplies(events,callId) {
+  return events.filter(row=>row.type==='user/message'&&row.data.source?.kind==='user-question-reply'&&row.data.source.callId===callId);
+}
+
+export function assertNativeQuestionHistoryExcluded(body,events,requested) {
+  for(const event of events) {
+    const message=event.type==='user/message'?event.data:event.type==='assistant/message'?event.data.message:undefined;
+    for(const part of message?.content??[])if(part.type==='text'&&part.text&&!requested.some(text=>text.includes(part.text)))
+      assert.equal(body.includes(part.text),false,'Exact-channel question must not expose unrequested channel history');
+  }
+}
+
 export function observeOriginalMainReadiness() {
   const services=window.__stockV130ClientServices,roster=services.sessions.list.getSnapshot(),workspace=services.workspaces?.list.getSnapshot();
   const mains=Object.values(roster.byId).filter(row=>(row.retainedBy.mainView??0)>0),mainIds=mains.map(row=>row.id).sort();
@@ -427,7 +439,8 @@ async function channelQuestion(gui,sessionId,kind) {
   assert.equal((await clientFacts(gui,[sessionId])).references[sessionId],1);
   assert.equal(await scope.locator('[data-message-id]').count(),0,'Native question route does not expose channel history');
   assert.equal(await scope.locator('[data-composer-input="true"]').isVisible(),false,'Native question takeover does not expose a free-message input');
-  const body=await scope.innerText();for(const event of (await gui.original(sessionId)).filter(row=>row.type==='user/message'||row.type==='assistant/message'))for(const part of event.data.message?.content??[])if(part.type==='text'&&part.text)assert.equal(body.includes(part.text),false,'Exact-channel question exposes its requested decision material only');
+  const body=await scope.innerText(),requested=await gui.page.evaluate(id=>window.__stockV130ClientServices.uiSession.sessionStatus.getSnapshot().get(id)?.pendingInteraction?.questions?.flatMap(row=>[row.question,row.detail,row.header,...(row.options??[]).flatMap(option=>[option.label,option.description])]).filter(text=>typeof text==='string')??[],sessionId);
+  assertNativeQuestionHistoryExcluded(body,await gui.original(sessionId),requested);
   return scope;
 }
 async function questionToolAudit(gui,sessionId,callId,name,selected) {
@@ -529,9 +542,9 @@ async function timedGroupQuestion(gui,groupId,otherGroupId) {
     assert.deepEqual((await clientFacts(gui)).mainIds,before.mainIds);gui.check('v130QuestionReconnectDiscardsCarrierAndRestoresCurrentProjection',true);
     const option=panel.getByRole('radio',{name:'保留原通道',exact:true});await option.click();await option.press('Enter');
     await panel.waitFor({state:'hidden'});question.release.resolve();
-    await waitFor(async()=>(await gui.original(sessionId)).some(row=>row.type==='user/message'&&row.data.message?.source?.kind==='user-question-reply'&&row.data.message.source.callId===question.callId),'late native RPC admits original-call user reply');
-    const events=await gui.original(sessionId),answers=events.filter(row=>row.type==='user/message'&&row.data.message?.source?.kind==='user-question-reply'&&row.data.message.source.callId===question.callId);
-    assert.equal(answers.length,1);assert.ok(JSON.stringify(answers[0].data.message.content).includes('保留原通道'));assert.deepEqual(events.find(row=>row.type==='tool/result'&&row.data.message?.toolCallId===question.callId),originalResult,'Late reply preserves the original timed result');
+    await waitFor(async()=>originalTimedQuestionReplies(await gui.original(sessionId),question.callId).length>0,'late native RPC admits original-call user reply');
+    const events=await gui.original(sessionId),answers=originalTimedQuestionReplies(events,question.callId);
+    assert.equal(answers.length,1);assert.ok(JSON.stringify(answers[0].data.content).includes('保留原通道'));assert.deepEqual(events.find(row=>row.type==='tool/result'&&row.data.message?.toolCallId===question.callId),originalResult,'Late reply preserves the original timed result');
     await waitFor(()=>gui.app.ctx.dshBot.store.read().groups[groupId].rounds[posted.value.roundId].state==='complete','late answer stays within the original bounded group round');await questionUnmounted(gui,sessionId);
     assert.equal(gui.report.requests.filter(row=>row.sessionId===sessionId&&row.purpose==='conversation').length,2);gui.check('v130TimedQuestionLateReplyPreservesOriginalCallAndCurrentChannel',true);
     assert.equal(gui.app.ctx.dshBot.store.read().sessions[sessionId].state,'settled');assert.equal(await space(gui).locator(`button[data-pending-session-id="${sessionId}"],button[data-reopen-session-id="${sessionId}"]`).count(),0);

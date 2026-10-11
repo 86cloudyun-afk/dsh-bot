@@ -374,3 +374,51 @@ test('qualification context reads optional workspace through public actual Cordi
     assert.equal(factoryCalls,1);assert.equal(applyCalls,1);
   } finally {await workspaceProvider?.dispose();await fork.dispose();await provider.dispose();}
 });
+
+test('timed question audit reads original direct user payload from official persisted events',async t=>{
+  const {Context}=await import('@deepseek-ai/cordis'),{Session}=await import('@deepseek-ai/dsh-session'),{createUserMessage}=await import('@deepseek-ai/dsh-llm'),{default:Persistence}=await import('@deepseek-ai/dsh-session-persistence-jsonl');
+  const directory=await mkdtemp(join(tmpdir(),'stock-timed-question-audit-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const ctx=new Context(),fork=ctx.plugin(Persistence,{root:directory});await fork.await();
+  let writer,reader;
+  try {
+    const callId='original-timed-question',session=Session.create('qualification-timed-question');
+    const append=id=>session.append('user/message',createUserMessage({source:{kind:'user-question-reply',callId:id,outcome:'answered'},content:[{type:'text',text:JSON.stringify({kind:'answer_to_pending_question',callId:id,answers:[{id:'v130-channel-choice',selected:['保留原通道']}]})}]}),{surfaceOp:'append'});
+    const original=append(callId),other=append('different-call');
+    writer=await ctx.get('sessionPersistence').create(session.header);await writer.append([original,other]);await writer.flush();await writer.close();writer=undefined;
+    reader=await ctx.get('sessionPersistence').open(session.id,'read');const {events}=await reader.read(0);
+    assert.equal(events[0].data.source.kind,'user-question-reply');assert.equal(events[0].data.source.callId,callId);assert.equal(events[0].data.message,undefined,'Official user events store their identified message directly in data');
+    const helper=await readFile(new URL('./stock-v130-bot-space-checks.mjs',import.meta.url),'utf8'),body=helper.slice(helper.indexOf('async function timedGroupQuestion'),helper.indexOf('async function managementTargets'));
+    const oldPredicate=/\.some\((row=>row\.type==='user\/message'[^\n]+)\),'late native RPC/.exec(body);
+    if(oldPredicate)assert.equal(vm.runInNewContext(`events.some(${oldPredicate[1]})`,{events,question:{callId}}),true,'The installed timed audit must admit the real official direct-payload event');
+    const {originalTimedQuestionReplies:replies}=await import('./stock-v130-bot-space-checks.mjs');assert.equal(typeof replies,'function');
+    assert.deepEqual(replies(events,callId),[events[0]]);assert.deepEqual(replies(events,'missing-call'),[]);
+    assert.deepEqual(replies([{type:'tool/result',data:{message:{source:{kind:'user-question-reply',callId}}}},{type:'user/message',data:{message:{source:{kind:'user-question-reply',callId}}}}],callId),[],'Nested tool payloads and invented user wrappers cannot satisfy the native audit');
+    const answer=JSON.parse(replies(events,callId)[0].data.content[0].text);assert.deepEqual(answer.answers[0].selected,['保留原通道']);
+    assert.match(body,/originalTimedQuestionReplies\(await gui\.original\(sessionId\),question\.callId\)/);assert.match(body,/originalTimedQuestionReplies\(events,question\.callId\)/,'Both wait and exact one-reply audit must use the real event shape');
+  } finally {await reader?.close();await writer?.close();await fork.dispose();}
+});
+
+test('question history exclusion checks persisted direct user and nested assistant text separately',async t=>{
+  const {Context}=await import('@deepseek-ai/cordis'),{Session}=await import('@deepseek-ai/dsh-session'),{createUserMessage,createAssistantMessage,AssistantStreamAccumulator}=await import('@deepseek-ai/dsh-llm'),{default:Persistence}=await import('@deepseek-ai/dsh-session-persistence-jsonl');
+  const directory=await mkdtemp(join(tmpdir(),'stock-question-history-audit-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const ctx=new Context(),fork=ctx.plugin(Persistence,{root:directory});await fork.await();let writer,reader;
+  try {
+    const session=Session.create('qualification-question-history'),userText='原始用户历史正文',assistantText='原始助手历史正文',stream=new AssistantStreamAccumulator();
+    for(const chunk of [{type:'block-start',index:0,blockType:'text'},{type:'text-delta',index:0,text:assistantText},{type:'block-end',index:0,block:{type:'text',text:assistantText}},{type:'finish',reason:{kind:'stop'}}])stream.push({time:Date.now(),chunk});
+    const original=[session.append('turn/start',{turn:1}),session.append('step/start',{turn:1,step:1}),
+      session.append('user/message',createUserMessage({source:{kind:'user-question-reply',callId:'history-call',outcome:'answered'},content:[{type:'text',text:userText}]}),{surfaceOp:'append'}),
+      session.append('assistant/message',{turn:1,step:1,message:createAssistantMessage({source:{provider:'controlled-history-unit',model:'fixture'},content:[{type:'text',text:assistantText}]}),stream:[...stream.snapshot()]},{surfaceOp:'append'}),
+      session.append('step/end',{turn:1,step:1}),session.append('turn/end',{turn:1,reason:{kind:'completed'}})];
+    writer=await ctx.get('sessionPersistence').create(session.header);await writer.append(original);await writer.flush();await writer.close();writer=undefined;
+    reader=await ctx.get('sessionPersistence').open(session.id,'read');const {events}=await reader.read(0);
+    assert.equal(events[2].data.content[0].text,userText);assert.equal(events[3].data.message.content[0].text,assistantText);
+    const source=await readFile(new URL('./stock-v130-bot-space-checks.mjs',import.meta.url),'utf8'),body=source.slice(source.indexOf('async function channelQuestion'),source.indexOf('async function questionToolAudit'));
+    const oldLoop=/const body=await scope\.innerText\(\);(for\(const event[^\n]+)/.exec(body);
+    if(oldLoop)assert.throws(()=>vm.runInNewContext(oldLoop[1].replace('await gui.original(sessionId)','events'),{events,body:userText,assert}),/AssertionError|requested decision material/,'The real history assertion must reject visible original user text');
+    const {assertNativeQuestionHistoryExcluded:exclude}=await import('./stock-v130-bot-space-checks.mjs');assert.equal(typeof exclude,'function');
+    assert.throws(()=>exclude(userText,events,[]),/channel history/);assert.throws(()=>exclude(assistantText,events,[]),/channel history/);assert.doesNotThrow(()=>exclude('本次明确请求的计划全文',events,['本次明确请求的计划全文']));
+    assert.doesNotThrow(()=>exclude(`本次决策材料明确引用：${userText}`,events,[`本次决策材料明确引用：${userText}`]),'Canonical question detail may explicitly quote decision material; it is not forbidden solely because history contains the same text');
+    assert.throws(()=>exclude(`${userText}\n${assistantText}`,events,[`本次决策材料明确引用：${userText}`]),/channel history/,'Allowed canonical user quotation does not authorize unrelated assistant history');
+    assert.match(body,/assertNativeQuestionHistoryExcluded\(body,await gui\.original\(sessionId\),requested\)/);assert.match(body,/pendingInteraction\?\.questions/,'The allowed decision material must come from the actual canonical question');
+  } finally {await reader?.close();await writer?.close();await fork.dispose();}
+});
