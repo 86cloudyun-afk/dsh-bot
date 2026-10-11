@@ -11,6 +11,20 @@ const paint=page=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame((
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
 const payload=request=>{try{return request.postDataJSON()?.payload;}catch{return undefined;}};
 
+export async function exactChannelPlanDocument(panel,sessionId) {
+  assert.equal(await panel.count(),1,'Full-plan witness requires a unique native pane');
+  assert.equal(await panel.getAttribute('data-session-id'),sessionId,'Full-plan witness must retain the original session');
+  assert.equal(await panel.getAttribute('data-interaction-kind'),'plan-review');
+  const dialog=panel.locator('xpath=ancestor::dialog[1]');
+  assert.equal(await dialog.count(),1,'Native plan pane must have one owning dialog');
+  assert.equal(await dialog.getAttribute('aria-label'),'待确认操作');assert.equal(await dialog.isVisible(),true);
+  assert.equal(await dialog.locator('.bs-interaction').count(),1,'Owning dialog must contain only its original native pane');
+  assert.equal(await dialog.locator(`.bs-interaction[data-session-id="${sessionId}"]`).count(),1);
+  const plan=dialog.locator('.bs-plan-document[aria-label="完整原生计划"] > pre');
+  assert.equal(await plan.count(),1,'Owning dialog must contain one full original plan');
+  return plan;
+}
+
 export function isCurrentIndependentApprovalProbe(state,binding,target) {
   const receipt=state.operations?.[target?.operationId],original=receipt?.result;
   if(receipt?.action!=='meeting.start'||original?.groupId!==target?.groupId||original?.phase!=='independent'||
@@ -296,7 +310,7 @@ async function taskAndMeeting(gui,first,second,sessionId,groupId) {
     const selected={...gui.v130ChannelQuestion},binding=gui.app.ctx.dshBot.store.read().sessions[selected.sessionId];
     assert.equal(binding.lineage.groupId,groupId);assert.equal(binding.lineage.meetingId,meetingId);assert.equal(binding.lineage.phase,'discussion');
     let panel=await channelQuestion(gui,selected.sessionId,'plan-review');await panel.locator('[data-plan-review-key]').waitFor();
-    await bookmarkQuestion(gui,selected.sessionId);const plan=panel.locator('.bs-plan-document[aria-label="完整原生计划"] > pre');await plan.waitFor();assert.equal(await plan.innerText(),'# 本群受控计划\n\n保留原通道与原会议信息。\n\n第二段：验证原计划全文。\n\n- 最后一项：保留原请求回执。');
+    await bookmarkQuestion(gui,selected.sessionId);const plan=await exactChannelPlanDocument(panel,selected.sessionId);await plan.waitFor();assert.equal(await plan.innerText(),'# 本群受控计划\n\n保留原通道与原会议信息。\n\n第二段：验证原计划全文。\n\n- 最后一项：保留原请求回执。');
     await assertPlanPreviewEntry(gui,-1);await screenshot(gui,'v130-space-discussion-plan-review');
     await button(panel,'要求修改').click();await panel.waitFor({state:'hidden'});
     await assertPlanPreviewEntry(gui,0);

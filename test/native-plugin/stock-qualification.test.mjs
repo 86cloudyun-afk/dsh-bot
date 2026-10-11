@@ -6,6 +6,7 @@ import {join,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import vm from 'node:vm';
+import {renderOriginalPlanDialog} from './stock-v130-plan-scope.browser.mjs';
 
 const root=resolve(import.meta.dirname,'../..');
 const target={packageName:'dsh-bot',packageVersion:'1.1.1',artifactSha256:'cf651bff75f9fa144e05b0db7fd6284038c50bcafb8a44ccfa8b0d4d66bb9c92',sourceCommit:'a'.repeat(40),officialVersion:'0.2.0-rc.2'};
@@ -454,4 +455,21 @@ test('approval audit pairs exact persisted call decision and localized rejected 
     assert.match(body,/originalApprovalAuditPair\(await gui\.original\(sessionId\),callId,toolName,outcome\)/,'The actual GUI audit must wait for the exact complete durable pair');
     assert.match(body,/v130-channel-approval-\$\{sessionId\}/);assert.match(body,/v130ApprovalExecutions/,'Native tool-body dispatch evidence remains required');
   } finally {await reader?.close();await writer?.close();await fork.dispose();}
+});
+
+test('original plan render scopes the sibling full document to its own channel dialog',async()=>{
+  const sessionId='original-plan-channel',detail='# 原计划\n\n第二段\n\n- 原计划最后一项';
+  const dialog=await renderOriginalPlanDialog(sessionId,detail),other=await renderOriginalPlanDialog('different-channel','# 不同通道计划');
+  const nodes=[];
+  const visit=(node,parent)=>{if(!node||typeof node!=='object')return;nodes.push({node,parent});for(const child of node.children)visit(child,node);};visit(dialog);
+  const find=predicate=>nodes.filter(({node})=>predicate(node));
+  const panes=find(node=>node.props['data-session-id']===sessionId),documents=find(node=>node.props['aria-label']==='完整原生计划');
+  assert.equal(dialog.type,'dialog');assert.equal(dialog.props['aria-label'],'待确认操作');assert.equal(panes.length,1);assert.equal(documents.length,1);
+  assert.equal(panes[0].parent,documents[0].parent,'The original full document and native pane are siblings in one dialog body');
+  assert.equal(documents[0].node.children.find(node=>node.type==='pre').children[0],detail);
+  assert.notDeepEqual(other,dialog,'Another channel has a separate original component and plan');
+  const source=await readFile(new URL('./stock-v130-bot-space-checks.mjs',import.meta.url),'utf8');
+  assert.match(source,/const plan=await exactChannelPlanDocument\(panel,selected\.sessionId\)/,'The installed witness must follow the actual sibling layout');
+  const {exactChannelPlanDocument}=await import('./stock-v130-bot-space-checks.mjs');assert.equal(typeof exactChannelPlanDocument,'function');
+  assert.match(exactChannelPlanDocument.toString(),/xpath=ancestor::dialog\[1\]/,'Scope starts at the actual exact native pane, not a global dialog or first plan');
 });
