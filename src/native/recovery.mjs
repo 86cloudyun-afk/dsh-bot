@@ -12,8 +12,8 @@ export class Reconciler {
         if(draft.sessions[attempt.sessionId])draft.sessions[attempt.sessionId].state='UNKNOWN';
         if(draft.tasks[attempt.taskId])draft.tasks[attempt.taskId].state='UNKNOWN';
       }
-      for(const binding of Object.values(draft.sessions))if(binding.ownerRuntimeId!==this.adapter.runtimeId&&(binding.state==='creating'||['group','independent','meeting'].includes(binding.purpose)&&binding.state==='ready')) {binding.state='UNKNOWN';binding.error='previous_channel_runtime';}
-      for(const group of Object.values(draft.groups))for(const round of Object.values(group.rounds??{}))if(round.state==='running'&&round.runtimeId!==this.tasks.runtimeId){round.state='UNKNOWN';round.error='previous_round_runtime';unknown.push(round.roundId);}
+      for(const binding of Object.values(draft.sessions))if(binding.ownerRuntimeId!==this.adapter.runtimeId&&(binding.state==='creating'||['group','independent','meeting'].includes(binding.purpose)&&['ready','stopping'].includes(binding.state))) {binding.state='UNKNOWN';binding.error='previous_channel_runtime';}
+      for(const group of Object.values(draft.groups))for(const round of Object.values(group.rounds??{}))if(['running','stopping'].includes(round.state)&&round.runtimeId!==this.tasks.runtimeId){round.state='UNKNOWN';round.error='previous_round_runtime';unknown.push(round.roundId);}
       for(const meeting of Object.values(draft.meetings))if(!['complete','cancelled'].includes(meeting.phase)&&meeting.runtimeId!==this.tasks.runtimeId) {
         meeting.runtimeState='UNKNOWN';
         for(const participant of meeting.participants.filter(row=>row.active)) {

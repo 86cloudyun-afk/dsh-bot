@@ -338,6 +338,7 @@ export class BotService {
         "session.send": [this.broker, "enqueue"],
         "group.create": [this.collaboration, "createGroup"],
         "group.post": [this.collaboration, "post"],
+        "group.round.stop": [this.collaboration, "stopRound"],
         "group.members": [this.collaboration, "changeMembers"],
         "meeting.start": [this.collaboration, "startMeeting"],
         "meeting.opinion": [this.collaboration, "submitOpinion"],
