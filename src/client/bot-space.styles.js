@@ -408,7 +408,7 @@ export const botSpaceStyles = `
 .dsh-bot-space .bs-message-heading .bs-avatar { width: 32px; height: 32px; flex-basis: 32px; border-radius: 10px; font-size: 13px; }
 .dsh-bot-space .bs-message-body { margin: 9px 0 0 40px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.75; }
 .dsh-bot-space .bs-message[data-producer="human"] .bs-message-body { width: fit-content; max-width: calc(100% - 40px); padding: 11px 15px; border-radius: 2px 12px 12px 12px; background: var(--bs-accent-soft); }
-.dsh-bot-space .bs-rounds { flex: 0 1 auto; max-height: 160px; overflow-y: auto; overscroll-behavior: contain; }
+.dsh-bot-space .bs-rounds { flex: 0 0 auto; max-height: 160px; overflow-y: auto; overscroll-behavior: contain; }
 .dsh-bot-space .bs-round { box-sizing: border-box; display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: 8px; width: calc(100% - 48px); max-width: 760px; margin: 0 auto 10px; padding: 10px 12px; border: 1px solid var(--bs-rule); border-radius: 8px; background: var(--bs-subtle); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .dsh-bot-space .bs-load-more { display: flex; margin: 0 auto 24px; color: var(--bs-muted); }
 .dsh-bot-space .bs-new-messages { align-self: center; flex: 0 0 auto; margin: 0 16px 8px; border-color: color-mix(in srgb, var(--bs-accent) 25%, var(--bs-rule)); background: var(--bs-accent-soft); color: var(--bs-accent-ink); }
