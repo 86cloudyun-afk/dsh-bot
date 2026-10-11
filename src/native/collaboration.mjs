@@ -19,6 +19,10 @@ const modelReply = (history) =>
 /** Bounded native member turns, with durable material and membership generations. */
 export class GroupMeetingController {
   #runs = new Map();
+  #roundStops = new Map();
+  #nativeStarts = new Set();
+  #channelStops = new Map();
+  #stopErrors = new Map();
   #closed = false;
   constructor({ store, policy, adapter, tasks }) {
     Object.assign(this, { store, policy, adapter, tasks });
@@ -132,7 +136,7 @@ export class GroupMeetingController {
           };
         requireCondition(
           Object.values(group.rounds).filter((row) =>
-            ["running", "UNKNOWN"].includes(row.state),
+            ["running", "stopping", "UNKNOWN"].includes(row.state),
           ).length < 8,
           "group_queue_full",
         );
@@ -167,6 +171,129 @@ export class GroupMeetingController {
       this.#schedule(`group:${intent.roundId}`, () => this.#groupRound(intent));
     return intent;
   }
+  async stopRound(actor, command) {
+    this.#human(actor);
+    requireCondition(!this.#closed, "disabled");
+    command = this.#input(command, ["groupId", "roundId"]);
+    const { groupId, roundId } = command.input;
+    requireCondition(validId(groupId) && validId(roundId), "invalid_input");
+    const stamped = this.policy.command(actor, command);
+    // Replaying an immutable intent retrieves its original receipt, never sends
+    // a second native cancellation or resumes resources from another runtime.
+    if (Object.hasOwn(this.store.read().operations, command.operationId))
+      return this.store.transact(stamped, () => null);
+    const receipt = await this.store.transact(stamped, (draft) => {
+      this.policy.require(actor, "group.round.stop", { kind: "group", id: groupId }, draft);
+      const group = draft.groups[groupId], round = group?.rounds[roundId];
+      requireCondition(round && round.groupId === groupId && round.roundId === roundId, "not_found");
+      requireCondition(["running", "stopping", "complete", "stopped"].includes(round.state), "round_outcome_unknown");
+      if (["running", "stopping"].includes(round.state)) {
+        requireCondition(round.runtimeId === this.tasks.runtimeId, "round_outcome_unknown");
+        for (const sessionId of round.channels) {
+          const binding = draft.sessions[sessionId];
+          requireCondition(binding?.ownerRuntimeId === this.adapter.runtimeId &&
+            binding.purpose === "group" && binding.lineage?.groupId === groupId &&
+            binding.lineage.roundId === roundId, "round_outcome_unknown");
+        }
+      }
+      const accepted = round.state === "running";
+      if (accepted) {
+        round.state = "stopping";
+        round.stopOperationId = command.operationId;
+      }
+      return { groupId, roundId, accepted, state: round.state,
+        settled: this.#roundSettled(round, draft), channels: copy(round.channels) };
+    });
+    if (receipt.accepted) this.#dispatchRoundStop(receipt);
+    return receipt;
+  }
+  #roundSettled(round, state) {
+    if (!["complete", "stopped"].includes(round.state)) return false;
+    const proof = Array.isArray(round.stopEvidence) &&
+      round.stopEvidence.length === round.channels.length &&
+      new Set(round.stopEvidence.map(row => row.sessionId)).size === round.channels.length &&
+      round.stopEvidence.every(row => round.channels.includes(row.sessionId))
+      ? new Map(round.stopEvidence.map(row => [row.sessionId, row.resources])) : new Map();
+    return round.channels.every(sessionId => {
+      const binding = state.sessions[sessionId];
+      if (binding?.state !== "settled" || binding.purpose !== "group" ||
+        binding.lineage?.groupId !== round.groupId || binding.lineage.roundId !== round.roundId) return false;
+      const resources = proof.get(sessionId) ?? this.adapter.resources(sessionId);
+      return resources?.known === true && resources.settled === true && !resources.resourceFaults?.length;
+    });
+  }
+  #requireGroupRunning(binding, state = this.store.read()) {
+    if (binding.purpose !== "group") return;
+    const { groupId, roundId } = binding.lineage, round = state.groups[groupId]?.rounds[roundId];
+    requireCondition(round?.state === "running" && round.runtimeId === this.tasks.runtimeId,
+      "group_round_stopped");
+  }
+  #stopChannel(sessionId) {
+    if (this.#channelStops.has(sessionId)) return this.#channelStops.get(sessionId);
+    const promise = this.adapter.stopResources(sessionId).catch(error => {
+      this.#stopErrors.set(sessionId, error.code ?? error.name);
+    });
+    // Retain the original stop outcome for this channel, including failures.
+    this.#channelStops.set(sessionId, promise);
+    return promise;
+  }
+  #dispatchRoundStop(intent) {
+    const key = `group:${intent.roundId}`;
+    if (this.#roundStops.has(key)) return;
+    const worker = this.#runs.get(key);
+    const operation = (async () => {
+      await Promise.all(intent.channels.filter(sessionId =>
+        this.#nativeStarts.has(sessionId) &&
+          (this.adapter.resources(sessionId).known || this.adapter.context.agents.get(sessionId)))
+        .map(sessionId => this.#stopChannel(sessionId)));
+      // A pending create must finish (or be rejected by its fence) before an
+      // absent handle can be interpreted. The worker also stops late creations.
+      await worker;
+      while (!this.#closed) {
+        const state = this.store.read(), round = state.groups[intent.groupId]?.rounds[intent.roundId];
+        if (round?.state !== "stopping" || round.runtimeId !== this.tasks.runtimeId) return;
+        let error = null;
+        const evidence = round.channels.map(sessionId => {
+          const binding = state.sessions[sessionId];
+          const resources = binding?.nativeCreationSkipped === true
+            ? { known: true, settled: true, requests: [], nativeCreationSkipped: true }
+            : this.adapter.resources(sessionId);
+          if (binding?.ownerRuntimeId !== this.adapter.runtimeId || binding.state === "UNKNOWN" ||
+            !resources.known || resources.resourceFaults?.length || this.#stopErrors.has(sessionId))
+            error ??= this.#stopErrors.get(sessionId) ?? "group_resource_unknown";
+          return { sessionId, resources };
+        });
+        const settled = !error && evidence.every(row => row.resources.settled);
+        if (settled) for (const { sessionId } of evidence) {
+          try { await this.adapter.disposeOwned(sessionId); }
+          catch (failure) { error ??= failure.code ?? failure.name; }
+        }
+        if (error || settled || digest(round.stopEvidence ?? []) !== digest(evidence)) {
+          await this.store.transact({
+            operationId: randomUUID(), action: "group.round-stop-settlement",
+            input: { groupId: intent.groupId, roundId: intent.roundId, evidence, error },
+          }, draft => {
+            const current = draft.groups[intent.groupId].rounds[intent.roundId];
+            if (current.state !== "stopping" || current.runtimeId !== this.tasks.runtimeId) return null;
+            current.stopEvidence = copy(evidence);
+            if (error) {
+              current.state = "UNKNOWN"; current.error = error;
+              for (const { sessionId } of evidence) draft.sessions[sessionId].state = "UNKNOWN";
+            } else if (settled) {
+              current.state = "stopped";
+              for (const { sessionId } of evidence) draft.sessions[sessionId].state = "settled";
+            }
+            return null;
+          });
+        }
+        if (error || settled) return;
+        // Known active resources retain stopping; observe proof without replaying
+        // model work or issuing fresh native cancellations.
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    })().catch(() => {}).finally(() => this.#roundStops.delete(key));
+    this.#roundStops.set(key, operation);
+  }
   #binding(draft, botId, purpose, lineage) {
     const bot = draft.bots[botId],
       sessionId = randomUUID();
@@ -200,6 +327,8 @@ export class GroupMeetingController {
   }
   async #turn(binding, prompt) {
     requireCondition(!this.#closed, "disabled");
+    this.#requireGroupRunning(binding);
+    if (binding.purpose === "group") this.#nativeStarts.add(binding.sessionId);
     const handle = await this.adapter.createOwned(binding);
     await this.store.transact(
       {
@@ -208,6 +337,7 @@ export class GroupMeetingController {
         input: { sessionId: binding.sessionId },
       },
       (draft) => {
+        this.#requireGroupRunning(binding, draft);
         const current = draft.sessions[binding.sessionId];
         requireCondition(current.state === "creating", "stale_channel");
         current.state = "ready";
@@ -224,6 +354,7 @@ export class GroupMeetingController {
         input: { sessionId: binding.sessionId, origins },
       },
       (draft) => {
+        this.#requireGroupRunning(binding, draft);
         for (const ref of origins)
           this.policy.require(actor, `${ref.kind}.read`, ref, draft);
         draft.sessions[binding.sessionId].origins = origins;
@@ -232,6 +363,7 @@ export class GroupMeetingController {
     );
     for (const ref of origins)
       this.policy.require(actor, `${ref.kind}.read`, ref);
+    this.#requireGroupRunning(binding);
     handle.agent.followup(
       createUserMessage({
         id: randomUUID(),
@@ -279,15 +411,45 @@ export class GroupMeetingController {
       .catch(() => {});
     await this.adapter.disposeOwned(sessionId);
   }
+  async #finishGroupChannel(binding, error) {
+    const { groupId, roundId } = binding.lineage;
+    const current = this.store.read().groups[groupId].rounds[roundId];
+    if (current.state === "running") return this.#finishChannel(binding.sessionId, error);
+    const skipped = !this.#nativeStarts.has(binding.sessionId);
+    if (!skipped && this.adapter.context.agents.get(binding.sessionId))
+      await this.#stopChannel(binding.sessionId);
+    const resources = skipped ? { known: true, settled: true, requests: [] }
+      : this.adapter.resources(binding.sessionId);
+    let failure = this.#stopErrors.get(binding.sessionId) ??
+      (!resources.known || resources.resourceFaults?.length ? "group_resource_unknown" : null);
+    if (!failure && resources.settled) {
+      try { await this.adapter.disposeOwned(binding.sessionId); }
+      catch (e) { failure = e.code ?? e.name; }
+    }
+    await this.store.transact({
+      operationId: `${binding.sessionId}:stop-finish`, action: "group.channel-stop-settled",
+      input: { sessionId: binding.sessionId, skipped, resources, error: failure },
+    }, draft => {
+      const round = draft.groups[groupId].rounds[roundId], channel = draft.sessions[binding.sessionId];
+      if (round.state === "UNKNOWN") { channel.state = "UNKNOWN"; return null; }
+      if (failure) { round.state = "UNKNOWN"; round.error = failure; }
+      channel.state = failure ? "UNKNOWN" : resources.settled ? "settled" : "stopping";
+      channel.interruption = "group_round_stopped";
+      channel.stopEvidence = copy(resources);
+      if (skipped) channel.nativeCreationSkipped = true;
+      return null;
+    });
+  }
   async #groupRound(intent) {
     const original = this.store.read().groups[intent.groupId],
       round = original.rounds[intent.roundId];
-    for (let cycle = 0; cycle < round.roundLimit && !this.#closed; cycle++)
+    cycles: for (let cycle = 0; cycle < round.roundLimit && !this.#closed; cycle++)
       for (const member of original.members.filter((row) => row.active)) {
         const current = this.store.read().groups[intent.groupId];
         if (current.rounds[intent.roundId].state !== "running") return;
         if (current.rounds[intent.roundId].requests >= round.maxRequests) break;
         let binding,
+          replyResult,
           error = null;
         try {
           binding = await this.store.transact(
@@ -298,6 +460,9 @@ export class GroupMeetingController {
             },
             (draft) => {
               const group = draft.groups[intent.groupId];
+              requireCondition(group.rounds[intent.roundId]?.state === "running" &&
+                group.rounds[intent.roundId].runtimeId === this.tasks.runtimeId, "group_round_stopped");
+              requireCondition(group.messages.length < 2000, "group_history_full");
               requireCondition(
                 group.members.some(
                   (row) =>
@@ -328,6 +493,7 @@ export class GroupMeetingController {
             ).messages;
             return `内部群 ${current.name}，群身份 ${current.groupId}，有界轮 ${intent.roundId}/${cycle + 1}。\n仅讨论本群材料：${JSON.stringify(transcript)}\n请直接给出自己的简短真实答复；勿自动循环转投，不改变权限。`;
           });
+          replyResult = result;
           const actor = this.policy.fromAgent(result.handle.agent);
           await this.store.transact(
             {
@@ -343,6 +509,8 @@ export class GroupMeetingController {
                 memberNow = group.members.find(
                   (row) => row.botId === member.botId,
                 );
+              this.#requireGroupRunning(binding, draft);
+              requireCondition(group.messages.length < 2000, "group_history_full");
               requireCondition(
                 memberNow?.active && memberNow.epoch === member.epoch,
                 "stale_member",
@@ -375,7 +543,8 @@ export class GroupMeetingController {
             },
           );
         } catch (e) {
-          error = e.code ?? e.name;
+          error = this.store.read().groups[intent.groupId].rounds[intent.roundId].state !== "running"
+            ? "group_round_stopped" : e.code ?? e.name;
           await this.store
             .transact(
               {
@@ -386,14 +555,22 @@ export class GroupMeetingController {
               (draft) => {
                 draft.groups[intent.groupId].rounds[
                   intent.roundId
-                ].absences.push({ botId: member.botId, reason: error });
+                ].absences.push({ botId: member.botId, reason: error,
+                  ...(error === "group_history_full" && replyResult ? {
+                    messageId: replyResult.reply.data.message.id,
+                    source: { sessionId: binding.sessionId, eventSeq: replyResult.reply.seq },
+                    usage: copy(replyResult.usage),
+                  } : {}),
+                });
                 return null;
               },
             )
             .catch(() => {});
         } finally {
-          if (binding) await this.#finishChannel(binding.sessionId, error);
+          if (binding) await this.#finishGroupChannel(binding, error);
         }
+        // No later member or cycle can append after the bounded history fills.
+        if (error === "group_history_full") break cycles;
       }
     await this.store.transact(
       {
@@ -402,7 +579,9 @@ export class GroupMeetingController {
         input: { roundId: intent.roundId },
       },
       (draft) => {
-        draft.groups[intent.groupId].rounds[intent.roundId].state = "complete";
+        const current = draft.groups[intent.groupId].rounds[intent.roundId];
+        if (current.state === "running" && current.runtimeId === this.tasks.runtimeId)
+          current.state = "complete";
         return null;
       },
     );
@@ -1116,6 +1295,6 @@ export class GroupMeetingController {
         this.adapter.context.agents.get(binding.sessionId)
       )
         pending.push(this.adapter.stopResources(binding.sessionId));
-    await Promise.allSettled([...pending, ...this.#runs.values()]);
+    await Promise.allSettled([...pending, ...this.#runs.values(), ...this.#roundStops.values()]);
   }
 }

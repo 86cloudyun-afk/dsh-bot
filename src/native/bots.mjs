@@ -86,7 +86,7 @@ export class BotDirectory {
     // or in a later meeting phase after its present channel has settled.
     requireCondition(!Object.values(state.groups).some(group=>
       (group.ownerBotId===botId||group.coordinatorBotId===botId||group.members?.some(row=>row.botId===botId&&row.active))&&
-      Object.values(group.rounds??{}).some(row=>['running','UNKNOWN'].includes(row.state)))&&
+      Object.values(group.rounds??{}).some(row=>['running','stopping','UNKNOWN'].includes(row.state)))&&
       !Object.values(state.meetings).some(meeting=>!['complete','cancelled'].includes(meeting.phase)&&
         (meeting.ownerBotId===botId||meeting.coordinatorBotId===botId||meeting.participants?.some(row=>row.botId===botId&&row.active))),
       'bot_tasks_unsettled','Bot 仍参与未结算的群轮次或会议；请先完成、取消会议或查回原始协作状态。');
@@ -97,7 +97,7 @@ export class BotDirectory {
       'bot_delivery_pending','Bot 仍有待投递或入队状态不明的原生消息；请先查回原始投递。');
     for(const sessionId of sessionIds) {
       const row=state.sessions[sessionId];
-      requireCondition(!['creating','UNKNOWN','archiving','restoring','configuring'].includes(row?.state),
+      requireCondition(!['creating','stopping','UNKNOWN','archiving','restoring','configuring'].includes(row?.state),
         'bot_contact_unsettled','Bot 的原生会话状态尚未结算；请先查回原始操作。');
       const agent=this.adapter.context.agents.get(sessionId),resources=this.adapter.resources(sessionId);
       requireCondition(agent?.status!=='running'&&!agent?.inbox?.nextTurn?.length&&!agent?.inbox?.nextStep?.length&&
