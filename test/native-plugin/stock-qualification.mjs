@@ -136,9 +136,46 @@ export const guiCheckNames=Object.freeze([
   "v120MaterialSeamSearchReturnsExistingExactChunks",
   "v120EditedPausedOnceReminderKeepsOriginalDueAndNotifiesOnce",
   "v120GroupReplySourceRevocationHidesLaterDerivedMaterial",
-  "v120QualityUsesNoExternalModelRequests"
+  "v120QualityUsesNoExternalModelRequests",
+
+  'v130DedicatedSpaceOpensWithoutModelRequestOrMainNavigation',
+  'v130ExistingPrivateHistoryUsesOriginalSessionAndOwnedReference',
+  'v130TwoSameNameBotsKeepSeparateIdentityHistoryAndDrafts',
+  'v130NewConversationKeepsReceiptSessionWithoutMainNavigation',
+  'v130EmbeddedNativeComposerUsesSelectedBotModel',
+  'v130EmbeddedNativeToolApprovalHasOriginalAuditPair',
+  'v130SpaceCreatesTwoMemberGroupWithoutModelRequest',
+  'v130GroupRepliesComeFromActualIndependentNativeMembers',
+  'v130HeldGroupStopSettlesOriginalChannelAndPreventsNextMember',
+  'v130GroupDraftPreservesImeAndFailedOriginalSubmission',
+  'v130GroupPendingSubmitClearsOnlyOriginalUneditedDraft',
+  'v130PrivateTaskRunsWhileSelectedChatRemainsResponsive',
+  'v130GroupContextShowsOnlyMeetingActionTasks',
+  'v130MeetingIndependentOpinionsRemainSealedUntilAdvance',
+  'v130MeetingAdvancesRealPhasesAndCreatesLinkedActionTask',
+  'v130NarrowSpaceControlsRemainReachable',
+  'v130SpaceModalEscapeRestoresTriggerFocus',
+  'v130NativeReferencesReleaseOnSwitchAndDisable',
+  'v130SpaceDisablePreservesUnrelatedNativeConversation',
+  'v130SpaceLightDarkPrivateGroupCooperationScreenshots',
+  'v130SpaceUsesNoExternalModelRequests',
+  'v130GroupApprovalUsesExactNativeChannelAndAuditedContinuation',
+  'v130IndependentMeetingApprovalRejectsExactToolWithoutOpinionLeak',
+  'v130ResolvedChannelApprovalUnmountsBeforeDraftFallback',
+  'v130GroupNativeQuestionUsesExactChannelAndOriginalToolResult',
+  'v130MeetingDiscussionPlanReviewUsesExactChannelAndOriginalToolResult',
+  'v130ChannelQuestionCloseUnmountsWithoutFallbackOrLease',
+  'v130ChannelQuestionRemovalUnmountsAndPreservesOriginalGeneration',
+  'v130CancelledUnrevealedMeetingKeepsOpinionsSealedAndHistory',
+  'v130NarrowDrawersEscapeRestoreFocus',
+  'v130KeyedPlanReviewHideReopensSameOriginalCarrier',
+  'v130TimedQuestionLateReplyPreservesOriginalCallAndCurrentChannel',
+  'v130QuestionReconnectDiscardsCarrierAndRestoresCurrentProjection',
+  'v130SettledChannelQuestionCannotReactivateAfterCompletion',
+  'v130ManagementOpensExactSelectedBotAndGroupTargets',
+
 ]);
-const prior=(version,sha256,schema)=>Object.freeze({version,sha256,schema});
+const prior=(version,sha256,schema,bytes)=>Object.freeze({version,sha256,schema,...(bytes===undefined?{}:{bytes})});
 export const stockSources=Object.freeze({
   gui:null,
   upgrade:prior('1.0.0','1a8cab4c29db54ace76160d1e6e1ac9dfc7a4e291f77b65f974bab30fbaa1724',1),
@@ -149,6 +186,7 @@ export const stockSources=Object.freeze({
   'upgrade-v112':prior('1.1.2','426a244ae02927129e315420907ab4b2f9acf16414144e0e6792b7f25bfe48ff',2),
   'upgrade-v113':prior('1.1.3','55c192a3837d36ff6dd78fa5f34c36d2375a648258ddd499f793d6e3a47ae289',2),
   'upgrade-v114':prior('1.1.4','3fb396f44120881c5f9fbf6d40b278e8614ffa765e29c04a6c49ccf8000f5677',2),
+  'upgrade-v120':prior('1.2.0','43e837624194596a9ff679e86b68f416ea7977152f480191c208fc5eae726d94',2,147662),
 });
 const stableVersion=version=>typeof version==='string'&&/^\d+\.\d+\.\d+$/.test(version);
 const hex=(value,size)=>typeof value==='string'&&new RegExp(`^[a-f\\d]{${size}}$`).test(value);
@@ -224,6 +262,7 @@ export function validateStockReport(report,{source,target}) {
     const previous=stockSources[source];
     assert.equal(count,0,'Upgrade and receipt lookup cannot issue target model requests');
     assert.equal(report.previousArtifactSha256,previous.sha256,'Immutable upgrade source differs');
+    if(previous.bytes!==undefined)assert.equal(report.previousArtifactBytes,previous.bytes,'Immutable upgrade source byte length differs');
     assert.equal(report.upgradeArtifactSha256,target.artifactSha256,'Upgrade target artifact differs');
     assert.equal(report.freshHostProcessAfterUpgrade,true,'Upgrade requires a fresh host process');
     if(report.upgradeFromVersion!==undefined)assert.equal(report.upgradeFromVersion,previous.version,'Upgrade source version differs');

@@ -7,6 +7,7 @@ import {runV111QualityChecks} from './stock-v111-quality-checks.mjs';
 import {runV112QualityChecks} from './stock-v112-quality-checks.mjs';
 import {runV113QualityChecks} from './stock-v113-quality-checks.mjs';
 import {runV120QualityChecks} from './stock-v120-quality-checks.mjs';
+import {runV130BotSpaceChecks,isCurrentIndependentApprovalProbe} from './stock-v130-bot-space-checks.mjs';
 import { writeFile, readFile, access, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runUiRegressions } from "./stock-ui-regressions.mjs";
@@ -28,13 +29,67 @@ async function* stream(options, state) {
     binding = service.store.read().sessions[options.sessionId],
     count = (calls.get(options.sessionId) ?? 0) + 1;
   calls.set(options.sessionId, count);
+  const originalCause=binding?.purpose==='group'?service.store.read().groups[binding.lineage.groupId]?.messages.find(row=>row.messageId===service.store.read().groups[binding.lineage.groupId]?.rounds[binding.lineage.roundId]?.causeMessageId)?.text:undefined;
   if (options.purpose === "session-title") {
     yield* textReply("原生插件验收");
+    return;
+  }
+  // Dedicated v1.3 fixtures remain real stock Agent turns; only provider
+  // responses are controlled. A held response settles through native cancel.
+  if (binding?.lineage?.groupId === state.v130GroupHoldGroupId && state.v130GroupHoldGroupId && originalCause==='V130_HELD_GROUP_STOP') {
+    await new Promise(resolve => {
+      if (options.signal.aborted) resolve();
+      else options.signal.addEventListener("abort", resolve, { once: true });
+    });
+    options.signal.throwIfAborted();
+    return;
+  }
+  if (binding?.lineage?.groupId === state.v130ApprovalGroupId &&
+      ((state.v130ApprovalChannelPurpose === "group" && binding?.purpose === "group" && originalCause==='V130_GROUP_NATIVE_APPROVAL') ||
+       (state.v130ApprovalChannelPurpose === "independent" && isCurrentIndependentApprovalProbe(service.store.read(),binding,state.v130ApprovalMeetingTarget)))) {
+    state.v130ApprovalChannel ??= options.sessionId;
+    state.v130ApprovalChannelsIssued ??= new Set();
+    if (state.v130ApprovalChannel === options.sessionId && !state.v130ApprovalChannelsIssued.has(options.sessionId)) {
+      state.v130ApprovalChannelsIssued.add(options.sessionId);
+      yield* toolReply(state.v130ApprovalChannelPurpose === "independent" ? "dsh_bot" : "stock_v130_approval",
+        state.v130ApprovalChannelPurpose === "independent" ? {action:"help",input:{}} : {},
+        `v130-channel-approval-${options.sessionId}`);
+      return;
+    }
+  }
+  const question=state.v130ChannelQuestion;
+  if(question&&binding?.lineage?.groupId===question.groupId&&binding?.purpose===question.purpose&&
+    (question.purpose==='group'?originalCause===question.text:binding.lineage.meetingId===question.meetingId&&binding.lineage.phase==='discussion')) {
+    question.sessionId??=options.sessionId;
+    if(question.sessionId===options.sessionId&&!question.issued) {
+      question.issued=true;question.callId=`v130-channel-${question.kind}-${options.sessionId}`;
+      if(question.timed) {
+        const tools=[{id:question.callId,name:'ask_user_question',arguments:JSON.stringify({questions:[{id:'v130-channel-choice',question:'选择本群受控验证结果',options:[{label:'保留原通道'},{label:'稍后处理'}]}],timeout:1})},
+          {id:`${question.callId}-hold`,name:'stock_v130_question_hold',arguments:'{}'}];
+        for(const [index,block] of tools.entries()){yield {type:'block-start',index,blockType:'tool-call'};yield {type:'block-end',index,block:{type:'tool-call',...block}};}
+        yield {type:'finish',reason:{kind:'tool-calls'}};return;
+      }
+      yield* toolReply(question.kind==='plan-review'?'stock_v130_plan_review':'ask_user_question',
+        question.kind==='plan-review'?{}:{questions:[{id:'v130-channel-choice',question:'选择本群受控验证结果',options:[{label:'保留原通道'},{label:'稍后处理'}]}]},question.callId);
+      return;
+    }
+  }
+  if (options.sessionId === state.v130ApprovalSession && !state.v130ApprovalIssued) {
+    state.v130ApprovalIssued = true;
+    yield* toolReply("stock_v130_approval", {}, "v130-native-approval-probe");
     return;
   }
   if (binding?.purpose === "execution") {
     const attempt = service.store.read().attempts[binding.attemptId],
       task = service.store.read().tasks[attempt.taskId];
+    if (task.goal.startsWith("GUI_V130_HOLD")) {
+      await new Promise(resolve => {
+        if (options.signal.aborted) resolve();
+        else options.signal.addEventListener("abort", resolve, { once: true });
+      });
+      options.signal.throwIfAborted();
+      return;
+    }
     if (task.goal.startsWith("GUI_LONG") && count === 1) {
       yield* toolReply(
         "bash",
@@ -61,7 +116,7 @@ async function* stream(options, state) {
     yield* textReply(`${bot.name}，青草。聊天仍然可用。`);
     return;
   }
-  if (binding?.lineage?.phase === "independent")
+  if (binding?.lineage?.phase === "independent" && !state.v130ChecksStarted)
     await waitFor(
       () => Object.keys(service.store.read().meetings).length === 2,
       "two simultaneously independent meetings",
@@ -74,7 +129,7 @@ async function* stream(options, state) {
     return;
   }
   yield* textReply(
-    `${binding?.lineage?.phase ?? "group"}：${binding?.botId ?? "ordinary"} 的受控原生意见`,
+    `${binding?.lineage?.phase ?? "group"}：${binding?.botId ?? "ordinary"} 的受控原生意见${state.v130ChecksStarted?` ${binding?.lineage?.meetingId??binding?.lineage?.roundId??''}`:''}`,
   );
 }
 async function newTask(title, goal, origin = gui.contactId) {
@@ -822,6 +877,8 @@ try {
   await runV113QualityChecks(gui);
   mark("v120-continuity-and-knowledge-quality");
   await runV120QualityChecks(gui);
+  mark("v130-dedicated-bot-space-and-native-binding");
+  await runV130BotSpaceChecks(gui);
   gui.check("noBrowserScriptErrors", gui.errors.length === 0);
   await gui.save("final-native-workbench");
   gui.report.passed = true;
