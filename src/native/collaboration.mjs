@@ -324,7 +324,8 @@ export class GroupMeetingController {
             const transcript = this.viewGroup(
               actor,
               this.store.read().groups[intent.groupId],
-            ).messages.slice(-30);
+              { messageLimit: 30 },
+            ).messages;
             return `内部群 ${current.name}，群身份 ${current.groupId}，有界轮 ${intent.roundId}/${cycle + 1}。\n仅讨论本群材料：${JSON.stringify(transcript)}\n请直接给出自己的简短真实答复；勿自动循环转投，不改变权限。`;
           });
           const actor = this.policy.fromAgent(result.handle.agent);
@@ -693,13 +694,17 @@ export class GroupMeetingController {
       };
     });
   }
-  viewGroup(actor, group) {
+  viewGroup(actor, group, { messageLimit } = {}) {
     const output = copy(group);
     output.messages = output.messages.filter((row) =>
       this.policy.canReadDerived(actor, row),
     );
+    if (messageLimit !== undefined)
+      output.messages = output.messages.slice(
+        Math.max(0, output.messages.length - messageLimit),
+      );
     for (const row of output.messages)
-      this.policy.noteDependencies(actor, row.origins);
+      this.policy.noteDerivedRead(actor, row);
     return output;
   }
   viewMeeting(actor, meeting) {

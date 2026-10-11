@@ -2,13 +2,13 @@
 
 在你现有的 **官方 DSH** 中创建有名字、长期记忆和独立职责的 Bot。后台任务继续运行时，Bot 仍能聊天、接受新任务、查询进度和响应停止指令。
 
-[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.4/dist/dsh-bot-1.1.4.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.1.4/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.0/docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
+[下载插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.2.0/dist/dsh-bot-1.2.0.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.2.0/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本与验收](https://github.com/86cloudyun-afk/dsh-bot/releases) · [产品规格](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.0/docs/superpowers/specs/2026-10-08-native-dsh-plugin-v1-design.md)
 
 ## 日常能力
 
 | 能力 | 日常使用 |
 | --- | --- |
-| 具名多 Bot | 在「Bot 工作台」创建 Bot 只需名称；职责选填、模型默认沿用 DSH。点击卡片“开始聊天”，或新建对话时选择已有 Bot。首条消息前，输入框上方已显示 Bot 身份；原生会话标题栏持续标明当前 Bot 和会话用途，重名时用稳定 ID 区分。 |
+| 具名多 Bot | 在「Bot 工作台」创建 Bot 只需名称；职责选填、模型默认沿用 DSH。点击卡片“开始聊天”新建会话，或点击“继续聊天”按名称与原会话 ID 选择已有聊天；新建对话也可选择已有 Bot。首条消息前，输入框上方已显示 Bot 身份；原生会话标题栏持续标明当前 Bot 和会话用途，重名时用稳定 ID 区分。 |
 | 各自的长期记忆 | 同一 Bot 的新会话自动带入身份、记忆与未完成任务；细节按需查阅自有会话。其他 Bot 的记忆分别保存。 |
 | 持续聊天与后台工作 | 联络与执行分开；长任务未结束时，仍能回复新话题并运行另一个短任务。每个 Bot 的父工作、一级子工作和未结算未知任务共用 15 槽。 |
 | 共享与持续授权 | 跨 Bot 默认只读；设置接收 Bot、共享范围及只读／控制权限。授权持续有效，可随时撤销。 |
@@ -26,11 +26,11 @@
 
 兼容基线为 **官方 `@deepseek-ai/dsh@0.2.0-rc.2`**、Node **22（≥22.19）或 24 及以上**，验证平台为 Linux 与 macOS。官方插件安装命令需要 `pnpm`。
 
-1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.1.4) 提供本版源码和验收记录。
+1. 从页面顶部的链接下载插件 `.tgz` 和 `SHA256SUMS`，核对文件哈希。对应 [Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.2.0) 提供本版源码和验收记录。
 2. 将插件安装到你日常使用的 DSH profile。以 `web` 为例：
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.1.4.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.2.0.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -38,9 +38,9 @@ dsh web
 
 完整的依赖检查、首次安装、升级和卸载步骤见 [安装说明](docs/install.zh-CN.md)。版本是否正式交付，以对应 Release 的验收报告为准。
 
-**v1.1.4** 修复会话列表更新清空诊断选择并折叠面板的问题，并保留 v1.1.3 候选中的全量修复：保存自身记忆或互相只读后无法继续聊天、冷会话有待处理工作仍被删除的问题。已接受的任务调整继续停止确切旧执行，来源权限撤销后阻止尚未准入的消息投递，暂停或取消的定时仍结算原在途工作。获授权的冷普通会话可直接发送和配置，停用插件保留会话选择的模型。新子工作使用已确认的目录、preset 和准入时的父级原生权限；会话分页及时包含已完成回复。记忆固定额度与深层 JSON 的原生存储能力在写入前检查；工作台修正目录刷新、搜索重试、默认共享范围及安排负责人保存。具体证据与验收状态见 [v1.1.4 验收记录](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.1.4/docs/releases/v1.1.4-qualification.zh-CN.md)。
+**v1.2.0** 增加卡片上的“继续聊天”，打开同一 Bot 的原有联络会话，保留原身份与历史。跨资料块的中文、单词和短语检索仍返回精确原块引用；群聊实际消费的来源会随派生资料保留，撤销后续读取权限及时生效。父任务停止时同步展示尚在结算的当前子任务；暂停的一次提醒修改内容后保留原定时间，重新启用时只通知一次。浏览器无法保存完整原始请求时阻止写入，原 ID 可只读查回；已确认成功的回执不会因浏览器清理失败变成未知。具体证据与验收状态见 [v1.2.0 验收记录](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.2.0/docs/releases/v1.2.0-qualification.zh-CN.md)。
 
-从 v1.0.0／v1.0.1／v1.0.2／v1.1.0／v1.1.1／v1.1.2 或 v1.1.3 候选升级后，完全重启 DSH 并刷新浏览器，核对 **插件 1.1.4 / 服务 1.1.4**。升级保留原 Bot、记忆、会话、任务、资料、安排及原始操作 ID 和回执。v1.0.x 的 schema 1 迁移保留校验过的升级前备份，旧授权的新增资料范围默认为关闭；v1.1.0／v1.1.1／v1.1.2／v1.1.3 的 schema 2 数据继续保留，协议仍为 2。
+从 v1.0.0／v1.0.1／v1.0.2／v1.1.0／v1.1.1／v1.1.2／v1.1.3 候选或 v1.1.4 升级后，完全重启 DSH 并刷新浏览器，核对 **插件 1.2.0 / 服务 1.2.0**。升级保留原 Bot、记忆、会话、任务、资料、安排及原始操作 ID 和回执。v1.0.x 的 schema 1 迁移保留校验过的升级前备份，旧授权的新增资料范围默认为关闭；v1.1.0／v1.1.1／v1.1.2／v1.1.3／v1.1.4 的 schema 2 数据继续保留，协议仍为 2。
 
 v1.1.3 保留为未发布稳定 Release 的候选，其源码标签和包不变；正式安装与验收以本版 Release 为准。
 
