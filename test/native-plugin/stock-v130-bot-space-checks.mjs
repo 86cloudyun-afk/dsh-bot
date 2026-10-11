@@ -37,6 +37,19 @@ export function assertNativeQuestionHistoryExcluded(body,events,requested) {
   }
 }
 
+export function originalApprovalAuditPair(events,callId,toolName,outcome) {
+  const calls=events.filter(row=>row.type==='tool/call'&&row.data.callId===callId),asked=events.filter(row=>row.type==='approval/asked'&&row.data.callId===callId&&row.data.toolName===toolName);
+  if(calls.length!==1||asked.length!==1||calls[0].data.name!==toolName)return;
+  const decided=events.filter(row=>row.type==='approval/decided'&&row.data.id===asked[0].data.id),results=events.filter(row=>row.type==='tool/result'&&row.data.message?.toolCallId===callId&&row.data.message.source?.kind==='tool'&&row.data.message.source.callId===callId);
+  if(decided.length!==1||results.length!==1||decided[0].data.outcome!==outcome)return;
+  const call=calls[0],ask=asked[0],decision=decided[0],result=results[0],message=result.data.message;
+  if(!(call.seq<ask.seq&&ask.seq<decision.seq&&decision.seq<result.seq)||result.data.turn!==call.data.turn||result.data.step!==call.data.step)return;
+  if(outcome==='rejected'){if(message.isError!==true)return;}
+  else if(outcome==='allowed-once'){if(message.isError===true||message.content.filter(part=>part.type==='text').map(part=>part.text).join('')!==outcome)return;}
+  else return;
+  return {call,asked:ask,decided:decision,result};
+}
+
 export function observeOriginalMainReadiness() {
   const services=window.__stockV130ClientServices,roster=services.sessions.list.getSnapshot(),workspace=services.workspaces?.list.getSnapshot();
   const mains=Object.values(roster.byId).filter(row=>(row.retainedBy.mainView??0)>0),mainIds=mains.map(row=>row.id).sort();
@@ -375,11 +388,11 @@ async function channelApproval(gui,sessionId,outcome) {
   gui.check('v130ResolvedChannelApprovalUnmountsBeforeDraftFallback',true);
 }
 async function approvalAudit(gui,sessionId,outcome,toolName='stock_v130_approval') {
-  await waitFor(async()=>{const events=await gui.original(sessionId);return events.some(row=>row.type==='approval/decided'&&row.data.outcome===outcome);},'real exact-channel native approval audit');
+  const callId=`v130-channel-approval-${sessionId}`;let pair;
+  await waitFor(async()=>{pair=originalApprovalAuditPair(await gui.original(sessionId),callId,toolName,outcome);return !!pair;},'real exact-channel original call, approval decision and native result audit');
   const events=await gui.original(sessionId),asked=events.filter(row=>row.type==='approval/asked'&&row.data.toolName===toolName);
-  assert.equal(asked.length,1);assert.ok(asked[0].data.callId);
-  assert.ok(events.some(row=>row.type==='approval/decided'&&row.data.id===asked[0].data.id&&row.data.outcome===outcome));
-  assert.ok(events.some(row=>row.type==='tool/result'&&JSON.stringify(row.data).includes(outcome)));
+  assert.equal(asked.length,1);assert.equal(asked[0].data.callId,callId);assert.equal(pair.decided.data.outcome,outcome);
+  assert.equal(pair.asked.data.id,pair.decided.data.id);assert.equal(pair.result.data.message.toolCallId,pair.call.data.callId);
   assert.equal(gui.v130ApprovalExecutions?.get(sessionId)??0,outcome==='allowed-once'?1:0,'Only the exact permitted harmless tool operation executes');
 }
 async function groupApproval(gui,groupId,otherGroupId) {

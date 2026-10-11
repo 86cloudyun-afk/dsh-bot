@@ -422,3 +422,36 @@ test('question history exclusion checks persisted direct user and nested assista
     assert.match(body,/assertNativeQuestionHistoryExcluded\(body,await gui\.original\(sessionId\),requested\)/);assert.match(body,/pendingInteraction\?\.questions/,'The allowed decision material must come from the actual canonical question');
   } finally {await reader?.close();await writer?.close();await fork.dispose();}
 });
+
+test('approval audit pairs exact persisted call decision and localized rejected result',async t=>{
+  const {Context}=await import('@deepseek-ai/cordis'),{Session}=await import('@deepseek-ai/dsh-session'),{createToolResultMessage,createAssistantMessage,AssistantStreamAccumulator}=await import('@deepseek-ai/dsh-llm'),{default:Persistence}=await import('@deepseek-ai/dsh-session-persistence-jsonl');
+  const directory=await mkdtemp(join(tmpdir(),'stock-approval-pair-audit-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const ctx=new Context(),fork=ctx.plugin(Persistence,{root:directory});await fork.await();let writer,reader;
+  try {
+    const callId='original-approval-call',toolName='dsh_bot',outcome='rejected',session=Session.create('qualification-approval-pair'),block={type:'tool-call',id:callId,name:toolName,arguments:'{"action":"help","input":{}}'},stream=new AssistantStreamAccumulator();
+    for(const chunk of [{type:'block-start',index:0,blockType:'tool-call'},{type:'block-end',index:0,block},{type:'finish',reason:{kind:'tool-calls'}}])stream.push({time:Date.now(),chunk});
+    const original=[session.append('turn/start',{turn:1}),session.append('step/start',{turn:1,step:1}),
+      session.append('assistant/message',{turn:1,step:1,message:createAssistantMessage({source:{provider:'controlled-approval-unit',model:'fixture'},content:[block]}),stream:[...stream.snapshot()]},{surfaceOp:'append'}),
+      session.append('tool/call',{turn:1,step:1,callId,name:toolName,arguments:'{"action":"help","input":{}}'}),
+      session.append('approval/asked',{id:'original-approval-id',toolName,callId,reason:'受控审批'}),session.append('approval/decided',{id:'original-approval-id',outcome}),
+      session.append('tool/result',{turn:1,step:1,message:createToolResultMessage({callId,isError:true,content:[{type:'text',text:'结果发布被拒绝：access_denied'}]})},{surfaceOp:'append'})];
+    writer=await ctx.get('sessionPersistence').create(session.header);await writer.append(original);await writer.flush();await writer.close();writer=undefined;
+    reader=await ctx.get('sessionPersistence').open(session.id,'read');const {events}=await reader.read(0);
+    const source=await readFile(new URL('./stock-v130-bot-space-checks.mjs',import.meta.url),'utf8'),body=source.slice(source.indexOf('async function approvalAudit'),source.indexOf('async function groupApproval'));
+    const oldPredicate=/assert\.ok\(events\.some\((row=>row\.type==='tool\/result'[^\n]+)\)\);/.exec(body);
+    if(oldPredicate)assert.equal(vm.runInNewContext(`events.some(${oldPredicate[1]})`,{events,outcome}),true,'Exact native rejection must not depend on an English substring in localized model result content');
+    const {originalApprovalAuditPair:pair}=await import('./stock-v130-bot-space-checks.mjs');assert.equal(typeof pair,'function');
+    const facts=pair(events,callId,toolName,outcome);assert.equal(facts.call,events[3]);assert.equal(facts.asked,events[4]);assert.equal(facts.decided,events[5]);assert.equal(facts.result,events[6]);
+    assert.equal(pair(events.slice(0,-1),callId,toolName,outcome),undefined,'An approval decision alone cannot satisfy the original result audit');
+    for(const [name,mutate] of [
+      ['another tool result',rows=>{rows[6].data.message.toolCallId='different';}],['another result source',rows=>{rows[6].data.message.source.callId='different';}],
+      ['another tool call',rows=>{rows[3].data.name='different';}],['another approval call',rows=>{rows[4].data.callId='different';}],
+      ['another decision id',rows=>{rows[5].data.id='different';}],['different outcome',rows=>{rows[5].data.outcome='allowed-once';}],
+      ['successful result after rejection',rows=>{rows[6].data.message.isError=false;}],['different native step',rows=>{rows[6].data.step=2;}],
+      ['result preceding decision',rows=>{rows[6].seq=rows[5].seq-1;}],['duplicate original result',rows=>{rows.push(structuredClone(rows[6]));}],
+    ]){const rows=structuredClone(events);mutate(rows);assert.equal(pair(rows,callId,toolName,outcome),undefined,name);}
+    const allowed=structuredClone(events);allowed[5].data.outcome='allowed-once';allowed[6].data.message.isError=false;allowed[6].data.message.content=[{type:'text',text:'allowed-once'}];assert.ok(pair(allowed,callId,toolName,'allowed-once'));
+    assert.match(body,/originalApprovalAuditPair\(await gui\.original\(sessionId\),callId,toolName,outcome\)/,'The actual GUI audit must wait for the exact complete durable pair');
+    assert.match(body,/v130-channel-approval-\$\{sessionId\}/);assert.match(body,/v130ApprovalExecutions/,'Native tool-body dispatch evidence remains required');
+  } finally {await reader?.close();await writer?.close();await fork.dispose();}
+});
