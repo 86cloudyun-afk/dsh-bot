@@ -17,7 +17,7 @@ function browser(snapshot=defaultSnapshot(),route=()=>({}),routes={}) {
   const hookKey=()=>{const key=`${active}:${index++}`;usedHookKeys?.add(key);return key;};
   function render(component,props={},key='root') {const before=[active,index];active=key;index=0;const result=component(props);[active,index]=before;return result;}
   const react={
-    createElement(type,props,...children) {return typeof type==='function'?render(type,props??{},`${active}/${type.name}:${props?.key??''}`):{type,props:props??{},children:children.flat(Infinity)};},
+    createElement(type,props,...children) {return typeof type==='function'?{type,props:props??{},children:[render(type,props??{},`${active}/${type.name}:${props?.key??''}`)]}:{type,props:props??{},children:children.flat(Infinity)};},
     useState(initial) {const key=hookKey();if(!hooks.has(key))hooks.set(key,initial);return [hooks.get(key),next=>hooks.set(key,typeof next==='function'?next(hooks.get(key)):next)];},
     useRef(initial) {const key=hookKey();if(!hooks.has(key))hooks.set(key,{current:initial});return hooks.get(key);},
     useEffect(effect,deps) {const key=hookKey();usedEffectKeys?.add(key);const prior=effects.get(key);if(prior&&deps?.length===prior.deps.length&&deps?.every((item,i)=>Object.is(item,prior.deps[i])))return;prior?.cleanup?.();effects.set(key,{deps:deps??[],cleanup:effect()});},
@@ -273,4 +273,30 @@ for(const barrier of ['snapshot','native'])for(const intent of ['tab','bot'])tes
   // React may not render/clean up passive effects before the awaited read resolves.
   gate.resolve(barrier==='snapshot'?snapshot:undefined);await selecting;
   assert.deepEqual(ui.opened,[]);assert.equal(ui.calls.some(row=>row.payload.operationId),false);
+});
+
+
+test('editing and updating a schedule keeps distinct sibling identities for saved cards and its editor',async t=>{
+  const snapshot=defaultSnapshot(),rule={kind:'once',timezone:'UTC',date:'2099-10-10',time:'09:00'};
+  let rows=[{scheduleId:'older_task',ownerBotId:bot.botId,kind:'task',recipe:{title:'Old task',criteria:[]},rule,version:1,enabled:false},
+    ...['older_one','older_two','target'].map(scheduleId=>({scheduleId,ownerBotId:bot.botId,kind:'reminder',message:scheduleId==='target'?'Original target':scheduleId,rule,version:1,enabled:false}))];
+  const requests=[];
+  const ui=browser(snapshot,(action,input,request)=>{
+    if(action==='schedule.list')return rows;
+    if(action==='notice.list'||action==='occurrence.list')return [];
+    if(action==='session.list')return {items:[],nextCursor:null};
+    if(action==='schedule.update'){
+      requests.push(structuredClone(request));const index=rows.findIndex(row=>row.scheduleId===input.scheduleId),saved={...rows[index],...input,version:rows[index].version+1};
+      rows=rows.map(row=>row.scheduleId===saved.scheduleId?saved:row);snapshot.revision++;return saved;
+    }
+    return {};
+  });t.after(()=>ui.dispose());await ui.ready();await ui.click('任务');await ui.settle();
+  const list=()=>ui.find(node=>node.props.className==='advanced-content'&&node.children?.some(child=>child?.type==='article'&&child.props.key==='target'));
+  const assertUnique=()=>{const keys=list().children.filter(child=>child?.props?.key!==undefined).map(child=>child.props.key);assert.equal(new Set(keys).size,keys.length,'saved schedule card and editor must never share a React sibling key');};
+  assertUnique();const target=ui.find(node=>node.type==='article'&&node.props.key==='target');
+  const edit=target.children.find(node=>node.type==='button'&&ui.text(node)==='编辑并重新确认');assert.ok(edit);await edit.props.onClick();ui.render();assertUnique();
+  await ui.submit('重新确认并保存安排',{kind:'reminder',ruleKind:'once',timezone:'UTC',date:'2099-10-10',time:'09:00',message:'Edited target',missedPolicy:'skip'});await ui.settle();assertUnique();
+  assert.equal(list().children.filter(node=>node?.type==='article').length,4);
+  assert.equal(list().children.filter(node=>node?.type==='article'&&node.props.key==='target').length,1);
+  assert.equal(requests[0].input.scheduleId,'target');assert.equal(requests[0].input.expectedVersion,1);
 });
