@@ -16,6 +16,8 @@ const mainRunId=38114000001, tagRunId=38114000002, publisherRunId=987, commentId
 const owner={id:269269188,login:'86cloudyun-afk',type:'User'};
 const repository={full_name:repositoryName,owner,default_branch:'main'};
 const jobNames=['artifact','plugin (ubuntu-latest, 22)','plugin (ubuntu-latest, 24)','plugin (macos-latest, 22)','plugin (macos-latest, 24)','stock-gui (ubuntu-latest)','stock-gui (macos-latest)','publication-guard'];
+const readableJobNames=['原生 GUI (ubuntu-latest)','原生 GUI (macos-latest)'];
+const successfulJob=(name,{id,runId=mainRunId}={})=>({id,name,run_id:runId,head_sha:source,run_attempt:1,status:'completed',conclusion:'success'});
 function command(mode='tag') {
   return {action:'created',repository,sender:owner,issue:{number:11,pull_request:{}},comment:{id:commentId,issue_url:'https://api.github.com/repos/86cloudyun-afk/dsh-bot/issues/11',body:`/dsh-bot-${mode} v1.2.0 ${source} ${mode==='tag'?mainRunId:tagRunId}`,user:owner,created_at:'2026-10-11T14:00:00Z',updated_at:'2026-10-11T14:00:00Z'}};
 }
@@ -40,7 +42,7 @@ async function fixture(t,mode='tag') {
   t.after(()=>rm(scratch,{recursive:true,force:true}));
   const target=await stock.readStockTarget({root,sourceCommit:source});
   const event=command(mode);
-  const state={main:source,tag:mode==='publish'?annotation():null,release:null,dispatchResponse:{workflow_run_id:tagRunId},comment:structuredClone(event.comment),originalComment:{...structuredClone(event.comment),id:6105999999,body:`/dsh-bot-tag v1.2.0 ${source} ${mainRunId}`,created_at:'2026-10-11T11:30:00Z',updated_at:'2026-10-11T11:30:00Z'},ambiguousBranch:false,runs:{[mainRunId]:ciRun(),[tagRunId]:ciRun(tagRunId),[publisherRunId]:{...ciRun(),id:publisherRunId,workflow_id:2002,path:'.github/workflows/publish-v120.yml',event:'issue_comment',status:'in_progress',conclusion:null,display_title:`v1.2.0 publication comment ${commentId}`},986:{...ciRun(),id:986,workflow_id:2002,path:'.github/workflows/publish-v120.yml',event:'issue_comment',head_branch:'main',display_title:'v1.2.0 publication comment 6105999999',created_at:'2026-10-11T11:30:01Z',updated_at:'2026-10-11T12:01:30Z'}},prior:[],tagRuns:[],reads:[],writes:[],downloads:[],unmodeled:[],afterDownload:()=>{},beforeRequest:()=>{},afterWrite:()=>{}};
+  const state={main:source,tag:mode==='publish'?annotation():null,release:null,dispatchResponse:{workflow_run_id:tagRunId},comment:structuredClone(event.comment),originalComment:{...structuredClone(event.comment),id:6105999999,body:`/dsh-bot-tag v1.2.0 ${source} ${mainRunId}`,created_at:'2026-10-11T11:30:00Z',updated_at:'2026-10-11T11:30:00Z'},ambiguousBranch:false,runs:{[mainRunId]:ciRun(),[tagRunId]:ciRun(tagRunId),[publisherRunId]:{...ciRun(),id:publisherRunId,workflow_id:2002,path:'.github/workflows/publish-v120.yml',event:'issue_comment',status:'in_progress',conclusion:null,display_title:`v1.2.0 publication comment ${commentId}`},986:{...ciRun(),id:986,workflow_id:2002,path:'.github/workflows/publish-v120.yml',event:'issue_comment',head_branch:'main',display_title:'v1.2.0 publication comment 6105999999',created_at:'2026-10-11T11:30:01Z',updated_at:'2026-10-11T12:01:30Z'}},jobsByRun:{[mainRunId]:[...jobNames,...readableJobNames].map((name,index)=>successfulJob(name,{id:5000+index,runId:mainRunId})),[tagRunId]:jobNames.map((name,index)=>successfulJob(name,{id:7000+index,runId:tagRunId}))},prior:[],tagRuns:[],reads:[],writes:[],downloads:[],unmodeled:[],afterDownload:()=>{},beforeRequest:()=>{},afterWrite:()=>{}};
   const api={async request(method,path,body) {
     await state.beforeRequest({method,path,body});
     if(method==='GET')state.reads.push(path);else state.writes.push({method,path,body});
@@ -55,7 +57,7 @@ async function fixture(t,mode='tag') {
     else if(method==='GET'&&path.startsWith(`${prefix}/actions/workflows/publish-v120.yml/runs?`))response={total_count:state.prior.length,workflow_runs:state.prior};
     else if(method==='GET'&&path.startsWith(`${prefix}/actions/workflows/ci.yml/runs?`))response={total_count:state.tagRuns.length,workflow_runs:state.tagRuns};
     else if(method==='GET'&&/\/actions\/runs\/\d+$/.test(path))response=state.runs[path.split('/').at(-1)];
-    else if(method==='GET'&&path.includes('/jobs?'))response={total_count:jobNames.length,jobs:jobNames.map(name=>({name,status:'completed',conclusion:'success'}))};
+    else if(method==='GET'&&path.includes('/jobs?')){const runId=Number(/\/runs\/(\d+)/.exec(path)[1]),jobs=state.jobsByRun[runId];response={total_count:jobs.length,jobs};}
     else if(method==='GET'&&path.includes('/artifacts?')) {
       const runId=Number(/\/runs\/(\d+)/.exec(path)[1]);
       response={total_count:3,artifacts:['native-plugin-package','stock-gui-ubuntu-latest','stock-gui-macos-latest'].map((name,index)=>({id:2100+index,name,expired:false,workflow_run:{id:runId,head_sha:source,head_branch:state.runs[runId].head_branch}}))};
@@ -171,3 +173,26 @@ test('a remotely accepted annotated tag with a missing returned object SHA remai
 test('a remotely accepted release with a missing returned release ID remains UNKNOWN',async t=>{
   const f=await fixture(t,'publish');f.state.afterWrite=({path,response})=>{if(path===`${prefix}/releases`)delete response.id;};let failure;try{await executePublication(f.options);}catch(error){failure=error;}assert.ok(failure instanceof PublicationFailure);assert.equal(failure.partial.status,'unknown-write');assert.equal(f.state.release.id,12345);assert.equal(f.state.writes.filter(x=>x.path===`${prefix}/releases`).length,1);
 });
+
+// Real main push run38116990411 includes the two fixed native GUI check-run
+// summaries in GET /jobs. Workflow-dispatched tag runs do not create them.
+test('the observed main ten-job and tag eight-job contracts permit qualified publication',async t=>{
+  const f=await fixture(t,'publish');assert.equal(f.state.jobsByRun[mainRunId].length,10);assert.equal(f.state.jobsByRun[tagRunId].length,8);const result=await executePublication(f.options);assert.equal(result.status,'published');assert.ok(f.state.reads.some(path=>path.includes(`/runs/${mainRunId}/jobs?`)));assert.ok(f.state.reads.some(path=>path.includes(`/runs/${tagRunId}/jobs?`)));assert.deepEqual(f.state.unmodeled,[]);
+});
+for(const name of readableJobNames){
+  test(`main qualification rejects missing readable summary ${name}`,async t=>refusesWithoutWrite(t,'tag',f=>{f.state.jobsByRun[mainRunId]=f.state.jobsByRun[mainRunId].filter(job=>job.name!==name);}));
+  test(`main qualification rejects duplicate readable summary ${name} while total remains ten`,async t=>refusesWithoutWrite(t,'tag',f=>{const other=readableJobNames.find(value=>value!==name),index=f.state.jobsByRun[mainRunId].findIndex(job=>job.name===other);f.state.jobsByRun[mainRunId][index]={...f.state.jobsByRun[mainRunId][index],name};}));
+  test(`main qualification rejects failed readable summary ${name} despite successful run`,async t=>refusesWithoutWrite(t,'tag',f=>{f.state.jobsByRun[mainRunId].find(job=>job.name===name).conclusion='failure';}));
+  test(`main qualification rejects incomplete readable summary ${name} despite completed run`,async t=>refusesWithoutWrite(t,'tag',f=>{f.state.jobsByRun[mainRunId].find(job=>job.name===name).status='in_progress';}));
+  test(`tag qualification rejects unexpected readable summary ${name}`,async t=>refusesWithoutWrite(t,'publish',f=>{f.state.jobsByRun[tagRunId].push(successfulJob(name,{id:9000,runId:tagRunId}));}));
+}
+test('main qualification rejects an unknown extra job instead of allowing arbitrary additional checks',async t=>refusesWithoutWrite(t,'tag',f=>{f.state.jobsByRun[mainRunId].push(successfulJob('unreviewed publication check',{id:9000,runId:mainRunId}));}));
+test('main qualification rejects a similarly named third-platform readable summary',async t=>refusesWithoutWrite(t,'tag',f=>{f.state.jobsByRun[mainRunId].push(successfulJob('原生 GUI (windows-latest)',{id:9000,runId:mainRunId}));}));
+
+for(const [name,mutate] of [
+  ['a different run carrying the same source',job=>{job.run_id=tagRunId;}],
+  ['a different source carrying the right run ID',job=>{job.head_sha='e'.repeat(40);} ],
+  ['a different attempt carrying the right run and source',job=>{job.run_attempt=2;}],
+  ['an invalid numeric check identity',job=>{job.id=0;}],
+])test(`readable job provenance rejects ${name} despite exact successful job names`,async t=>refusesWithoutWrite(t,'tag',f=>{mutate(f.state.jobsByRun[mainRunId].find(job=>job.name===readableJobNames[0]));}));
+test('readable job provenance rejects duplicate IDs across independently named platform summaries',async t=>refusesWithoutWrite(t,'tag',f=>{const rows=f.state.jobsByRun[mainRunId].filter(job=>readableJobNames.includes(job.name));rows[1].id=rows[0].id;}));

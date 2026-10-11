@@ -31,6 +31,7 @@ import {readStockTarget,qualifyStockReports} from '../test/native-plugin/stock-q
 
 export const FROZEN_SHA256='43e837624194596a9ff679e86b68f416ea7977152f480191c208fc5eae726d94';
 export const EXPECTED_JOBS=Object.freeze(['artifact','plugin (ubuntu-latest, 22)','plugin (ubuntu-latest, 24)','plugin (macos-latest, 22)','plugin (macos-latest, 24)','stock-gui (ubuntu-latest)','stock-gui (macos-latest)','publication-guard']);
+const mainReadableChecks=Object.freeze(['原生 GUI (macos-latest)','原生 GUI (ubuntu-latest)']);
 const prefix=`/repos/${REPOSITORY}`;
 const artifactNames=['native-plugin-package','stock-gui-ubuntu-latest','stock-gui-macos-latest'];
 const tagMessagePrefix='dsh-bot v1.2.0 qualified publication\n';
@@ -59,8 +60,11 @@ async function validateRun(api,runId,{sha,mode,workflow}) {
   assert.equal(run.event,mode==='tag'?'workflow_dispatch':'push','Wrong CI event');assert.equal(run.head_branch,mode==='tag'?VERSION:'main','Wrong CI branch');
   assert.ok(id(run.run_attempt),'Invalid CI attempt');assert.ok(timestamp(run.updated_at)>=timestamp(run.created_at),'Invalid CI chronology');
   const jobs=list(await api.request('GET',`${prefix}/actions/runs/${runId}/jobs?filter=latest&per_page=100`),'jobs');
-  assert.deepEqual(jobs.map(job=>job.name).sort(),[...EXPECTED_JOBS].sort(),'Exact eight CI jobs are required');
-  for(const job of jobs){assert.equal(job.status,'completed','Incomplete CI job');assert.equal(job.conclusion,'success','Unsuccessful CI job');}
+  const expectedJobs=mode==='main'?[...EXPECTED_JOBS,...mainReadableChecks]:[...EXPECTED_JOBS];
+  assert.deepEqual(jobs.map(job=>job.name).sort(),expectedJobs.sort(),'Exact native CI job/check set is required');
+  const jobIds=jobs.map(job=>job.id);
+  assert.ok(jobIds.every(id)&&new Set(jobIds).size===jobIds.length,'CI job IDs must be positive and unique');
+  for(const job of jobs){assert.equal(job.run_id,run.id,'Foreign CI job run');assert.equal(job.head_sha,run.head_sha,'Foreign CI job source');assert.equal(job.run_attempt,run.run_attempt,'Foreign CI job attempt');assert.equal(job.status,'completed','Incomplete CI job');assert.equal(job.conclusion,'success','Unsuccessful CI job');}
   return run;
 }
 
