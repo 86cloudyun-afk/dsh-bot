@@ -27,7 +27,9 @@ try {
   assert.ok(Object.hasOwn(previousHashes,previousVersion),'Upgrade source must be an immutable previous release');
   const schemaTwo=previousSources.find(source=>source.version===previousVersion).schema===2;
   const patch=resolve(process.argv[2]),previous=resolve(`dist/dsh-bot-${previousVersion}.tgz`);
-  assert.equal(createHash('sha256').update(await readFile(previous)).digest('hex'),previousHashes[previousVersion]);
+  const previousBytes=await readFile(previous),sourceIdentity=previousSources.find(source=>source.version===previousVersion);
+  assert.equal(createHash('sha256').update(previousBytes).digest('hex'),previousHashes[previousVersion]);
+  if(sourceIdentity.bytes!==undefined)assert.equal(previousBytes.length,sourceIdentity.bytes,'Original upgrade package byte length is immutable');
   const existingRoot=process.argv[3];
   gui=await stockGui({artifact:existingRoot?patch:previous,existingRoot,stream:async function*(){yield* textReply('Retained native history');}});
   if (!existingRoot) {
@@ -103,7 +105,8 @@ try {
   await gui.boot();
   const service=gui.app.ctx.dshBot,actor=service.policy.fromPeer(gui.app.ctx.connection.operator);
   const {request,bot,contact,memory,task,completed,attempt,eventProof,v11Proof,legacyControlledRequests}=JSON.parse(await readFile(join(gui.root,'upgrade-original.json'),'utf8'));
-  gui.report.previousArtifactSha256=createHash('sha256').update(await readFile(previous)).digest('hex');
+  gui.report.previousArtifactSha256=createHash('sha256').update(previousBytes).digest('hex');
+  gui.report.previousArtifactBytes=previousBytes.length;
   gui.report.upgradeArtifactSha256=createHash('sha256').update(await readFile(patch)).digest('hex');
   gui.report.freshHostProcessAfterUpgrade=true;
   gui.report.upgradeFromVersion=previousVersion;
