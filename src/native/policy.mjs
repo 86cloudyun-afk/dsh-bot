@@ -20,6 +20,7 @@ const humanOnly = new Set([
   "share.set",
   "grant.set",
   "group.members",
+  "group.round.stop",
 ]);
 const controllable = new Set([
   "session.configure",
