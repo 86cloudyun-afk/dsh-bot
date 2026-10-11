@@ -50,7 +50,10 @@ async function browserRpc(gui,accept,interact,{errorCode,transportFailure=false,
     assert.equal(reply?.ok,errorCode===undefined,`${request?.action??event.request.url()}: ${reply?.error?.code}`);
     if(errorCode!==undefined)assert.equal(reply.error.code,errorCode);
     if(mutation&&errorCode===undefined)assert.ok(gui.app.ctx.dshBot.store.read().operations[request.operationId]);
-    if(mutation)await waitFor(async()=>await button(gui.page,'刷新').count()===0||await button(gui.page,'刷新').isEnabled(),'v120 original UI mutation is no longer busy');
+    // A successful session.create opens the real native conversation and
+    // unmounts this workbench; existingContact waits for that navigation itself.
+    // Other mutations keep the workbench mounted until their refresh finishes.
+    if(mutation&&request?.action!=='session.create')await waitFor(()=>button(gui.page,'刷新').isEnabled(),'v120 original UI mutation is no longer busy');
     await paint(gui.page);return {request,value:reply.value,error:reply.error};
   }catch(error){primary=error;throw error;}
   finally{observer.stop(primary??Error('v120 observer finished'));await observer.result;}
@@ -94,12 +97,17 @@ async function existingContact(gui) {
   const bot=(await api(gui,'bot.create',{name,contact:{provider:controlledProvider,model:'model-c'}})).value;
   await gui.workbench('Bots');await refresh(gui);
   const botCard=gui.page.locator(`#dsh-resource-${bot.botId}`);
+  const waitForContact=async contact=>{
+    await waitFor(()=>gui.page.evaluate(id=>JSON.parse(localStorage.getItem('dsh.sessions.current'))?.sessionId===id,contact.sessionId),'official shell selects this exact newly created contact');
+    await gui.page.locator('[data-composer-input="true"]').waitFor({state:'visible'});
+  };
   // The original Start chat contract intentionally creates a new contact each
   // time; Continue chat chooses one existing stable identity without a command.
   const first=await uiCommand(gui,'session.create',()=>button(botCard,'开始聊天').click(),{mutation:true,accept:row=>row.input.botId===bot.botId});
-  await gui.page.locator('[data-composer-input="true"]').waitFor();
+  await waitForContact(first.value);
   await gui.workbench('Bots');
   const second=await uiCommand(gui,'session.create',()=>button(botCard,'开始聊天').click(),{mutation:true,accept:row=>row.input.botId===bot.botId});
+  await waitForContact(second.value);
   assert.notEqual(first.value.sessionId,second.value.sessionId);
   for(const contact of [first.value,second.value])await api(gui,'session.configure',{sessionId:contact.sessionId,expectedVersion:contact.revision,name:'V120_SAVED_SAME_NAME'});
   await gui.workbench('Bots');await refresh(gui);
@@ -245,7 +253,12 @@ async function materialSeam(gui) {
     assert.equal(await article.locator('pre').innerText(),original);
     const page=await uiCommand(gui,'material.page',()=>button(article,'打开此引用').click(),{accept:row=>row.input.docId===stored.docId&&row.input.chunkId===chunk.chunkId});
     assert.equal(page.value.text,original);assert.equal(page.value.chunkId,chunk.chunkId);assert.equal(page.value.contentHash,digest(text));
-    const reader=gui.card(title);assert.equal(await reader.locator('pre').innerText(),original);await button(reader,'关闭正文').click();
+    const reader=gui.page.locator('section.card')
+      .filter({has:gui.page.locator(':scope > h2').filter({hasText:new RegExp(`^${title}$`)})})
+      .filter({has:button(gui.page,'关闭正文')});
+    assert.equal(await reader.count(),1,'Exactly one material reader owns the direct title and Close body button');
+    assert.equal(await reader.locator('pre').count(),1,'The selected reader contains exactly its original chunk body');
+    assert.equal(await reader.locator('pre').innerText(),original);await button(reader,'关闭正文').click();
   }
   assert.equal(gui.report.requests.length,requestsBefore);
   gui.report.v120Quality.materialSeam={docId:stored.docId,contentHash:stored.contentHash,chunks:stored.chunks};
