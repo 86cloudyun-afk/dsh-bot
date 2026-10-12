@@ -2,15 +2,15 @@
 
 在现有的 **官方 DSH** 中拥有自己的 Bot 团队：每个 Bot 有名字、职责和独立记忆。在专用 **Bot 空间** 里继续私聊、组织群聊、开会和派发任务；后台工作运行时仍可继续对话。
 
-[下载 v1.3.0 插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.0/dist/dsh-bot-1.3.0.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.0/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本说明](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.3.0/docs/releases/v1.3.0-release-notes.zh-CN.md) · [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.3.0)
+[下载 v1.3.1 插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.1/dist/dsh-bot-1.3.1.tgz) · [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.1/dist/SHA256SUMS) · [安装与上手](docs/install.zh-CN.md) · [使用手册](docs/guide.zh-CN.md) · [版本说明](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.3.1/docs/releases/v1.3.1-release-notes.zh-CN.md) · [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.3.1)
 
 ## 实际界面
 
-受控示例：官方原版 DSH 中的真实插件界面；回复由本地受控模型提供。
+布局预览来自已发布的 v1.3.0：官方原版 DSH 中的真实插件界面，回复由本地受控模型提供。本版沿用该布局；连接恢复等本轮修复见版本说明。
 
-![嘟嘟私聊与独立记忆](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.0/docs/images/v1.3.0/bot-space-private-dark.png)
+![嘟嘟私聊与独立记忆](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.1/docs/images/v1.3.0/bot-space-private-dark.png)
 
-![三个 Bot 在产品协作群中分别回复](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.0/docs/images/v1.3.0/bot-space-group-light.png)
+![三个 Bot 在产品协作群中分别回复](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.1/docs/images/v1.3.0/bot-space-group-light.png)
 
 [浅色私聊](docs/images/v1.3.0/bot-space-private-light.png) · [深色群聊](docs/images/v1.3.0/bot-space-group-dark.png) · [窄屏群聊](docs/images/v1.3.0/bot-space-group-narrow.png) · [窄屏上下文](docs/images/v1.3.0/bot-space-context-narrow.png)
 
@@ -41,7 +41,7 @@
 2. 安装到日常使用的 DSH profile。以下使用 `web`：
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.3.0.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.3.1.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -52,11 +52,15 @@ dsh web
 
 ## 升级与历史保留
 
-从 v1.0.0、v1.0.1、v1.0.2、v1.1.0、v1.1.1、v1.1.2、v1.1.3 候选、v1.1.4 或 v1.2.0 升级后，完全重启 DSH 并刷新浏览器，在完整工作台核对 **插件 1.3.0 / 服务 1.3.0**。原 Bot、记忆、会话、任务、资料、安排、操作 ID 和回执继续保存。原有联络聊天直接出现在 Bot 空间中，无需复制历史或重新创建 Bot。
+从 v1.0.0、v1.0.1、v1.0.2、v1.1.0、v1.1.1、v1.1.2、v1.1.3 候选、v1.1.4、v1.2.0 或 v1.3.0 升级后，完全重启 DSH 并刷新浏览器，在完整工作台核对 **插件 1.3.1 / 服务 1.3.1**。原 Bot、记忆、会话、任务、资料、安排、操作 ID 和回执继续保存。原有联络聊天直接出现在 Bot 空间中，无需复制历史或重新创建 Bot。
 
-v1.0.x 升级保留校验过的 schema 1 备份；v1.1.x 与 v1.2.0 延续 schema 2 和协议 2。旧版本资料的默认共享范围保持关闭。详细步骤及回退条件见 [升级说明](docs/install.zh-CN.md#6-升级禁用与卸载)。v1.1.3 仍为未发布稳定 Release 的历史候选。
+v1.0.x 升级保留校验过的 schema 1 备份；v1.1.x、v1.2.0 与 v1.3.0 延续 schema 2 和协议 2。旧版本资料的默认共享范围保持关闭。详细步骤及回退条件见 [升级说明](docs/install.zh-CN.md#6-升级禁用与卸载)。v1.1.3 仍为未发布稳定 Release 的历史候选。
 
 停止被接受后仍须等待真实资源结算；无法确认的操作保留为“未知”，使用原始 ID 查回。会议取消与已经登记的行动任务分别管理；尚未揭示的独立意见在取消后仍封存。已有原生会话的工作目录固定，更换锁定的 preset 时新建会话。
+
+## 下一版讨论
+
+[升级讨论稿](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.3.1/docs/roadmap/v1.4-discussion.zh-CN.md) 比较定向群回复、引用追问、会议行动草案、知识证据复用和轻量处理收件箱。它们仍为提案，已具备的模板、依赖、交接和定时不作为新增能力重复宣传。
 
 ## 与 DSH 的关系
 
