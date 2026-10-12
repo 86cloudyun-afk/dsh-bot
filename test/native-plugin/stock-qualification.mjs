@@ -187,6 +187,7 @@ export const stockSources=Object.freeze({
   'upgrade-v113':prior('1.1.3','55c192a3837d36ff6dd78fa5f34c36d2375a648258ddd499f793d6e3a47ae289',2),
   'upgrade-v114':prior('1.1.4','3fb396f44120881c5f9fbf6d40b278e8614ffa765e29c04a6c49ccf8000f5677',2),
   'upgrade-v120':prior('1.2.0','43e837624194596a9ff679e86b68f416ea7977152f480191c208fc5eae726d94',2,147662),
+  'upgrade-v130':prior('1.3.0','c93329b09b4bee6b820e9984d76f87a66ed09e5f64dceac0c8ea698e518e87bb',2,172469),
 });
 const stableVersion=version=>typeof version==='string'&&/^\d+\.\d+\.\d+$/.test(version);
 const hex=(value,size)=>typeof value==='string'&&new RegExp(`^[a-f\\d]{${size}}$`).test(value);
