@@ -10,6 +10,8 @@ import {renderOriginalPlanDialog} from './stock-v130-plan-scope.browser.mjs';
 
 const root=resolve(import.meta.dirname,'../..');
 const target={packageName:'dsh-bot',packageVersion:'1.1.1',artifactSha256:'cf651bff75f9fa144e05b0db7fd6284038c50bcafb8a44ccfa8b0d4d66bb9c92',sourceCommit:'a'.repeat(40),officialVersion:'0.2.0-rc.2'};
+const v131Target={...target,packageVersion:'1.3.1',artifactSha256:'c'.repeat(64)};
+const v130Source={version:'1.3.0',sha256:'c93329b09b4bee6b820e9984d76f87a66ed09e5f64dceac0c8ea698e518e87bb',schema:2,bytes:172469};
 async function validator() {
   const module=await import('./stock-qualification.mjs').catch(error=>{if(error.code!=='ERR_MODULE_NOT_FOUND')throw error;return {};});
   assert.equal(typeof module.validateStockReport,'function','The stock report gate needs the shared strict validator');
@@ -28,7 +30,7 @@ function report(module,source='gui',expected=target) {
 
 test('actual workflow gate rejects truncated reports previously marked Passed',async t=>{
   const scratch=await mkdtemp(join(tmpdir(),'stock-gate-test-'));t.after(()=>rm(scratch,{recursive:true,force:true}));
-  for(const source of ['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110','upgrade-v111','upgrade-v112','upgrade-v113','upgrade-v114','upgrade-v120']) {
+  for(const source of ['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110','upgrade-v111','upgrade-v112','upgrade-v113','upgrade-v114','upgrade-v120','upgrade-v130']) {
     const dir=join(scratch,'qualification',source);await mkdir(dir,{recursive:true});
     await writeFile(join(dir,'stock-gui-report.json'),JSON.stringify({passed:true,teardownComplete:true,checks:{oneArbitraryCheck:true}}));
   }
@@ -63,6 +65,9 @@ test('actual shared CLI gate accepts complete reports and rejects lost checks or
     assert.notEqual(run().status,0,'The real CLI must reject incomplete or mismatched qualification');
   }
   await write('gui',report(module,'gui',expected));
+  await rm(join(directory,'upgrade-v130','stock-gui-report.json'));
+  assert.notEqual(run().status,0,'The immutable v1.3.0 tenth upgrade is mandatory');
+  await write('upgrade-v130',report(module,'upgrade-v130',expected));
   await rm(join(directory,'upgrade-v120','stock-gui-report.json'));
   assert.notEqual(run().status,0,'The immutable v1.2.0 ninth upgrade is mandatory');
   await write('upgrade-v120',report(module,'upgrade-v120',expected));
@@ -81,7 +86,7 @@ test('actual shared CLI gate accepts complete reports and rejects lost checks or
 
 test('complete named reports retain all supported stock and schema upgrade paths',async()=>{
   const module=await validator();
-  assert.deepEqual(Object.keys(module.stockSources),['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110','upgrade-v111','upgrade-v112','upgrade-v113','upgrade-v114','upgrade-v120']);
+  assert.deepEqual(Object.keys(module.stockSources),['gui','upgrade','upgrade-v101','upgrade-v102','upgrade-v110','upgrade-v111','upgrade-v112','upgrade-v113','upgrade-v114','upgrade-v120','upgrade-v130']);
   assert.equal(module.stockSources['upgrade-v111'].sha256,target.artifactSha256);
   assert.equal(module.stockSources['upgrade-v112'].sha256,'426a244ae02927129e315420907ab4b2f9acf16414144e0e6792b7f25bfe48ff');
   assert.equal(module.stockSources['upgrade-v113'].sha256,'55c192a3837d36ff6dd78fa5f34c36d2375a648258ddd499f793d6e3a47ae289');
@@ -246,12 +251,102 @@ test('v1.2.0 predecessor uses immutable original SHA256 and byte length and requ
     assert.throws(()=>module.validateStockReport(invalid,{source:'upgrade-v120',target}));
   }
 });
-test('v1.3 workflow runs and projects the ninth original source as the tenth report',async()=>{
+test('v1.3.1 workflow retains the ninth original source alongside the new eleventh report',async()=>{
   const workflow=await readFile(join(root,'.github/workflows/ci.yml'),'utf8');
   assert.match(workflow,/DSH_BOT_UPGRADE_FROM: '1\.2\.0'/);
-  assert.match(workflow,/Require all ten complete stock qualification reports/);
+  assert.match(workflow,/Require all eleven complete stock qualification reports/);
   assert.match(workflow,/\['upgrade-v120','upgradeV120'\]/);
   assert.match(workflow,/qualification\/upgrade-v120\/stock-gui-report\.json/);
+});
+
+// These reports exercise the real validator with synthetic unit fixtures;
+// they never represent installed GUI or upgrade qualification evidence.
+function v130ReportFixture(module) {
+  const row=report(module,'upgrade-v120',v131Target);
+  Object.assign(row,{previousArtifactSha256:v130Source.sha256,previousArtifactBytes:v130Source.bytes,upgradeFromVersion:'1.3.0',upgradeToVersion:'1.3.1',checks:{
+    upgradeV130SchemaTwoFullHostRestartRetainsExistingBackupExactly:true,
+    upgradeV130PreservesEveryOriginalIdentityReceiptAndExactV11Rows:true,
+    upgradePreservesRealSettledAttemptOutboxAndOriginalNativeLog:true,
+    v130ToV131StandardUpgradePreservesOriginalIdentities:true,
+    upgradedOriginalReceiptLookupNeverRecreatesBot:true,
+    upgradedStockGuiCreatesNextBot:true,
+    upgradeAndReceiptLookupIssueNoModelRequests:true,
+  }});
+  return row;
+}
+async function previousQualificationFixtures(t,module) {
+  const directory=await mkdtemp(join(tmpdir(),'stock-v130-source-test-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  for(const source of Object.keys(module.stockSources).filter(source=>source!=='upgrade-v130')) {
+    await mkdir(join(directory,source));
+    await writeFile(join(directory,source,'stock-gui-report.json'),JSON.stringify(report(module,source,v131Target)));
+  }
+  return directory;
+}
+
+test('v1.3.0 tenth upgrade source is mandatory even when all ten preceding reports pass',async t=>{
+  const module=await validator(),directory=await previousQualificationFixtures(t,module);
+  const result=await module.qualifyStockReports(directory,{target:v131Target});
+  assert.equal(result.passed,false,'A missing v1.3.0 source must fail the complete directory gate');
+  assert.deepEqual(result.rows.filter(row=>!row.passed).map(row=>row.source),['upgrade-v130']);
+});
+
+for(const [name,mutate] of [
+  ['wrong immutable hash',row=>{row.previousArtifactSha256='0'.repeat(64);}],
+  ['wrong immutable byte length',row=>{row.previousArtifactBytes=172468;}],
+  ['missing immutable byte length',row=>{delete row.previousArtifactBytes;}],
+  ['schema-one proof',row=>{delete row.upgradeSchemaTwo;row.migration={fromSchema:1,toSchema:2,backupChecksum:'b'.repeat(64),backupPayloadMatchesOriginal:true,allOriginalReceiptIdentitiesPreserved:true,legacySnapshotReadFromClosedOfficialKv:true};}],
+  ['wrong original schema',row=>{row.upgradeSchemaTwo.fromSchema=1;}],
+  ['wrong target schema',row=>{row.upgradeSchemaTwo.toSchema=1;}],
+])test(`v1.3.0 complete directory gate rejects ${name}`,async t=>{
+  const module=await validator(),directory=await previousQualificationFixtures(t,module),row=v130ReportFixture(module);
+  mutate(row);await mkdir(join(directory,'upgrade-v130'));
+  await writeFile(join(directory,'upgrade-v130','stock-gui-report.json'),JSON.stringify(row));
+  const result=await module.qualifyStockReports(directory,{target:v131Target});
+  assert.equal(result.passed,false,`The complete gate must reject v1.3.0 ${name}`);
+  assert.deepEqual(result.rows.filter(row=>!row.passed).map(row=>row.source),['upgrade-v130']);
+});
+
+test('v1.3.0 frozen source qualifies with schema-two proof and contributes exactly seven named checks',async t=>{
+  const module=await validator(),bytes=await readFile(join(root,'dist/dsh-bot-1.3.0.tgz'));
+  assert.deepEqual(module.stockSources['upgrade-v130'],v130Source);
+  const originalSources=Object.fromEntries(Object.entries(module.stockSources).filter(([source])=>source!=='upgrade-v130'));
+  assert.equal(createHash('sha256').update(JSON.stringify(originalSources)).digest('hex'),'c32abbe92c3a95379a766ba98d18912f78431f5cbe82f54fa3b1da1fa7fbb30d','All nine original upgrade source descriptors retain their exact identity and order');
+  assert.equal(createHash('sha256').update(JSON.stringify(module.guiCheckNames)).digest('hex'),'44493323d1c8447514c6202c63a266f18efe757257d12195650b867f8ea02cd2','The existing 163 actual GUI check names remain unchanged');
+  assert.equal(bytes.length,v130Source.bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),v130Source.sha256);
+  const packed=spawnSync('tar',['-xzOf',join(root,'dist/dsh-bot-1.3.0.tgz'),'package/package.json'],{encoding:'utf8'});
+  assert.equal(packed.status,0);assert.equal(JSON.parse(packed.stdout).version,'1.3.0');
+  const directory=await previousQualificationFixtures(t,module),row=v130ReportFixture(module);
+  await mkdir(join(directory,'upgrade-v130'));await writeFile(join(directory,'upgrade-v130','stock-gui-report.json'),JSON.stringify(row));
+  const result=await module.qualifyStockReports(directory,{target:v131Target});
+  assert.equal(result.passed,true);assert.equal(result.rows.length,11);
+  assert.equal(result.rows.find(row=>row.source==='gui').checks,163);
+  assert.equal(result.rows.filter(row=>row.source!=='gui').length,10);
+  assert.ok(result.rows.filter(row=>row.source!=='gui').every(row=>row.checks===7));
+  assert.equal(result.rows.reduce((total,row)=>total+row.checks,0),233);
+  assert.match(module.stockQualificationSummary(result.rows),/\| upgrade-v130 \| Passed \| 7 \|/);
+  assert.deepEqual(module.expectedStockChecks('upgrade-v130','1.3.1'),Object.keys(row.checks));
+});
+
+test('v1.3.0 workflow runs the real upgrade and includes all eleven reports in both summaries and artifacts',async()=>{
+  const module=await validator(),workflow=await readFile(join(root,'.github/workflows/ci.yml'),'utf8');
+  const step=workflow.slice(workflow.indexOf('- name: Upgrade an existing v1.3.0'),workflow.indexOf('- name: Require all'));
+  assert.match(step,/DSH_BOT_UPGRADE_FROM: '1\.3\.0'/);assert.match(step,/DSH_BOT_GUI_OUTPUT: qualification\/upgrade-v130/);
+  assert.match(step,/mkdir -p qualification\/upgrade-v130/);
+  assert.match(step,/node test\/native-plugin\/stock-upgrade-run\.mjs qualification\/package\/\*\.tgz > qualification\/stock-upgrade-v130-private\.log 2>&1/);
+  assert.match(workflow,/Require all eleven complete stock qualification reports/);
+  const sanitized=workflow.slice(workflow.indexOf('- name: Sanitized GUI'),workflow.indexOf('- name: Publish readable'));
+  const readable=workflow.slice(workflow.indexOf('- name: Publish readable'),workflow.lastIndexOf('- uses: actions/upload-artifact'));
+  const upload=workflow.slice(workflow.lastIndexOf('- uses: actions/upload-artifact'));
+  for(const source of Object.keys(module.stockSources)) {
+    const path=`qualification/${source}/stock-gui-report.json`;
+    assert.ok(sanitized.includes(path),`Sanitized summary must include ${source}`);
+    assert.ok(upload.includes(path),`Artifact upload must include ${source}`);
+    if(source!=='gui') {
+      const key=source==='upgrade'?'upgrade':source.replace('upgrade-v','upgradeV');
+      assert.ok(readable.includes(`['${source}','${key}']`),`Full readable summary must project ${source} as ${key}`);
+    }
+  }
 });
 
 test('qualification context observation preserves original factory, plugin object, apply calls and service faces',async()=>{

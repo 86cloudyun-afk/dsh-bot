@@ -3,6 +3,11 @@ import {resolve} from 'node:path';
 const root=resolve(import.meta.dirname,'..');
 const target=resolve(root,'src/client/client.js');
 let source=readFileSync(target,'utf8');
+const {version}=JSON.parse(readFileSync(resolve(root,'package.json'),'utf8'));
+if(typeof version!=='string'||!version)throw Error('package.json: missing release version');
+const versionDeclaration=/const pluginVersion = "[^"]+", clientProtocol = 2;/g;
+if([...source.matchAll(versionDeclaration)].length!==1)throw Error('client.js: missing or duplicate release identity');
+source=source.replace(versionDeclaration,`const pluginVersion = ${JSON.stringify(version)}, clientProtocol = 2;`);
 for(const entry of [{file:'bot-space.js',marker:'BOT SPACE',declaration:'export function createBotSpace('},{file:'bot-space.styles.js',marker:'BOT SPACE STYLES',declaration:'export const botSpaceStyles'}]) {
   const helper=readFileSync(resolve(root,'src/client',entry.file),'utf8').replace(/\r\n/g,'\n');
   if(helper.split(entry.declaration).length!==2)throw Error(`${entry.file}: expected exactly one public declaration`);

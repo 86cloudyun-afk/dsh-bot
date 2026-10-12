@@ -23,11 +23,11 @@ dsh web
 
 ## 2. 获取并验证插件包
 
-在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.3.0) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.0/dist/dsh-bot-1.3.0.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.0/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
+在 [GitHub Release](https://github.com/86cloudyun-afk/dsh-bot/releases/tag/v1.3.1) 中打开 [插件包](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.1/dist/dsh-bot-1.3.1.tgz) 和 [校验文件](https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.1/dist/SHA256SUMS) 链接保存；也可以在下载目录运行：
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.0/dist/dsh-bot-1.3.0.tgz
-curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.0/dist/SHA256SUMS
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.1/dist/dsh-bot-1.3.1.tgz
+curl -fLO https://raw.githubusercontent.com/86cloudyun-afk/dsh-bot/v1.3.1/dist/SHA256SUMS
 ```
 
 Linux：
@@ -42,14 +42,14 @@ macOS：
 shasum -a 256 -c SHA256SUMS
 ```
 
-应显示插件文件校验通过。Release 同时提供兼容版本、源代码身份和 [本版说明与验收状态](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.3.0/docs/releases/v1.3.0-release-notes.zh-CN.md)。
+应显示插件文件校验通过。Release 同时提供兼容版本、源代码身份和 [本版说明与验收状态](https://github.com/86cloudyun-afk/dsh-bot/blob/v1.3.1/docs/releases/v1.3.1-release-notes.zh-CN.md)。
 
 ## 3. 安装到日常 profile
 
 以下命令使用官方 `web` profile。使用其他现有 Web profile 时，将 `web` 替换为你实际使用的名称。
 
 ```bash
-dsh plugin --profile web add ./dsh-bot-1.3.0.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.3.1.tgz --ignore-scripts --strict-peer-dependencies
 dsh web
 ```
 
@@ -95,12 +95,12 @@ Bot 空间位于 DSH 内的专用面板。**完整工作台** 保留 Bots、任�
 
 ```bash
 dsh plugin --profile web remove dsh-bot --config.ignore-scripts=true
-dsh plugin --profile web add ./dsh-bot-1.3.0.tgz --ignore-scripts --strict-peer-dependencies
+dsh plugin --profile web add ./dsh-bot-1.3.1.tgz --ignore-scripts --strict-peer-dependencies
 ```
 
 重新启动或启用插件后，Bot ID、记忆、会话和任务读取原持久数据。卸载只移除插件依赖与入口；手动删除 DSH 存储不属于卸载步骤。
 
-从 v1.0.0、v1.0.1、v1.0.2、v1.1.0、v1.1.1、v1.1.2、v1.1.3 候选、v1.1.4 或 v1.2.0 升级到 v1.3.0 时，请先备份原 DSH profile 并完全退出进程，再执行上述命令，启动同一 profile 并刷新浏览器。完整工作台标题下方应同时显示 **插件 1.3.0 / 服务 1.3.0**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
+从 v1.0.0、v1.0.1、v1.0.2、v1.1.0、v1.1.1、v1.1.2、v1.1.3 候选、v1.1.4、v1.2.0 或 v1.3.0 升级到 v1.3.1 时，请先备份原 DSH profile 并完全退出进程，再执行上述命令，启动同一 profile 并刷新浏览器。完整工作台标题下方应同时显示 **插件 1.3.1 / 服务 1.3.1**。原 Bot ID、记忆、会话、任务和待查回的原始操作及持久回执保留。界面与运行服务不同版时，新写入会被明确阻止并给出重启／刷新提示。
 
 v1.1.3 未发布稳定 Release；曾手动安装该候选的 profile 也按以上步骤升级，保留原数据和操作身份。
 
@@ -139,4 +139,4 @@ v1.1.3 未发布稳定 Release；曾手动安装该候选的 profile 也按以�
 
 从 v1.0.0／v1.0.1／v1.0.2 升级时，schema 2 在原 profile 的同一记录原子迁移，保留原始身份、回执和校验过的 schema 1 备份。旧 Bot 与旧持续授权的新增资料范围为关闭。升级后不要直接在同一份 schema 2 存储上降级旧插件；回退需使用升级前独立备份和对应旧插件包。迁移失败或未来格式不会覆盖原记录。
 
-从 v1.1.0／v1.1.1／v1.1.2／v1.1.3 候选／v1.1.4 或 v1.2.0 升级到 v1.3.0 沿用 schema 2 与协议 2，不重新迁移或创建替代对象；原资料、安排、通知和已有迁移备份继续保留。宿主仍为未修改的官方 DSH 0.2.0-rc.2。
+从 v1.1.0／v1.1.1／v1.1.2／v1.1.3 候选／v1.1.4、v1.2.0 或 v1.3.0 升级到 v1.3.1 沿用 schema 2 与协议 2，不重新迁移或创建替代对象；原资料、安排、通知和已有迁移备份继续保留。宿主仍为未修改的官方 DSH 0.2.0-rc.2。
