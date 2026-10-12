@@ -11,7 +11,10 @@ const maxFileBytes=4*1024*1024;
 // File and storage byte quotas bound attribution more tightly than this count.
 const maxProvenanceItems=Math.floor(maxFileBytes/16);
 const importDescription=memoryId=>`dsh-bot-memory:${memoryId}`;
-const sourceIdentity=(source,storeId)=>digest([source?.storeId??storeId,source?.kind??(source?.sessionId?'session':'human'),source?.sessionId??source?.docId??null,source?.eventSeq??source?.chunkId??null]);
+const sourceIdentity=(source,storeId)=>{
+  const kind=source?.kind??(source?.sessionId?'session':'human');
+  return digest([source?.storeId??storeId,kind,kind==='human'?source?.operationId??null:source?.sessionId??source?.docId??null,source?.eventSeq??source?.chunkId??null]);
+};
 const dedupKey=entry=>digest([entry.text.normalize('NFKC').trim(),entry.category]);
 const binary=(a,b)=>a<b?-1:a>b?1:0;
 const latest=(a,b)=>binary(b.updatedAt??b.createdAt??'',a.updatedAt??a.createdAt??'')||binary(a.memoryId,b.memoryId);

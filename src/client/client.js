@@ -70,19 +70,22 @@ window.__ModuleLoader__.load({
         for(const meeting of rows(snapshot.meetings))if(meeting.groupId===groupId&&!['cancelled','complete'].includes(meeting.phase))for(const participant of rows(meeting.participants))if(participant.active)add(participant.sessionId,{meetingId:meeting.meetingId,epoch:meeting.epoch,phase:meeting.phase,memberEpoch:participant.memberEpoch,botId:participant.botId});
         return targets;
       }
-      function QuestionRecovery({target,onReference,onError}) {
+      function QuestionRecovery({target,onReference,onFailure,isCurrent,attempt}) {
         useEffect(()=>{
-          if(!alive)return;
+          if(!alive||!isCurrent())return;
           const abort=new AbortController();let reference,released=false;
           const release=()=>{if(released)return;released=true;abort.abort();releases.delete(release);reference?.release();onReference(null,reference);};
-          try{reference=ctx.sessions.retain(target.sessionId,{source:'botSpace',signal:abort.signal});releases.add(release);onReference(reference);
-            Promise.resolve(reference.ready).catch(failure=>{if(!released){onError(`问答接续连接失败：${failure.message}`);release();}});
-          }catch(failure){onError(`问答接续连接失败：${failure.message}`);release();}
+          onFailure(null);
+          const failed=failure=>{if(!released&&isCurrent())onFailure(`问答接续连接失败：${failure.message}`);release();};
+          try{reference=ctx.sessions.retain(target.sessionId,{source:'botSpace',signal:abort.signal});releases.add(release);
+            if(!isCurrent()){release();return;}
+            onReference(reference);Promise.resolve(reference.ready).catch(failed);
+          }catch(failure){failed(failure);}
           return release;
-        },[]);
+        },[attempt]);
         return null;
       }
-      function InteractionPane({target,SessionProvider,renderSlot,isPending,onClose,returnFocus,onError,recoveryReference,recovering}) {
+      function InteractionPane({target,SessionProvider,renderSlot,isPending,onClose,returnFocus,onError,recoveryReference,recovering,recoveryError,onRetry}) {
         const [reference,setReference]=useState(null);
         useEffect(()=>{
           if(target.pending.kind!=='plan-review'||!isPending())return;
@@ -106,6 +109,7 @@ window.__ModuleLoader__.load({
         if(!isPending())return null;
         return h(SpaceDialog,{title:'待确认操作',onClose,returnFocus},h('p',{className:'bs-meta'},`${target.identityLabel} · ${target.sessionId}`),
           target.pending.kind==='plan-review'&&h('section',{className:'bs-plan-document','aria-label':'完整原生计划'},h('h3',null,'完整原生计划'),...rows(target.pending.questions).filter(row=>typeof row.detail==='string').map(row=>h('pre',{key:row.id},row.detail))),
+          recoveryError?h('div',null,h('p',{className:'bs-error',role:'alert'},recoveryError),h('button',{type:'button',className:'bs-button','data-retry-session-id':target.sessionId,onClick:onRetry},'重试原会话连接')):
           h('div',{className:'bs-native bs-interaction','data-session-id':target.sessionId,'data-interaction-kind':target.pending.kind},h(SessionProvider,{session:recoveryReference??reference??undefined,key:target.sessionId,empty:()=>h('p',{role:'status'},'正在打开原生待确认操作…')},renderSlot('dsh.bot-space.interaction',{sessionId:target.sessionId,pending:target.pending,isPending}))));
       }
       function SpaceDialog({title,children,onClose,returnFocus}) {
@@ -124,7 +128,9 @@ window.__ModuleLoader__.load({
         const view=useView(),snapshot=view.snapshot,storeId=snapshot.storeId;
         const [selection,setSelection]=useState(null),[search,setSearch]=useState(''),[owned,setOwned]=useState(null),[error,setError]=useState(''),[notice,setNotice]=useState('');
         const [dialog,setDialog]=useState(null),[interaction,setInteraction]=useState(null),[members,setMembers]=useState([]),[drafts,setDrafts]=useState({}),[visible,setVisible]=useState({}),[railOpen,setRailOpen]=useState(false),[contextOpen,setContextOpen]=useState(false),[contextCollapsed,setContextCollapsed]=useState(false),[unread,setUnread]=useState(false),[recoveryReferences,setRecoveryReferences]=useState({});
-        const latest=useRef(view),intent=useRef(0),mounted=useRef(true),composing=useRef(false),draftRef=useRef(drafts),draftRevision=useRef({}),sent=useRef(new Set()),scroll=useRef(null),follow=useRef(true),lastMessages=useRef(null),current=useRef(selection),element=useRef(null),rail=useRef(null),context=useRef(null),drawerTrigger=useRef(null);
+        const [recoveryFailures,setRecoveryFailures]=useState({}),[recoveryAttempts,setRecoveryAttempts]=useState({});
+        const retriedRecovery=useRef(new WeakSet()),currentRecoveries=useRef([]);
+        const latest=useRef(view),intent=useRef(0),mounted=useRef(true),composing=useRef(false),composer=useRef(null),draftRef=useRef(drafts),draftRevision=useRef({}),sent=useRef(new Set()),scroll=useRef(null),follow=useRef(true),lastMessages=useRef(null),current=useRef(selection),element=useRef(null),rail=useRef(null),context=useRef(null),drawerTrigger=useRef(null);
         latest.current=view;current.current=selection;draftRef.current=drafts;
         const statusSource=ctx.uiSession?.sessionStatus;
         const statuses=useSyncExternalStore(listener=>statusSource?.subscribe(listener)??(()=>{}),()=>statusSource?.getSnapshot()??absentStatus,()=>absentStatus);
@@ -159,8 +165,29 @@ window.__ModuleLoader__.load({
           const queued=new Set([...rows(values?.inbox?.['next-step']),...rows(values?.inbox?.['next-turn'])].filter(row=>row?.source?.kind==='user-question-reply').map(row=>row.source.callId));
           return rows(values?.userQuestions?.active).some(row=>row.state==='continued'&&typeof row.callId==='string'&&!queued.has(row.callId)&&!cards.some(card=>card.sessionId===target.sessionId&&card.callId===row.callId&&!unfinished(card)));
         });
-        const recoveryTargets=[...new Map([...known.current.cards.values(),...continuedTargets].filter(target=>target.bindingState==='ready'||question(target.pending)).map(target=>[target.sessionId,target])).values()];
+        const recoveryTargets=[...new Map([...continuedTargets,...known.current.cards.values()].filter(target=>target.bindingState==='ready'||question(target.pending)).map(target=>[target.sessionId,target])).values()];
+        currentRecoveries.current=recoveryTargets;
         const inScope=target=>alive&&mounted.current&&latest.current.snapshot.storeId===target.storeId&&target.generation===(generationSource?generationSource.getSnapshot():null)&&current.current?.generation===target.generation&&current.current?.kind==='group'&&current.current.id===target.groupId&&currentChannels(latest.current.snapshot,target.groupId).some(channel=>channelKey(channel)===channelKey(target));
+        const recoveryBindingCurrent=target=>inScope(target)&&target.scope===known.current&&currentRecoveries.current.some(row=>channelKey(row)===channelKey(target));
+        const recoveryCurrent=target=>{
+          const actual=(statusSource?.getSnapshot()??absentStatus).get(target.sessionId)?.pendingInteraction;
+          return recoveryBindingCurrent(target)&&currentRecoveries.current.some(row=>channelKey(row)===channelKey(target)&&row.pending===target.pending)&&(!target.pending||(unfinished(target.pending)&&known.current.cards.get(target.pending.key)?.pending===target.pending&&(!actual||actual===target.pending)));
+        };
+        const recoveryFailure=target=>{
+          const failure=recoveryFailures[channelKey(target)];
+          if(!failure||!recoveryBindingCurrent(failure.target))return null;
+          const admission={...target,storeId,generation,scope:failure.target.scope};
+          return recoveryCurrent(admission)?failure:null;
+        };
+        const retryRecovery=target=>{
+          const failure=recoveryFailure(target);if(!failure||retriedRecovery.current.has(failure))return;
+          retriedRecovery.current.add(failure);const key=channelKey(target),scope=failure.target.scope;
+          setRecoveryAttempts(previous=>({...previous,[key]:{scope,count:(previous[key]?.scope===scope?previous[key].count:0)+1}}));
+        };
+        useEffect(()=>{
+          setRecoveryFailures(previous=>Object.fromEntries(Object.entries(previous).filter(([,failure])=>failure.target.scope===known.current)));
+          setRecoveryAttempts(previous=>Object.fromEntries(Object.entries(previous).filter(([,attempt])=>attempt.scope===known.current)));
+        },[storeId,generation,group?.groupId]);
         const pendingActive=()=>interaction&&inScope(interaction)&&currentChannels(latest.current.snapshot,interaction.groupId).some(target=>target.sessionId===interaction.sessionId&&target.bindingState==='ready')&&(statusSource?.getSnapshot()??absentStatus).get(interaction.sessionId)?.pendingInteraction===interaction.pending&&liveInteraction(interaction.pending,interaction.sessionId);
         const interactionCurrent=interaction&&interaction.storeId===storeId&&interaction.generation===generation&&group?.groupId===interaction.groupId&&pendingTargets.some(target=>target.sessionId===interaction.sessionId&&target.pending===interaction.pending);
         useEffect(()=>{if(interaction&&!interactionCurrent)setInteraction(null);},[interaction,interactionCurrent]);
@@ -182,6 +209,11 @@ window.__ModuleLoader__.load({
         const keyFor=(groupId,profile=storeId)=>`${profile}\u0000${groupId}`;
         const groupKey=group?keyFor(group.groupId):null;
         const draft=groupKey?drafts[groupKey]??'':'';
+        if(composer.current?.storeId!==storeId||composer.current?.generation!==generation||composer.current?.groupId!==group?.groupId){
+          composer.current=group?{storeId,generation,groupId:group.groupId}:null;composing.current=false;
+        }
+        const composerIdentity=composer.current;
+        const composerCurrent=()=>alive&&mounted.current&&composerIdentity!==null&&composer.current===composerIdentity&&latest.current.snapshot.storeId===storeId&&current.current?.storeId===storeId&&current.current?.generation===generation&&generation===(generationSource?generationSource.getSnapshot():null)&&current.current?.kind==='group'&&current.current.id===composerIdentity.groupId;
         const updateDraft=(key,text)=>{draftRevision.current[key]=(draftRevision.current[key]??0)+1;draftRef.current={...draftRef.current,[key]:text};setDrafts(draftRef.current);};
         const available=(kind,id,profile)=>alive&&mounted.current&&latest.current.snapshot.storeId===profile&&rows(kind==='bot'?latest.current.snapshot.bots:latest.current.snapshot.groups).some(row=>(kind==='bot'?row.botId:row.groupId)===id&&!row.deletedAt);
         const isCurrent=(token,kind,id,profile)=>available(kind,id,profile)&&token===intent.current&&current.current?.generation===(generationSource?generationSource.getSnapshot():null)&&(!generationSource||!!generationSource.getSnapshot())&&current.current?.kind===kind&&current.current?.id===id&&current.current?.storeId===profile;
@@ -229,7 +261,8 @@ window.__ModuleLoader__.load({
           setError('');setNotice('正在核对原会话…');
           const remote=await query('snapshot',{},valid);
           if(!valid())return;
-          if(!remote||remote.storeId!==profile||!contact(remote,botId,id)||!contact(latest.current.snapshot,botId,id)){
+          if(!remote){setNotice('');return;}
+          if(remote.storeId!==profile||!contact(remote,botId,id)||!contact(latest.current.snapshot,botId,id)){
             setNotice('');setError('此聊天已归档、Bot 已删除或不可用，请重新选择。');return;
           }
           const next={storeId:profile,generation,kind:'bot',id:botId,sessionId:id};current.current=next;setSelection(next);setNotice('');setRailOpen(false);
@@ -243,13 +276,14 @@ window.__ModuleLoader__.load({
           // command has performed the durable write and refreshed the shared snapshot.
           const remote=await query('snapshot',{},()=>isCurrent(token,'bot',botId,profile));
           if(!isCurrent(token,'bot',botId,profile))return;
-          if(remote?.storeId!==profile||!contact(remote,botId,receipt.sessionId)||!contact(latest.current.snapshot,botId,receipt.sessionId)){
+          if(!remote){setNotice('新会话回执已保存；连接恢复后可从原会话记录继续。');return;}
+          if(remote.storeId!==profile||!contact(remote,botId,receipt.sessionId)||!contact(latest.current.snapshot,botId,receipt.sessionId)){
             setError('新会话回执已保存；当前身份或会话状态改变，请从原会话记录继续。');return;
           }
           const next={storeId:profile,generation,kind:'bot',id:botId,sessionId:receipt.sessionId};current.current=next;setSelection(next);setNotice('');
         };
         const sendGroup=async()=>{
-          if(!group||view.busy||composing.current||!draftRef.current[groupKey]?.trim()||sent.current.has(groupKey))return;
+          if(!group||!composerCurrent()||view.busy||composing.current||!draftRef.current[groupKey]?.trim()||sent.current.has(groupKey))return;
           const originalGroupId=group.groupId,profile=storeId,key=groupKey,text=draftRef.current[key],revision=draftRevision.current[key]??0;
           if(text.length>16000){setError('群消息最多 16000 字符；正文草稿已保留。');return;}
           if(!available('group',originalGroupId,profile))return;
@@ -391,13 +425,14 @@ window.__ModuleLoader__.load({
                 }),
               ),unread&&button('查看新消息',()=>{follow.current=true;setUnread(false);if(scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight;},{className:'bs-new-messages',disabled:false}),
               h('div',{className:'bs-rounds'},...rows(group.rounds).filter(round=>['running','stopping','UNKNOWN','stopped'].includes(round.state)||(round.state==='complete'&&rows(round.absences).length>0)).map(round=>h('div',{className:'bs-round',key:round.roundId,'data-round-id':round.roundId},h('span',null,`${stateName(round.state)} · 请求 ${round.requests}/${round.maxRequests}`),rows(round.absences).length>0&&h('span',{className:'bs-meta'},rows(round.absences).map(row=>row.botId?`${memberLabel(row.botId)}：${row.reason}`:row.reason).join('；')),round.state==='running'&&button('停止此群轮',()=>command('group.round.stop',{groupId:group.groupId,roundId:round.roundId})),round.state==='stopping'&&h('span',null,'等待真实资源结算'),(round.state==='UNKNOWN'||(round.state==='complete'&&rows(round.absences).length>0))&&button('查阅原群轮',()=>manage('groups',{groupId:group.groupId,roundId:round.roundId}),{disabled:false})))),
-              h('form',{className:'bs-composer',onSubmit:event=>{event.preventDefault();return sendGroup();}},h('textarea',{className:'bs-textarea','aria-label':'群消息',placeholder:'发送给群成员…',value:draft,maxLength:16000,onChange:event=>updateDraft(groupKey,event.target.value),onCompositionStart:()=>{composing.current=true;},onCompositionEnd:()=>{composing.current=false;},onKeyDown:event=>{if(event.key==='Enter'&&!event.shiftKey&&!composing.current&&!event.nativeEvent?.isComposing&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendGroup();}}}),h('div',{className:'bs-composer-footer'},h('span',{className:'bs-meta'},'Enter 发送 · Shift+Enter 换行'),button('发送消息',sendGroup,{className:'bs-primary',disabled:view.busy||!draft.trim()})))):
+              h('form',{className:'bs-composer',onSubmit:event=>{event.preventDefault();return sendGroup();}},h('textarea',{key:groupKey,className:'bs-textarea','aria-label':'群消息',placeholder:'发送给群成员…',value:draft,maxLength:16000,onChange:event=>updateDraft(groupKey,event.target.value),onCompositionStart:()=>{if(composerCurrent())composing.current=true;},onCompositionEnd:()=>{if(composerCurrent())composing.current=false;},onKeyDown:event=>{if(composerCurrent()&&event.key==='Enter'&&!event.shiftKey&&!composing.current&&!event.nativeEvent?.isComposing&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendGroup();}}}),h('div',{className:'bs-composer-footer'},h('span',{className:'bs-meta'},'Enter 发送 · Shift+Enter 换行'),button('发送消息',sendGroup,{className:'bs-primary',disabled:view.busy||!draft.trim()})))):
               h('div',{className:'bs-empty'},h('div',{className:'bs-empty-art','aria-hidden':true},'B'),h('h3',null,'把日常对话留在 Bot 空间'),h('p',null,'选择具名 Bot 继续原生聊天，或进入群与团队协作。'),button('新建第一个 Bot',event=>openDialog('bot',event),{className:'bs-primary'}))),
           h('aside',{className:'bs-context',ref:context,inert:railOpen,role:contextOpen?'dialog':undefined,'aria-modal':contextOpen?true:undefined,tabIndex:contextOpen?-1:undefined,'aria-label':'当前会话上下文'},h('header',{className:'bs-context-header'},h('h3',null,'上下文'),button('关闭上下文',()=>{if(contextOpen)closeDrawers();else setContextCollapsed(true);},{className:'bs-icon-button',disabled:false})),
             bot&&h('section',{className:'bs-section'},h('div',{className:'bs-section-heading'},h('h3',null,'当前 Bot 的任务'),button('新任务',event=>openDialog('task',event,{botId:bot.botId,sessionId}),{disabled:view.busy||bot.lifecycle!=='active'})),...tasks.map(taskCard),!tasks.length&&h('p',{className:'bs-meta'},'还没有任务。登记后明确开始，后台执行不中断聊天。')),
             bot&&h('section',{className:'bs-section'},h('h3',null,'身份与记忆'),h('p',null,bot.role||'尚未填写职责'),h('p',{className:'bs-meta'},`Bot ID ${bot.botId}`),h('p',{className:'bs-meta'},`工作槽 ${rows(snapshot.attempts).filter(a=>a.botId===bot.botId&&a.reservationHeld).length}/15`),...rows(snapshot.memories).filter(m=>m.botId===bot.botId&&!m.forgotten&&!m.inactive).slice(0,3).map(m=>h('p',{key:m.memoryId,className:'bs-muted'},m.text)),button('管理记忆与资料',()=>manage('memory',{botId:bot.botId}),{disabled:false})),
             group&&h('section',{className:'bs-section'},h('h3',null,'群成员'),...rows(group.members).filter(m=>m.active).map(member=>{const owner=snapshot.bots.find(bot=>bot.botId===member.botId);return h('div',{className:'bs-member',key:member.botId},avatar(owner?.name,member.botId),h('span',null,owner?botLabel(owner):member.botId),member.botId===group.coordinatorBotId&&h('span',{className:'bs-tag'},'协调者'));}),button('管理成员与群设置',()=>manage('groups',{groupId:group.groupId}),{disabled:false})),
             group&&(pendingTargets.length>0||hiddenTargets.length>0||continuedTargets.length>0||cards.length>0)&&h('section',{className:'bs-section'},h('h3',null,'原生待处理操作'),
+              ...recoveryTargets.filter(target=>recoveryFailure(target)).map(target=>h('div',{key:channelKey(target)},h('p',{className:'bs-error',role:'alert'},recoveryFailure(target).error),button(`重试原会话连接 · ${interactionLabel(target)}`,()=>retryRecovery(target),{'data-retry-session-id':target.sessionId,disabled:false}))),
               ...pendingTargets.map(target=>button(`${{approval:'审批',question:'提问','plan-review':'计划确认'}[target.pending.kind]} ${interactionLabel(target)}`,event=>openInteraction(target,event),{key:target.sessionId,'data-pending-session-id':target.sessionId,'data-interaction-kind':target.pending.kind,disabled:false})),
               ...hiddenTargets.map(target=>button(`重新打开${target.pending.kind==='plan-review'?'计划确认':'提问'} ${interactionLabel(target)}`,event=>reopenInteraction(target,event),{key:target.pending.key,'data-reopen-session-id':target.sessionId,'data-call-id':target.pending.callId,disabled:false})),
               ...published.filter(target=>unfinished(target.pending)&&!liveInteraction(target.pending,target.sessionId)).map(target=>h('p',{key:target.pending.key,className:'bs-meta',role:'status'},`等待原生问答通道 · ${interactionLabel(target)}`)),
@@ -406,8 +441,8 @@ window.__ModuleLoader__.load({
             group&&h('section',{className:'bs-section'},h('h3',null,'本群会议行动任务'),...tasks.map(taskCard),!tasks.length&&h('p',{className:'bs-meta'},'会议决定登记的行动任务会显示在这里。')),
             !bot&&!group&&h('p',{className:'bs-meta'},'选择一个 Bot 或群查看真实任务、成员和会议。')),
           (railOpen||contextOpen)&&h('button',{type:'button',className:'bs-backdrop','data-for':railOpen?'rail':'context','aria-label':'关闭会话抽屉',onClick:closeDrawers}),renderDialog(),
-          ...recoveryTargets.map(target=>h(QuestionRecovery,{key:`${storeId}:${channelKey(target)}`,target,onError:setError,onReference:(reference,old)=>setRecoveryReferences(previous=>{if(!reference&&previous[target.sessionId]!==old)return previous;const next={...previous};if(reference)next[target.sessionId]=reference;else delete next[target.sessionId];return next;})})),
-          interactionCurrent&&h(InteractionPane,{key:`${storeId}:${interaction.sessionId}:${interaction.pending.key}`,target:interaction,SessionProvider,renderSlot,isPending:pendingActive,onClose:()=>setInteraction(null),returnFocus:interaction.returnFocus,onError:setError,recovering:unfinished(interaction.pending)&&typeof interaction.pending.callId==='string',recoveryReference:recoveryReferences[interaction.sessionId]})));
+          ...recoveryTargets.map(target=>{const scoped={...target,storeId,generation,scope:known.current},key=channelKey(target);return h(QuestionRecovery,{key:`${storeId}:${key}`,target:scoped,attempt:recoveryAttempts[key]?.scope===known.current?recoveryAttempts[key].count:0,isCurrent:()=>recoveryBindingCurrent(scoped),onFailure:failure=>setRecoveryFailures(previous=>{const currentTarget=currentRecoveries.current.find(row=>channelKey(row)===key),actual=currentTarget&&{...currentTarget,storeId,generation,scope:scoped.scope};if(failure&&(!actual||!recoveryCurrent(actual)))return previous;const next={...previous};if(failure)next[key]={target:actual,error:failure};else delete next[key];return next;}),onReference:(reference,old)=>setRecoveryReferences(previous=>{if(!reference&&previous[target.sessionId]!==old)return previous;const next={...previous};if(reference)next[target.sessionId]=reference;else delete next[target.sessionId];return next;})});}),
+          interactionCurrent&&h(InteractionPane,{key:`${storeId}:${interaction.sessionId}:${interaction.pending.key}`,target:interaction,SessionProvider,renderSlot,isPending:pendingActive,onClose:()=>setInteraction(null),returnFocus:interaction.returnFocus,onError:setError,recovering:unfinished(interaction.pending)&&typeof interaction.pending.callId==='string',recoveryReference:recoveryReferences[interaction.sessionId],recoveryError:recoveryFailure(interaction)?.error,onRetry:()=>retryRecovery(interaction)})));
       }
       return {BotSpace,NativeConversation,NativeInteraction};
     }
@@ -1017,7 +1052,7 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind("dsh.bot"),
           listeners = new Set(),
           lifetime = new AbortController();
-        const pluginVersion = "1.3.0", clientProtocol = 2;
+        const pluginVersion = "1.3.1", clientProtocol = 2;
         let interval,
           refreshing,
           refreshingCatalog = false,

@@ -163,6 +163,7 @@ export class AssistantController {
     this.#authenticate(actor);const state=this.store.read();return Object.values(state.notices).filter(n=>(!input.botId||n.botId===input.botId)&&(!input.sessionId||n.sessionId===input.sessionId)&&this.#noticeVisible(actor,n,state)).map(n=>this.#noticeDTO(actor,n,state));
   }
   #noticeVisible(actor,n,state) {
+    if(!this.policy.canRead(actor,{kind:'notice',id:n.noticeId},null,state))return false;
     if(!this.#visible(actor,n,state))return false;
     if(n.taskId&&!this.policy.canRead(actor,{kind:'task',id:n.taskId},null,state))return false;
     if(n.scheduleId&&!this.policy.canRead(actor,{kind:'schedule',id:n.scheduleId},null,state))return false;
